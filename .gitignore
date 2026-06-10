@@ -1,0 +1,39 @@
+# Python Virtual Environments
+venv/
+venv311/
+.venv/
+ENV/
+env/
+
+# Python Cache & Builds
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local SQLite Database
+cricket.db
+cricket.db-journal
+
+# IDE Configs
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Flutter/Dart build files and caches
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.metadata
+frontend/build/
+frontend/android/local.properties
+frontend/ios/Flutter/Generated.xcconfig
+frontend/ios/Flutter/flutter_export_environment.sh
+
+# OS generated files
+.DS_Store
+Thumbs.db
