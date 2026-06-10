@@ -1,23 +1,14 @@
-import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cricket_scorer/core/app_config.dart';
 
 class ApiService {
   final Dio _dio = Dio();
   static String? _token;
   static const String _tokenKey = "jwt_auth_token";
 
-  // Local SQLite FastAPI server running on default port 8000
-  // Android emulator uses 10.0.2.2 to access localhost on host machine
-  static String get baseUrl {
-    if (Platform.isAndroid) {
-      return "http://10.0.2.2:8000/api/v1";
-    }
-    return "http://localhost:8000/api/v1";
-  }
-
   ApiService() {
-    _dio.options.baseUrl = baseUrl;
+    _dio.options.baseUrl = AppConfig.baseUrl;
     _dio.options.connectTimeout = const Duration(seconds: 10);
     _dio.options.receiveTimeout = const Duration(seconds: 10);
 
