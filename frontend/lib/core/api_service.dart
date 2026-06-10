@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cricket_scorer/core/app_config.dart';
+import 'package:flutter/foundation.dart';
 
 class ApiService {
   final Dio _dio = Dio();
@@ -11,6 +12,32 @@ class ApiService {
     _dio.options.baseUrl = AppConfig.baseUrl;
     _dio.options.connectTimeout = const Duration(seconds: 10);
     _dio.options.receiveTimeout = const Duration(seconds: 10);
+
+    // Inject logging interceptor
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          debugPrint("[Dio Request] => Method: ${options.method} | URL: ${options.baseUrl}${options.path}");
+          debugPrint("[Dio Request Headers] => ${options.headers}");
+          if (options.data != null) {
+            debugPrint("[Dio Request Data] => ${options.data}");
+          }
+          return handler.next(options);
+        },
+        onResponse: (response, handler) {
+          debugPrint("[Dio Response] <= Status: ${response.statusCode} | URL: ${response.requestOptions.baseUrl}${response.requestOptions.path}");
+          debugPrint("[Dio Response Data] <= ${response.data}");
+          return handler.next(response);
+        },
+        onError: (DioException e, handler) {
+          debugPrint("[Dio Error] <= Status: ${e.response?.statusCode} | Error: ${e.error} | Message: ${e.message} | URL: ${e.requestOptions.baseUrl}${e.requestOptions.path}");
+          if (e.response?.data != null) {
+            debugPrint("[Dio Error Data] <= ${e.response?.data}");
+          }
+          return handler.next(e);
+        },
+      ),
+    );
 
     // Inject Auth interceptor
     _dio.interceptors.add(
@@ -250,5 +277,15 @@ class ApiService {
         'format': format,
       },
     );
+  }
+
+  Future<Response> testConnection() async {
+    final uri = Uri.parse(AppConfig.baseUrl);
+    final hostUrl = "${uri.scheme}://${uri.host}:${uri.port}/";
+    debugPrint("[Connection Test] Probing host URL: $hostUrl");
+    final dio = Dio();
+    dio.options.connectTimeout = const Duration(seconds: 5);
+    dio.options.receiveTimeout = const Duration(seconds: 5);
+    return await dio.get(hostUrl);
   }
 }

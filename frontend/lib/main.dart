@@ -8,8 +8,18 @@ import 'package:cricket_scorer/features/auth/bloc/auth_state.dart';
 import 'package:cricket_scorer/features/auth/screens/login_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/dashboard_screen.dart';
 
+import 'package:cricket_scorer/core/app_config.dart';
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Runtime Diagnostics
+  debugPrint("==================================================");
+  debugPrint("[Startup Diagnostic] APP_ENV=${AppConfig.env}");
+  debugPrint("[Startup Diagnostic] LAN_IP=${AppConfig.lanIp}");
+  debugPrint("[Startup Diagnostic] BASE_URL=${AppConfig.baseUrl}");
+  debugPrint("==================================================");
+
   runApp(const MyApp());
 }
 
