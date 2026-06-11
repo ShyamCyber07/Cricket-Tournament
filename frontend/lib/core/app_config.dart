@@ -11,7 +11,7 @@ class AppConfig {
 
   /// The production API domain address.
   /// Define this using: --dart-define=PROD_DOMAIN=api.crickettournament.com
-  static const String prodDomain = String.fromEnvironment('PROD_DOMAIN', defaultValue: 'cricket-tournament.herokuapp.com');
+  static const String prodDomain = String.fromEnvironment('PROD_DOMAIN', defaultValue: 'cricket-tournament-production.up.railway.app');
 
   /// Returns the base URL based on the environment configuration
   static String get baseUrl {

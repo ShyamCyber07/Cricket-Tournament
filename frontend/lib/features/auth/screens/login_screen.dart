@@ -21,30 +21,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  String _connectionTestResult = "";
-  bool _testingConnection = false;
-
-  Future<void> _runConnectionTest() async {
-    setState(() {
-      _testingConnection = true;
-      _connectionTestResult = "Connecting...";
-    });
-    try {
-      final res = await ApiService().testConnection();
-      setState(() {
-        _connectionTestResult = "Success!\nStatus: ${res.statusCode}\nBody: ${res.data}";
-      });
-    } catch (e) {
-      setState(() {
-        _connectionTestResult = "Error: $e";
-      });
-    } finally {
-      setState(() {
-        _testingConnection = false;
-      });
-    }
-  }
-
   @override
   void dispose() {
     _emailController.dispose();
@@ -216,50 +192,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       side: const BorderSide(color: Color(0xFF334155)),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  // AppConfig Diagnostics
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFF334155)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          "Network Diagnostics",
-                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primary),
-                        ),
-                        const SizedBox(height: 8),
-                        Text("APP_ENV: ${AppConfig.env}", style: GoogleFonts.outfit(fontSize: 12, color: Colors.white70)),
-                        Text("LAN_IP: ${AppConfig.lanIp}", style: GoogleFonts.outfit(fontSize: 12, color: Colors.white70)),
-                        Text("Resolved URL: ${AppConfig.baseUrl}", style: GoogleFonts.outfit(fontSize: 12, color: Colors.white70)),
-                        const SizedBox(height: 12),
-                        if (_testingConnection)
-                          const Center(child: CircularProgressIndicator(color: AppColors.primary))
-                        else
-                          ElevatedButton.icon(
-                            onPressed: _runConnectionTest,
-                            icon: const Icon(Icons.network_check, size: 16),
-                            label: const Text("Test API Connection"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blueGrey,
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                            ),
-                          ),
-                        if (_connectionTestResult.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            _connectionTestResult,
-                            style: GoogleFonts.outfit(fontSize: 11, color: Colors.amberAccent),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ],
                     ),
                   ),
                   const Spacer(flex: 2),
