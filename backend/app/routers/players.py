@@ -31,7 +31,8 @@ def create_player(
         batting_style=player_in.batting_style,
         bowling_style=player_in.bowling_style,
         profile_photo_url=player_in.profile_photo_url,
-        jersey_number=player_in.jersey_number
+        jersey_number=player_in.jersey_number,
+        created_by=current_user.id
     )
     db.add(db_player)
     db.commit()
@@ -41,9 +42,10 @@ def create_player(
 @router.get("/", response_model=List[PlayerResponse])
 def list_players(
     search: Optional[str] = Query(None, description="Search player by name"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    query = db.query(Player)
+    query = db.query(Player).filter(Player.created_by == current_user.id)
     if search:
         query = query.filter(Player.name.ilike(f"%{search}%"))
     return query.limit(50).all()
@@ -354,6 +356,9 @@ def update_player(
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
+    if player.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to manage this player")
+
     # Update fields if provided
     update_data = player_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -374,6 +379,9 @@ def delete_player(
     player = db.query(Player).filter(Player.id == id).first()
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
+
+    if player.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to manage this player")
 
     # Prevent deletion if player is in an active (non-completed/non-abandoned) match squad
     active_match = db.query(Match).join(MatchSquad).filter(

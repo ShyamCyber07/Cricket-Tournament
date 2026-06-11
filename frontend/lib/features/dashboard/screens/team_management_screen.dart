@@ -330,80 +330,157 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
     final availablePlayers =
         allPlayers.where((p) => !existingIds.contains(p['id'].toString())).toList();
 
+    final Set<String> selectedPlayerIds = {};
+
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppColors.background,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                "Add Player to Team",
-                style: GoogleFonts.outfit(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: availablePlayers.isEmpty
-                    ? Center(
-                        child: Text(
-                          "No new players available",
-                          style: GoogleFonts.outfit(color: AppColors.textSecondary),
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          maxChildSize: 0.9,
+          minChildSize: 0.4,
+          expand: false,
+          builder: (context, scrollController) {
+            return StatefulBuilder(
+              builder: (context, setModalState) {
+                return Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
-                      )
-                    : ListView.builder(
-                        itemCount: availablePlayers.length,
-                        itemBuilder: (context, index) {
-                          final player = availablePlayers[index];
-                          final jersey = player['jersey_number'];
-                          final displayName = jersey != null ? "#$jersey ${player['name']}" : player['name'];
-                          return ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: AppColors.primary.withOpacity(0.15),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Add Players to Team",
+                            style: GoogleFonts.outfit(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          if (availablePlayers.isNotEmpty)
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              onPressed: selectedPlayerIds.isEmpty
+                                  ? null
+                                  : () async {
+                                      Navigator.pop(context); // close sheet
+                                      setState(() => _isLoading = true);
+                                      try {
+                                        await _apiService.addPlayersToTeamBulk(
+                                          teamId,
+                                          selectedPlayerIds.toList(),
+                                        );
+                                        _showSnackBar("Selected players added successfully!", AppColors.primary);
+                                        _fetchTeams();
+                                      } catch (e) {
+                                        setState(() => _isLoading = false);
+                                        String errMsg = e.toString();
+                                        if (e is DioException && e.response?.data?['detail'] != null) {
+                                          errMsg = e.response!.data['detail'].toString();
+                                        }
+                                        _showSnackBar("Failed to add players: $errMsg", AppColors.error);
+                                      }
+                                    },
                               child: Text(
-                                player['name'][0].toString().toUpperCase(),
-                                style: GoogleFonts.outfit(
-                                    fontWeight: FontWeight.bold, color: AppColors.primary),
+                                "Add (${selectedPlayerIds.length})",
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
                               ),
                             ),
-                            title: Text(
-                              displayName,
-                              style: GoogleFonts.outfit(color: Colors.white),
-                            ),
-                            subtitle: Text(
-                              player['role'].toString().toUpperCase(),
-                              style: GoogleFonts.outfit(
-                                  color: AppColors.textSecondary, fontSize: 11),
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.add_circle, color: AppColors.accent),
-                              onPressed: () => _addPlayerToTeam(teamId, player['id']),
-                            ),
-                          );
-                        },
+                        ],
                       ),
-              ),
-            ],
-          ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: availablePlayers.isEmpty
+                            ? Center(
+                                child: Text(
+                                  "No new players available",
+                                  style: GoogleFonts.outfit(color: AppColors.textSecondary),
+                                ),
+                              )
+                            : ListView.builder(
+                                controller: scrollController,
+                                itemCount: availablePlayers.length,
+                                itemBuilder: (context, index) {
+                                  final player = availablePlayers[index];
+                                  final pId = player['id'].toString();
+                                  final jersey = player['jersey_number'];
+                                  final displayName = jersey != null ? "#$jersey ${player['name']}" : player['name'];
+                                  final isChecked = selectedPlayerIds.contains(pId);
+
+                                  return ListTile(
+                                    leading: CircleAvatar(
+                                      backgroundColor: AppColors.primary.withOpacity(0.15),
+                                      child: Text(
+                                        player['name'][0].toString().toUpperCase(),
+                                        style: GoogleFonts.outfit(
+                                            fontWeight: FontWeight.bold, color: AppColors.primary),
+                                      ),
+                                    ),
+                                    title: Text(
+                                      displayName,
+                                      style: GoogleFonts.outfit(color: Colors.white),
+                                    ),
+                                    subtitle: Text(
+                                      player['role'].toString().toUpperCase(),
+                                      style: GoogleFonts.outfit(
+                                          color: AppColors.textSecondary, fontSize: 11),
+                                    ),
+                                    trailing: Checkbox(
+                                      activeColor: AppColors.primary,
+                                      value: isChecked,
+                                      onChanged: (bool? val) {
+                                        setModalState(() {
+                                          if (val == true) {
+                                            selectedPlayerIds.add(pId);
+                                          } else {
+                                            selectedPlayerIds.remove(pId);
+                                          }
+                                        });
+                                      },
+                                    ),
+                                    onTap: () {
+                                      setModalState(() {
+                                        if (isChecked) {
+                                          selectedPlayerIds.remove(pId);
+                                        } else {
+                                          selectedPlayerIds.add(pId);
+                                        }
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
         );
       },
     );

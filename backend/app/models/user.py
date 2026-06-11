@@ -18,6 +18,6 @@ class User(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
-    players = relationship("Player", back_populates="user", uselist=False)
+    players = relationship("Player", back_populates="user", uselist=False, foreign_keys="[Player.user_id]")
     created_teams = relationship("Team", back_populates="creator")
-    organized_tournaments = relationship("Tournament", back_populates="organizer")
+    organized_tournaments = relationship("Tournament", back_populates="organizer", foreign_keys="[Tournament.organizer_id]")

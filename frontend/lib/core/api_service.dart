@@ -204,6 +204,15 @@ class ApiService {
     return await _dio.delete('/teams/$teamId/players/$playerId');
   }
 
+  Future<Response> addPlayersToTeamBulk(String teamId, List<String> playerIds) async {
+    return await _dio.post(
+      '/teams/$teamId/players/bulk',
+      data: {
+        'player_ids': playerIds,
+      },
+    );
+  }
+
   Future<Response> updateTeam(String id, String name, {String? captainId}) async {
     return await _dio.put(
       '/teams/$id',

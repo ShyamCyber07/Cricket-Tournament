@@ -175,7 +175,7 @@ def test_team_crud_and_validation(client, auth_headers):
         headers=auth_headers
     )
     assert res.status_code == 400
-    assert "Player already belongs to Team" in res.json()["detail"]
+    assert "Player already assigned to Team" in res.json()["detail"]
 
     # 7. Remove Player 1 from RCB (should clear captaincy and succeed)
     res = client.delete(

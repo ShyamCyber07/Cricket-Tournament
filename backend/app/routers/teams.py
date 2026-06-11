@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User
 from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad
-from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate
+from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate, BulkAddPlayersRequest
 
 router = APIRouter()
 
@@ -45,7 +45,7 @@ def list_teams(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return db.query(Team).all()
+    return db.query(Team).filter(Team.created_by == current_user.id).all()
 
 @router.get("/{id}", response_model=TeamResponse)
 def get_team(id: UUID, db: Session = Depends(get_db)):
@@ -74,6 +74,10 @@ def add_player_to_team(
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
+    # Check player ownership
+    if player.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to manage this player")
+
     # Check if player is already assigned to any team (duplicate active membership prevention)
     existing_membership = db.query(TeamPlayer).filter(TeamPlayer.player_id == req.player_id).first()
     if existing_membership:
@@ -84,11 +88,58 @@ def add_player_to_team(
         else:
             raise HTTPException(
                 status_code=400,
-                detail=f"Player already belongs to Team {team_name}."
+                detail=f"Player already assigned to Team {team_name}"
             )
 
     assoc = TeamPlayer(team_id=id, player_id=req.player_id)
     db.add(assoc)
+    db.commit()
+    db.refresh(team)
+    return team
+
+@router.post("/{id}/players/bulk", response_model=TeamResponse)
+def add_players_to_team_bulk(
+    id: UUID,
+    req: BulkAddPlayersRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+        
+    # Check authorization (only creator can add players)
+    if team.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to manage this team")
+
+    # Validate all player IDs first
+    for p_id in req.player_ids:
+        player = db.query(Player).filter(Player.id == p_id).first()
+        if not player:
+            raise HTTPException(status_code=404, detail=f"Player {p_id} not found")
+
+        # Check player ownership
+        if player.created_by != current_user.id:
+            raise HTTPException(status_code=403, detail=f"Not authorized to manage player {player.name}")
+
+        # Check duplicate assignment
+        existing_membership = db.query(TeamPlayer).filter(TeamPlayer.player_id == p_id).first()
+        if existing_membership:
+            assigned_team = db.query(Team).filter(Team.id == existing_membership.team_id).first()
+            team_name = assigned_team.name if assigned_team else "another team"
+            if existing_membership.team_id == id:
+                raise HTTPException(status_code=400, detail=f"Player {player.name} already in this team")
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Player already assigned to Team {team_name}"
+                )
+
+    # All validations passed, insert associations
+    for p_id in req.player_ids:
+        assoc = TeamPlayer(team_id=id, player_id=p_id)
+        db.add(assoc)
+        
     db.commit()
     db.refresh(team)
     return team

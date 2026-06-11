@@ -15,6 +15,8 @@ from sqlalchemy import inspect, text
 def patch_database_schema(db_engine):
     try:
         inspector = inspect(db_engine)
+        is_postgres = db_engine.dialect.name == 'postgresql'
+        uuid_type = "UUID" if is_postgres else "CHAR(32)"
         
         # 1. Patch players table
         if 'players' in inspector.get_table_names():
@@ -28,7 +30,8 @@ def patch_database_schema(db_engine):
                 ("economy", "REAL DEFAULT 0.0"),
                 ("highest_score", "INTEGER DEFAULT 0"),
                 ("best_bowling_figures", "VARCHAR DEFAULT ''"),
-                ("jersey_number", "INTEGER DEFAULT NULL")
+                ("jersey_number", "INTEGER DEFAULT NULL"),
+                ("created_by", f"{uuid_type} DEFAULT NULL")
             ]
             with db_engine.begin() as conn:
                 for col_name, col_type in new_player_cols:
@@ -44,7 +47,8 @@ def patch_database_schema(db_engine):
             new_tour_cols = [
                 ("num_teams", "INTEGER DEFAULT 4"),
                 ("status", "VARCHAR DEFAULT 'registration'"),
-                ("winner_id", "CHAR(32)")
+                ("winner_id", f"{uuid_type}"),
+                ("created_by", f"{uuid_type} DEFAULT NULL")
             ]
             with db_engine.begin() as conn:
                 for col_name, col_type in new_tour_cols:
@@ -56,12 +60,27 @@ def patch_database_schema(db_engine):
             columns_match = [col['name'] for col in inspector.get_columns('matches')]
             new_match_cols = [
                 ("tournament_stage", "VARCHAR"),
-                ("bracket_code", "VARCHAR")
+                ("bracket_code", "VARCHAR"),
+                ("created_by", f"{uuid_type} DEFAULT NULL")
             ]
             with db_engine.begin() as conn:
                 for col_name, col_type in new_match_cols:
                     if col_name not in columns_match:
                         conn.execute(text(f"ALTER TABLE matches ADD COLUMN {col_name} {col_type}"))
+
+        # 4. Migrate null created_by fields to enforce backwards compatibility
+        with db_engine.begin() as conn:
+            # Tournaments organizer -> created_by
+            conn.execute(text("UPDATE tournaments SET created_by = organizer_id WHERE created_by IS NULL"))
+            # Matches in tournaments
+            conn.execute(text("UPDATE matches SET created_by = (SELECT organizer_id FROM tournaments WHERE tournaments.id = matches.tournament_id) WHERE tournament_id IS NOT NULL AND created_by IS NULL"))
+            # Matches outside tournaments (default to team1 creator)
+            conn.execute(text("UPDATE matches SET created_by = (SELECT created_by FROM teams WHERE teams.id = matches.team1_id) WHERE created_by IS NULL"))
+            # Players linked to a user
+            conn.execute(text("UPDATE players SET created_by = user_id WHERE user_id IS NOT NULL AND created_by IS NULL"))
+            # Fallback for remaining players (default to first user)
+            conn.execute(text("UPDATE players SET created_by = (SELECT id FROM users LIMIT 1) WHERE created_by IS NULL"))
+
     except Exception as e:
         print(f"Error patching database schema: {e}")
 

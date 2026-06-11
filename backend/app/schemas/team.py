@@ -35,3 +35,6 @@ class TeamStatsResponse(BaseModel):
     matches_lost: int
     matches_tied: int
     net_run_rate: float
+
+class BulkAddPlayersRequest(BaseModel):
+    player_ids: List[UUID]

@@ -24,6 +24,7 @@ class PlayerUpdate(BaseModel):
 class PlayerResponse(PlayerBase):
     id: UUID
     user_id: Optional[UUID] = None
+    created_by: Optional[UUID] = None
     career_runs: Optional[int] = 0
     career_wickets: Optional[int] = 0
     matches_played: Optional[int] = 0

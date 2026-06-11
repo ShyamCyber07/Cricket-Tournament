@@ -2,6 +2,9 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:cricket_scorer/features/auth/bloc/auth_bloc.dart';
+import 'package:cricket_scorer/features/auth/bloc/auth_state.dart';
 import 'package:cricket_scorer/core/app_config.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
@@ -45,6 +48,14 @@ class _ScoringScreenState extends State<ScoringScreen> {
   int _wsRetryCount = 0;
   bool _isDisposed = false;
 
+  String? _currentUserId;
+
+  bool get _isViewerMode {
+    if (_liveState == null) return true; // Default to true (read-only) before loading
+    final matchOwnerId = _liveState!['created_by']?.toString();
+    return _currentUserId != matchOwnerId;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -52,6 +63,13 @@ class _ScoringScreenState extends State<ScoringScreen> {
     _activeStrikerId = widget.strikerId ?? "";
     _activeNonStrikerId = widget.nonStrikerId ?? "";
     _activeBowlerId = widget.bowlerId ?? "";
+
+    // Resolve current user ID from AuthBloc
+    final authState = context.read<AuthBloc>().state;
+    if (authState is AuthAuthenticated) {
+      _currentUserId = authState.user['id']?.toString();
+    }
+
     _fetchLiveState();
     _initWebSocket();
   }
@@ -169,19 +187,23 @@ class _ScoringScreenState extends State<ScoringScreen> {
       final data = res.data;
       
       final status = data['status'];
+      final isViewer = _currentUserId != data['created_by']?.toString();
+      
       if (status == 'scheduled') {
         setState(() {
           _liveState = data;
           _isLoading = false;
         });
-        _promptTossSelection();
+        if (!isViewer) {
+          _promptTossSelection();
+        }
         return;
       } else if (status == 'team_selection') {
         setState(() {
           _liveState = data;
           _isLoading = false;
         });
-        if (mounted) {
+        if (!isViewer && mounted) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
@@ -358,6 +380,10 @@ class _ScoringScreenState extends State<ScoringScreen> {
   }
 
   Future<void> _checkAndPromptSelections() async {
+    if (_isViewerMode) {
+      debugPrint("[ScoringScreen] Viewer mode active. Skipping player selection prompts.");
+      return;
+    }
     print("checkAndPromptSelections called");
     print("Current striker: $_activeStrikerId");
     print("Current non striker: $_activeNonStrikerId");
@@ -960,7 +986,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isCompleted ? "Match Completed" : "Live Scorer"),
+        title: Text(isCompleted ? "Match Completed" : (_isViewerMode ? "Match Viewer" : "Live Scorer")),
         actions: [
           if (!isCompleted) ...[
             Row(
@@ -1266,83 +1292,117 @@ class _ScoringScreenState extends State<ScoringScreen> {
                 ],
 
                 // 4. Large Circle Scoring Controls Pad
-                Container(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-                  decoration: const BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                  ),
-                  child: Column(
-                    children: [
-                      // Top control buttons (Wicket, Undo, Extras)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          ElevatedButton(
-                            onPressed: _openWicketDialog,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.error.withOpacity(0.2),
-                              foregroundColor: AppColors.error,
-                              elevation: 0,
-                            ),
-                            child: const Text("WICKET"),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: _undo,
-                            icon: const Icon(Icons.undo, size: 16),
-                            label: const Text("UNDO"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF334155),
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Extras toggles
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _buildExtraButton("WD", () => _openExtrasDialog("wide")),
-                          _buildExtraButton("NB", () => _openNoBallDialog()),
-                          _buildExtraButton("BYE", () => _openExtrasDialog("bye")),
-                          _buildExtraButton("LB", () => _openExtrasDialog("leg_bye")),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      // Runs pads row (0, 1, 2, 3, 4, 6)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [0, 1, 2, 3, 4, 6].map((runs) {
-                          return GestureDetector(
-                            onTap: () => _scoreBall(runs, 0, "none"),
-                            child: Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                color: runs == 4 || runs == 6
-                                    ? AppColors.primary
-                                    : const Color(0xFF1E293B),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: const Color(0xFF334155), width: 1.5),
+                if (!_isViewerMode)
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+                    decoration: const BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                    ),
+                    child: Column(
+                      children: [
+                        // Top control buttons (Wicket, Undo, Extras)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            ElevatedButton(
+                              onPressed: _openWicketDialog,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.error.withOpacity(0.2),
+                                foregroundColor: AppColors.error,
+                                elevation: 0,
                               ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                runs.toString(),
-                                style: GoogleFonts.outfit(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                              child: const Text("WICKET"),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: _undo,
+                              icon: const Icon(Icons.undo, size: 16),
+                              label: const Text("UNDO"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF334155),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // Extras toggles
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildExtraButton("WD", () => _openExtrasDialog("wide")),
+                            _buildExtraButton("NB", () => _openNoBallDialog()),
+                            _buildExtraButton("BYE", () => _openExtrasDialog("bye")),
+                            _buildExtraButton("LB", () => _openExtrasDialog("leg_bye")),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        // Runs pads row (0, 1, 2, 3, 4, 6)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [0, 1, 2, 3, 4, 6].map((runs) {
+                            return GestureDetector(
+                              onTap: () => _scoreBall(runs, 0, "none"),
+                              child: Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  color: runs == 4 || runs == 6
+                                      ? AppColors.primary
+                                      : const Color(0xFF1E293B),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: const Color(0xFF334155), width: 1.5),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  runs.toString(),
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        }).toList(),
-                      )
-                    ],
-                  ),
-                )
+                            );
+                          }).toList(),
+                        )
+                      ],
+                    ),
+                  )
+                else
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 36),
+                    decoration: const BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.remove_red_eye_outlined, color: AppColors.primary, size: 28),
+                        const SizedBox(height: 8),
+                        Text(
+                          "VIEWER MODE",
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: AppColors.primary,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Live score updates are received in real-time.",
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
               ],
             ),
     );

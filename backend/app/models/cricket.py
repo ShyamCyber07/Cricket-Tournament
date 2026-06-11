@@ -24,6 +24,7 @@ class Player(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     name = Column(String, nullable=False)
     role = Column(String, nullable=False) # batsman, bowler, all_rounder, wicket_keeper
     batting_style = Column(String, nullable=False) # right_hand, left_hand
@@ -42,7 +43,7 @@ class Player(Base):
     best_bowling_figures = Column(String, default="", nullable=True)
 
     # Relationships
-    user = relationship("User", back_populates="players")
+    user = relationship("User", back_populates="players", foreign_keys=[user_id])
     teams = relationship("Team", secondary="team_players", back_populates="players")
 
     def to_dict(self):
@@ -85,6 +86,7 @@ class Tournament(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
     organizer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
     format = Column(String, nullable=False) # League, Knockout, League + Knockout
@@ -95,7 +97,7 @@ class Tournament(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
-    organizer = relationship("User", back_populates="organized_tournaments")
+    organizer = relationship("User", back_populates="organized_tournaments", foreign_keys=[organizer_id])
     teams = relationship("Team", secondary="tournament_teams", back_populates="tournaments")
     matches = relationship("Match", back_populates="tournament")
     winner = relationship("Team", foreign_keys=[winner_id])
@@ -105,6 +107,7 @@ class Match(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tournament_id = Column(UUID(as_uuid=True), ForeignKey("tournaments.id", ondelete="SET NULL"), nullable=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     team1_id = Column(UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
     team2_id = Column(UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
     match_date = Column(DateTime, nullable=False)
