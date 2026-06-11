@@ -10,16 +10,15 @@ from app.models import Base
 
 # Import routers
 from app.routers import auth, players, teams, matches, tournaments
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 def patch_database_schema(db_engine):
     try:
-        with db_engine.connect() as conn:
-            has_changed = False
-            
-            # 1. Patch players table
-            result = conn.execute(text("PRAGMA table_info(players)"))
-            columns = [row[1] for row in result.fetchall()]
+        inspector = inspect(db_engine)
+        
+        # 1. Patch players table
+        if 'players' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('players')]
             new_player_cols = [
                 ("career_runs", "INTEGER DEFAULT 0"),
                 ("career_wickets", "INTEGER DEFAULT 0"),
@@ -31,42 +30,38 @@ def patch_database_schema(db_engine):
                 ("best_bowling_figures", "VARCHAR DEFAULT ''"),
                 ("jersey_number", "INTEGER DEFAULT NULL")
             ]
-            for col_name, col_type in new_player_cols:
-                if col_name not in columns:
-                    conn.execute(text(f"ALTER TABLE players ADD COLUMN {col_name} {col_type}"))
-                    has_changed = True
+            with db_engine.begin() as conn:
+                for col_name, col_type in new_player_cols:
+                    if col_name not in columns:
+                        conn.execute(text(f"ALTER TABLE players ADD COLUMN {col_name} {col_type}"))
+                
+                # 1b. Ensure unique index on team_players(player_id)
+                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_team_players_player_id ON team_players(player_id)"))
             
-            # 1b. Ensure unique index on team_players(player_id)
-            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_team_players_player_id ON team_players(player_id)"))
-            has_changed = True
-            
-            # 2. Patch tournaments table
-            result_tour = conn.execute(text("PRAGMA table_info(tournaments)"))
-            columns_tour = [row[1] for row in result_tour.fetchall()]
+        # 2. Patch tournaments table
+        if 'tournaments' in inspector.get_table_names():
+            columns_tour = [col['name'] for col in inspector.get_columns('tournaments')]
             new_tour_cols = [
                 ("num_teams", "INTEGER DEFAULT 4"),
                 ("status", "VARCHAR DEFAULT 'registration'"),
                 ("winner_id", "CHAR(32)")
             ]
-            for col_name, col_type in new_tour_cols:
-                if col_name not in columns_tour:
-                    conn.execute(text(f"ALTER TABLE tournaments ADD COLUMN {col_name} {col_type}"))
-                    has_changed = True
+            with db_engine.begin() as conn:
+                for col_name, col_type in new_tour_cols:
+                    if col_name not in columns_tour:
+                        conn.execute(text(f"ALTER TABLE tournaments ADD COLUMN {col_name} {col_type}"))
             
-            # 3. Patch matches table
-            result_match = conn.execute(text("PRAGMA table_info(matches)"))
-            columns_match = [row[1] for row in result_match.fetchall()]
+        # 3. Patch matches table
+        if 'matches' in inspector.get_table_names():
+            columns_match = [col['name'] for col in inspector.get_columns('matches')]
             new_match_cols = [
                 ("tournament_stage", "VARCHAR"),
                 ("bracket_code", "VARCHAR")
             ]
-            for col_name, col_type in new_match_cols:
-                if col_name not in columns_match:
-                    conn.execute(text(f"ALTER TABLE matches ADD COLUMN {col_name} {col_type}"))
-                    has_changed = True
-            
-            if has_changed:
-                conn.commit()
+            with db_engine.begin() as conn:
+                for col_name, col_type in new_match_cols:
+                    if col_name not in columns_match:
+                        conn.execute(text(f"ALTER TABLE matches ADD COLUMN {col_name} {col_type}"))
     except Exception as e:
         print(f"Error patching database schema: {e}")
 
