@@ -1,5 +1,8 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cricket_scorer/core/app_config.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
@@ -36,6 +39,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
   List<dynamic> _bowlingSquad = [];
   bool _isPrompting = false;
 
+  // WebSocket fields
+  WebSocket? _webSocket;
+  bool _isWsConnected = false;
+  int _wsRetryCount = 0;
+  bool _isDisposed = false;
+
   @override
   void initState() {
     super.initState();
@@ -44,7 +53,114 @@ class _ScoringScreenState extends State<ScoringScreen> {
     _activeNonStrikerId = widget.nonStrikerId ?? "";
     _activeBowlerId = widget.bowlerId ?? "";
     _fetchLiveState();
+    _initWebSocket();
   }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _webSocket?.close();
+    super.dispose();
+  }
+
+  void _initWebSocket() async {
+    if (_isDisposed) return;
+    
+    // Construct WebSocket URL by replacing http:// with ws:// and https:// with wss://
+    final wsBase = AppConfig.baseUrl
+        .replaceAll("http://", "ws://")
+        .replaceAll("https://", "wss://");
+    final wsUrl = "$wsBase/matches/${widget.matchId}/live/ws";
+    
+    debugPrint("[WebSocket] Connecting to $wsUrl");
+    
+    try {
+      final ws = await WebSocket.connect(wsUrl).timeout(const Duration(seconds: 5));
+      _webSocket = ws;
+      
+      if (_isDisposed) {
+        ws.close();
+        return;
+      }
+      
+      setState(() {
+        _isWsConnected = true;
+        _wsRetryCount = 0;
+      });
+      
+      debugPrint("[WebSocket] Connected successfully!");
+      
+      ws.listen(
+        (message) {
+          debugPrint("[WebSocket] Received message: $message");
+          _handleWebSocketMessage(message);
+        },
+        onError: (error) {
+          debugPrint("[WebSocket] Error: $error");
+          _handleWebSocketDisconnect();
+        },
+        onDone: () {
+          debugPrint("[WebSocket] Connection closed by server");
+          _handleWebSocketDisconnect();
+        },
+        cancelOnError: true,
+      );
+    } catch (e) {
+      debugPrint("[WebSocket] Connection failed: $e");
+      _handleWebSocketDisconnect();
+    }
+  }
+
+  void _handleWebSocketMessage(dynamic message) {
+    if (_isDisposed) return;
+    try {
+      final Map<String, dynamic> data = jsonDecode(message.toString());
+      setState(() {
+        _liveState = data;
+        _isLoading = false;
+        
+        // Sync active IDs from backend state cache
+        if (data['striker'] != null) {
+          _activeStrikerId = data['striker']['player_id'].toString();
+        }
+        if (data['non_striker'] != null) {
+          _activeNonStrikerId = data['non_striker']['player_id'].toString();
+        }
+        if (data['bowler'] != null) {
+          _activeBowlerId = data['bowler']['player_id'].toString();
+        }
+        
+        // Trigger prompt check if players are missing
+        final currentInnings = data['current_innings'];
+        if (currentInnings != null) {
+          _checkAndPromptSelections();
+        }
+      });
+    } catch (e) {
+      debugPrint("[WebSocket] Error parsing message: $e");
+    }
+  }
+
+  void _handleWebSocketDisconnect() {
+    if (_isDisposed) return;
+    
+    setState(() {
+      _isWsConnected = false;
+      _webSocket = null;
+    });
+    
+    // Auto-reconnect with exponential backoff capped at 30 seconds
+    _wsRetryCount++;
+    final delay = Duration(seconds: (_wsRetryCount * 2).clamp(2, 30));
+    debugPrint("[WebSocket] Disconnected. Retrying in ${delay.inSeconds} seconds...");
+    
+    Future.delayed(delay, () {
+      if (!_isDisposed && !_isWsConnected) {
+        _initWebSocket();
+      }
+    });
+  }
+
 
   Future<void> _fetchLiveState() async {
     setState(() => _isLoading = true);
@@ -846,11 +962,42 @@ class _ScoringScreenState extends State<ScoringScreen> {
       appBar: AppBar(
         title: Text(isCompleted ? "Match Completed" : "Live Scorer"),
         actions: [
-          if (!isCompleted)
+          if (!isCompleted) ...[
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: _isWsConnected ? Colors.green : Colors.red,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      if (_isWsConnected)
+                        BoxShadow(
+                          color: Colors.green.withOpacity(0.5),
+                          blurRadius: 4,
+                          spreadRadius: 2,
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _isWsConnected ? "Live" : "Connecting...",
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    color: _isWsConnected ? Colors.green : Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+            ),
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _fetchLiveState,
             ),
+          ],
         ],
       ),
       body: isCompleted

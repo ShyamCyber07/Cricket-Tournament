@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Optional, Dict
+from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 from uuid import UUID
 
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.routers.auth import get_current_user
 from app.models.user import User
 from app.models.cricket import Match, Team, Player, MatchSquad, Innings, Ball
@@ -14,8 +14,37 @@ from app.schemas.match import (
     BallCreate, LiveMatchState, StrikerState, BowlerState, 
     InningsSummarySchema, RecentBallSchema
 )
+from fastapi.encoders import jsonable_encoder
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, List[WebSocket]] = {}
+
+    async def connect(self, match_id: str, websocket: WebSocket):
+        await websocket.accept()
+        if match_id not in self.active_connections:
+            self.active_connections[match_id] = []
+        self.active_connections[match_id].append(websocket)
+
+    def disconnect(self, match_id: str, websocket: WebSocket):
+        if match_id in self.active_connections:
+            if websocket in self.active_connections[match_id]:
+                self.active_connections[match_id].remove(websocket)
+            if not self.active_connections[match_id]:
+                del self.active_connections[match_id]
+
+    async def broadcast(self, match_id: str, message: dict):
+        if match_id in self.active_connections:
+            for connection in list(self.active_connections[match_id]):
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    self.disconnect(match_id, connection)
+
+manager = ConnectionManager()
 
 router = APIRouter()
+
 
 @router.get("/", response_model=List[MatchResponse])
 def list_matches(
@@ -55,6 +84,7 @@ def create_match(
 def submit_toss(
     id: UUID,
     toss: TossSubmit,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -70,12 +100,15 @@ def submit_toss(
     match.status = "team_selection"
     db.commit()
     db.refresh(match)
+    
+    background_tasks.add_task(broadcast_match_update_task, id)
     return match
 
 @router.post("/{id}/squads", status_code=status.HTTP_200_OK)
 def submit_squads(
     id: UUID,
     squad: SquadSubmit,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -153,6 +186,7 @@ def submit_squads(
         db.commit()
         db.refresh(match)
         
+    background_tasks.add_task(broadcast_match_update_task, id)
     return {"message": "Squad registered successfully", "match_status": match.status}
 
 @router.get("/{id}/squads", status_code=status.HTTP_200_OK)
@@ -190,6 +224,7 @@ def get_match_squads(
 def submit_ball(
     id: UUID,
     ball_in: BallCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -417,11 +452,13 @@ def submit_ball(
         except Exception as err:
             print(f"Error progressing tournament: {err}")
             
+    background_tasks.add_task(broadcast_match_update_task, id)
     return {"message": "Ball recorded successfully", "innings_completed": innings.is_completed}
 
 @router.post("/{id}/undo", status_code=status.HTTP_200_OK)
 def undo_last_ball(
     id: UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -512,6 +549,7 @@ def undo_last_ball(
         innings.is_completed = False
 
     db.commit()
+    background_tasks.add_task(broadcast_match_update_task, id)
     return {"message": "Last ball rolled back successfully"}
 
 @router.get("/{id}/live", response_model=LiveMatchState)
@@ -713,8 +751,39 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
             dismissed_player_ids=prev_dismissed_ids,
             last_bowler_id=prev_last_bowler_id
         ) if prev_innings else None,
-        recent_balls=recent_balls
     )
+
+async def broadcast_match_update_task(match_id: UUID):
+    db = SessionLocal()
+    try:
+        state = get_live_match(match_id, db)
+        json_state = jsonable_encoder(state)
+        await manager.broadcast(str(match_id), json_state)
+    except Exception as e:
+        print(f"Error broadcasting match update: {e}")
+    finally:
+        db.close()
+
+@router.websocket("/{id}/live/ws")
+async def websocket_endpoint(websocket: WebSocket, id: UUID):
+    await manager.connect(str(id), websocket)
+    db = SessionLocal()
+    try:
+        try:
+            state = get_live_match(id, db)
+            await websocket.send_json(jsonable_encoder(state))
+        except Exception as e:
+            print(f"Error sending initial live state: {e}")
+        
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"WebSocket error for match {id}: {e}")
+    finally:
+        db.close()
+        manager.disconnect(str(id), websocket)
 
 from app.routers.players import update_player_stats
 from app.schemas.match import (
