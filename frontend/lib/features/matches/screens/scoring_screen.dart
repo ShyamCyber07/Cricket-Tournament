@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
+import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
+import 'squad_selection_screen.dart';
 
 class ScoringScreen extends StatefulWidget {
   final String matchId;
@@ -37,6 +39,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
   @override
   void initState() {
     super.initState();
+    print("Tournament scoring screen opened");
     _activeStrikerId = widget.strikerId ?? "";
     _activeNonStrikerId = widget.nonStrikerId ?? "";
     _activeBowlerId = widget.bowlerId ?? "";
@@ -49,6 +52,36 @@ class _ScoringScreenState extends State<ScoringScreen> {
       final res = await _apiService.getLiveMatch(widget.matchId);
       final data = res.data;
       
+      final status = data['status'];
+      if (status == 'scheduled') {
+        setState(() {
+          _liveState = data;
+          _isLoading = false;
+        });
+        _promptTossSelection();
+        return;
+      } else if (status == 'team_selection') {
+        setState(() {
+          _liveState = data;
+          _isLoading = false;
+        });
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SquadSelectionScreen(
+                matchId: widget.matchId,
+                team1Id: data['team1_id'].toString(),
+                team2Id: data['team2_id'].toString(),
+                team1Name: data['team1_name'].toString(),
+                team2Name: data['team2_name'].toString(),
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
       setState(() {
         _liveState = data;
 
@@ -91,7 +124,128 @@ class _ScoringScreenState extends State<ScoringScreen> {
     }
   }
 
+  Future<void> _promptTossSelection() async {
+    if (_liveState == null) return;
+    
+    final team1Id = _liveState!['team1_id'].toString();
+    final team2Id = _liveState!['team2_id'].toString();
+    final team1Name = _liveState!['team1_name'].toString();
+    final team2Name = _liveState!['team2_name'].toString();
+
+    String selectedTossWinner = team1Id;
+    String selectedTossDecision = "bat";
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              title: Text(
+                "Toss Selection",
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Who won the toss?", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                  const SizedBox(height: 8),
+                  DropdownButton<String>(
+                    value: selectedTossWinner,
+                    dropdownColor: AppColors.surface,
+                    isExpanded: true,
+                    items: [
+                      DropdownMenuItem(value: team1Id, child: Text(team1Name)),
+                      DropdownMenuItem(value: team2Id, child: Text(team2Name)),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setDialogState(() {
+                          selectedTossWinner = val;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Text("Toss winner elected to:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Text("BAT FIRST"),
+                          selected: selectedTossDecision == "bat",
+                          onSelected: (selected) {
+                            if (selected) {
+                              setDialogState(() {
+                                selectedTossDecision = "bat";
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Text("BOWL FIRST"),
+                          selected: selectedTossDecision == "bowl",
+                          onSelected: (selected) {
+                            if (selected) {
+                              setDialogState(() {
+                                selectedTossDecision = "bowl";
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    setState(() => _isLoading = true);
+                    try {
+                      await _apiService.submitToss(widget.matchId, selectedTossWinner, selectedTossDecision);
+                      if (mounted) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => SquadSelectionScreen(
+                              matchId: widget.matchId,
+                              team1Id: team1Id,
+                              team2Id: team2Id,
+                              team1Name: team1Name,
+                              team2Name: team2Name,
+                            ),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      setState(() => _isLoading = false);
+                      _showSnackBar("Error submitting toss: $e", AppColors.error);
+                    }
+                  },
+                  child: const Text("Submit & Proceed"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _checkAndPromptSelections() async {
+    print("checkAndPromptSelections called");
+    print("Current striker: $_activeStrikerId");
+    print("Current non striker: $_activeNonStrikerId");
+    print("Current bowler: $_activeBowlerId");
     debugPrint("[ScoringScreen] _checkAndPromptSelections entered. _isPrompting: $_isPrompting");
     
     if (_liveState == null) {
@@ -693,9 +847,36 @@ class _ScoringScreenState extends State<ScoringScreen> {
                   const SizedBox(height: 48),
                   ElevatedButton(
                     onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ScorecardScreen(matchId: widget.matchId),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.secondary,
+                    ),
+                    child: const Text("View Scorecard"),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: () {
                       Navigator.pop(context);
                     },
-                    child: const Text("Return to Dashboard"),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.white30),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(
+                      "Return to Dashboard",
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ],
               ),

@@ -7,7 +7,8 @@ class TournamentBase(BaseModel):
     name: str
     start_date: date
     end_date: date
-    format: str  # T20, ODI, Test, Custom
+    format: str  # League, Knockout, League + Knockout
+    num_teams: int = 4
     banner_url: Optional[str] = None
 
 class TournamentCreate(TournamentBase):
@@ -16,6 +17,8 @@ class TournamentCreate(TournamentBase):
 class TournamentResponse(TournamentBase):
     id: UUID
     organizer_id: UUID
+    status: str
+    winner_id: Optional[UUID] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -28,7 +31,12 @@ class PointsTableEntry(BaseModel):
     won: int
     lost: int
     tied: int
+    no_result: int = 0
     points: int
+    runs_for: int = 0
+    runs_against: int = 0
+    overs_faced: float = 0.0
+    overs_bowled: float = 0.0
     net_run_rate: float
 
 class PlayerLeaderboardEntry(BaseModel):

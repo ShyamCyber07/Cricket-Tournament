@@ -408,6 +408,15 @@ def submit_ball(
     match.current_bowler_id = next_bowler
 
     db.commit()
+    
+    # If the match belongs to a tournament, check if we need to progress to the next stage
+    if match.status == "completed" and match.tournament_id:
+        from app.routers.tournaments import check_and_progress_tournament
+        try:
+            check_and_progress_tournament(match.tournament_id, db)
+        except Exception as err:
+            print(f"Error progressing tournament: {err}")
+            
     return {"message": "Ball recorded successfully", "innings_completed": innings.is_completed}
 
 @router.post("/{id}/undo", status_code=status.HTTP_200_OK)
@@ -705,5 +714,310 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
             last_bowler_id=prev_last_bowler_id
         ) if prev_innings else None,
         recent_balls=recent_balls
+    )
+
+from app.routers.players import update_player_stats
+from app.schemas.match import (
+    MatchScorecardResponse, MatchSummaryCardSchema, InningsScorecardSchema,
+    BatsmanScorecardEntry, BowlerScorecardEntry, ExtrasBreakdownSchema,
+    FallOfWicketEntry, PartnershipEntry
+)
+
+@router.get("/{id}/scorecard", response_model=MatchScorecardResponse)
+def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
+    match = db.query(Match).filter(Match.id == id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    # Fetch all players in this match's squads and update their career statistics
+    squad_players = db.query(MatchSquad.player_id).filter(MatchSquad.match_id == id).all()
+    for row in squad_players:
+        update_player_stats(row.player_id, db)
+
+    # 1. Compile Match Summary Info
+    team1_name = match.team1.name
+    team2_name = match.team2.name
+    toss_winner_name = match.toss_winner.name if match.toss_winner else None
+    toss_decision = match.toss_decision
+    winner_name = match.winner.name if match.winner else None
+    
+    # Formulate win margin text
+    win_margin_text = "Match in progress"
+    if match.status == "completed":
+        if winner_name:
+            if match.win_margin_runs:
+                win_margin_text = f"{winner_name} won by {match.win_margin_runs} runs"
+            elif match.win_margin_wickets:
+                win_margin_text = f"{winner_name} won by {match.win_margin_wickets} wickets"
+            else:
+                win_margin_text = f"{winner_name} won"
+        else:
+            win_margin_text = "Match Tied"
+    elif match.status == "abandoned":
+        win_margin_text = "Match Abandoned"
+    elif match.status == "scheduled":
+        win_margin_text = "Match Scheduled"
+    elif match.status == "team_selection":
+        win_margin_text = "Toss completed. Lineups being selected."
+    elif toss_winner_name and toss_decision:
+        win_margin_text = f"{toss_winner_name} won toss & elected to {toss_decision}"
+
+    summary = MatchSummaryCardSchema(
+        match_id=match.id,
+        venue=match.venue,
+        match_type=match.match_type,
+        date=match.match_date,
+        team1_name=team1_name,
+        team2_name=team2_name,
+        toss_winner_name=toss_winner_name,
+        toss_decision=toss_decision,
+        winner_name=winner_name,
+        win_margin_runs=match.win_margin_runs,
+        win_margin_wickets=match.win_margin_wickets,
+        win_margin_text=win_margin_text
+    )
+
+    # 2. Process Innings Scorecards
+    innings_list = []
+    db_innings = db.query(Innings).filter(Innings.match_id == id).order_by(Innings.innings_number.asc()).all()
+
+    for innings in db_innings:
+        batting_team_name = innings.batting_team.name
+        
+        # Query all balls in chronological order
+        balls = db.query(Ball).filter(Ball.innings_id == innings.id).order_by(Ball.ball_number.asc()).all()
+
+        # Group and calculate Batsmen entries
+        # Maintain order of entry to crease
+        batsmen_order = []
+        seen_batsmen = set()
+        for b in balls:
+            if b.batsman_id not in seen_batsmen:
+                seen_batsmen.add(b.batsman_id)
+                batsmen_order.append(b.batsman_id)
+            if b.non_striker_id not in seen_batsmen:
+                seen_batsmen.add(b.non_striker_id)
+                batsmen_order.append(b.non_striker_id)
+            if b.player_dismissed_id and b.player_dismissed_id not in seen_batsmen:
+                seen_batsmen.add(b.player_dismissed_id)
+                batsmen_order.append(b.player_dismissed_id)
+
+        # Map player names for lookup
+        all_match_players = db.query(Player).filter(Player.id.in_(list(seen_batsmen))).all()
+        players_name_map = {p.id: p.name for p in all_match_players}
+
+        batting_entries = []
+        for batsman_id in batsmen_order:
+            batsman_balls = [b for b in balls if b.batsman_id == batsman_id]
+            runs = sum(b.runs_batsman for b in batsman_balls)
+            balls_faced = sum(1 for b in batsman_balls if b.extra_type != "wide")
+            fours = sum(1 for b in batsman_balls if b.runs_batsman == 4)
+            sixes = sum(1 for b in batsman_balls if b.runs_batsman == 6)
+            sr = round((runs / balls_faced) * 100, 2) if balls_faced > 0 else 0.0
+
+            # Find dismissal info
+            dismissal_info = "not out"
+            dismissal_ball = next((b for b in balls if b.is_wicket and b.player_dismissed_id == batsman_id), None)
+            if dismissal_ball:
+                w_type = dismissal_ball.wicket_type or "out"
+                bowler_name = players_name_map.get(dismissal_ball.bowler_id, "Bowler")
+                fielder_name = players_name_map.get(dismissal_ball.fielder_id, "Fielder") if dismissal_ball.fielder_id else None
+
+                if w_type == "bowled":
+                    dismissal_info = f"b {bowler_name}"
+                elif w_type == "caught":
+                    dismissal_info = f"c {fielder_name} b {bowler_name}" if fielder_name else f"c & b {bowler_name}"
+                elif w_type == "lbw":
+                    dismissal_info = f"lbw b {bowler_name}"
+                elif w_type == "stumped":
+                    dismissal_info = f"st {fielder_name} b {bowler_name}" if fielder_name else f"st b {bowler_name}"
+                elif w_type == "run_out":
+                    dismissal_info = f"run out ({fielder_name})" if fielder_name else "run out"
+                elif w_type == "hit_wicket":
+                    dismissal_info = f"hit wicket b {bowler_name}"
+                elif w_type == "retired_hurt":
+                    dismissal_info = "retired hurt"
+                else:
+                    dismissal_info = w_type
+
+            batting_entries.append(
+                BatsmanScorecardEntry(
+                    name=players_name_map.get(batsman_id, "Unknown Batsman"),
+                    runs=runs,
+                    balls=balls_faced,
+                    fours=fours,
+                    sixes=sixes,
+                    strike_rate=sr,
+                    dismissal_info=dismissal_info
+                )
+            )
+
+        # Bowling scorecard calculation
+        bowlers_order = []
+        seen_bowlers = set()
+        for b in balls:
+            if b.bowler_id not in seen_bowlers:
+                seen_bowlers.add(b.bowler_id)
+                bowlers_order.append(b.bowler_id)
+
+        all_bowlers = db.query(Player).filter(Player.id.in_(list(seen_bowlers))).all()
+        bowlers_name_map = {p.id: p.name for p in all_bowlers}
+
+        bowling_entries = []
+        for bowler_id in bowlers_order:
+            bowler_balls = [b for b in balls if b.bowler_id == bowler_id]
+            runs_conceded = sum(b.runs_batsman + b.runs_extras for b in bowler_balls if b.extra_type in ["wide", "no_ball", "none"])
+            wickets = sum(1 for b in bowler_balls if b.is_wicket and (b.wicket_type or "") not in ["run_out", "retired_hurt", "none"])
+            legit_balls = sum(1 for b in bowler_balls if b.extra_type not in ["wide", "no_ball"])
+            overs = float(f"{legit_balls // 6}.{legit_balls % 6}")
+            econ = round(runs_conceded / (legit_balls / 6.0), 2) if legit_balls > 0 else 0.0
+
+            # Calculate maidens
+            maidens = 0
+            overs_grouped = {}
+            for b in bowler_balls:
+                overs_grouped.setdefault(b.over_number, []).append(b)
+            for over_no, over_balls in overs_grouped.items():
+                legit_over_balls = [ob for ob in over_balls if ob.extra_type not in ["wide", "no_ball"]]
+                if len(legit_over_balls) == 6:
+                    over_runs = sum(ob.runs_batsman + ob.runs_extras for ob in over_balls if ob.extra_type in ["wide", "no_ball", "none"])
+                    if over_runs == 0:
+                        maidens += 1
+
+            bowling_entries.append(
+                BowlerScorecardEntry(
+                    name=bowlers_name_map.get(bowler_id, "Unknown Bowler"),
+                    overs=overs,
+                    maidens=maidens,
+                    runs_conceded=runs_conceded,
+                    wickets=wickets,
+                    economy=econ
+                )
+            )
+
+        # Extras Breakdown
+        wides = sum(b.runs_extras for b in balls if b.extra_type == "wide")
+        noballs = sum(b.runs_extras for b in balls if b.extra_type == "no_ball")
+        byes = sum(b.runs_extras for b in balls if b.extra_type == "bye")
+        legbyes = sum(b.runs_extras for b in balls if b.extra_type == "leg_bye")
+        total_extras = wides + noballs + byes + legbyes
+
+        extras_schema = ExtrasBreakdownSchema(
+            wides=wides,
+            no_balls=noballs,
+            byes=byes,
+            leg_byes=legbyes,
+            total=total_extras
+        )
+
+        # Fall of Wickets (FoW)
+        fow_entries = []
+        wkt_count = 0
+        legit_balls_so_far = 0
+        runs_so_far = 0
+        
+        for b in balls:
+            runs_so_far += (b.runs_batsman + b.runs_extras)
+            if b.extra_type not in ["wide", "no_ball"]:
+                legit_balls_so_far += 1
+                
+            if b.is_wicket and b.player_dismissed_id:
+                wkt_count += 1
+                ov_ball = f"{legit_balls_so_far // 6}.{legit_balls_so_far % 6}"
+                dismissed_name = db.query(Player.name).filter(Player.id == b.player_dismissed_id).scalar() or "Unknown"
+                fow_entries.append(
+                    FallOfWicketEntry(
+                        score=f"{runs_so_far}/{wkt_count}",
+                        player_name=dismissed_name,
+                        over=ov_ball
+                    )
+                )
+
+        # Partnerships Calculation
+        partnerships_list = []
+        if balls:
+            current_p = {
+                "player1_id": balls[0].batsman_id,
+                "player2_id": balls[0].non_striker_id,
+                "runs": 0,
+                "balls": 0
+            }
+            active_partners = {balls[0].batsman_id, balls[0].non_striker_id}
+
+            for b in balls:
+                ball_batsmen = {b.batsman_id, b.non_striker_id}
+                if not ball_batsmen.issubset(active_partners):
+                    # partnership has changed
+                    if current_p["runs"] > 0 or current_p["balls"] > 0:
+                        partnerships_list.append(current_p)
+                    
+                    survivor = list(active_partners.intersection(ball_batsmen))
+                    new_batsman = list(ball_batsmen.difference(active_partners))
+                    p1 = survivor[0] if survivor else b.batsman_id
+                    p2 = new_batsman[0] if new_batsman else b.non_striker_id
+                    
+                    current_p = {
+                        "player1_id": p1,
+                        "player2_id": p2,
+                        "runs": 0,
+                        "balls": 0
+                    }
+                    active_partners = {p1, p2}
+
+                current_p["runs"] += (b.runs_batsman + b.runs_extras)
+                if b.extra_type != "wide":
+                    current_p["balls"] += 1
+
+                if b.is_wicket and b.player_dismissed_id:
+                    partnerships_list.append(current_p)
+                    survivor = active_partners.difference({b.player_dismissed_id})
+                    active_partners = survivor
+
+            if current_p not in partnerships_list and (current_p["runs"] > 0 or current_p["balls"] > 0 or len(partnerships_list) == 0):
+                partnerships_list.append(current_p)
+
+            # Resolve names for partnerships
+            p_ids = set()
+            for p in partnerships_list:
+                p_ids.add(p["player1_id"])
+                p_ids.add(p["player2_id"])
+            partners_map = {p.id: p.name for p in db.query(Player).filter(Player.id.in_(list(p_ids))).all()}
+            
+            resolved_partnerships = [
+                PartnershipEntry(
+                    player1_name=partners_map.get(p["player1_id"], "Unknown"),
+                    player2_name=partners_map.get(p["player2_id"], "Unknown"),
+                    runs=p["runs"],
+                    balls=p["balls"]
+                )
+                for p in partnerships_list
+            ]
+        else:
+            resolved_partnerships = []
+
+        # Calculate run rate
+        total_balls = (legit_balls_so_far // 6) * 6 + (legit_balls_so_far % 6)
+        overs_frac = total_balls / 6.0
+        run_rate = round(innings.total_runs / overs_frac, 2) if overs_frac > 0 else 0.0
+
+        innings_list.append(
+            InningsScorecardSchema(
+                innings_number=innings.innings_number,
+                batting_team_name=batting_team_name,
+                total_runs=innings.total_runs,
+                total_wickets=innings.total_wickets,
+                total_overs=innings.total_overs,
+                run_rate=run_rate,
+                extras=extras_schema,
+                batting=batting_entries,
+                bowling=bowling_entries,
+                fall_of_wickets=fow_entries,
+                partnerships=resolved_partnerships
+            )
+        )
+
+    return MatchScorecardResponse(
+        match_summary=summary,
+        innings=innings_list
     )
 

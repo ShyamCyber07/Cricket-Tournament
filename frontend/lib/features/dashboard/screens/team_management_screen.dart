@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
+import 'package:dio/dio.dart';
 
 class TeamManagementScreen extends StatefulWidget {
   const TeamManagementScreen({super.key});
@@ -67,8 +68,103 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
       _fetchTeams(); // reload teams to reflect players
       if (mounted) Navigator.pop(context); // close player list sheet
     } catch (e) {
-      _showSnackBar("Failed to add player: $e", AppColors.error);
+      String errMsg = e.toString();
+      if (e is DioException && e.response?.data?['detail'] != null) {
+        errMsg = e.response!.data['detail'].toString();
+      }
+      _showSnackBar("Failed to add player: $errMsg", AppColors.error);
     }
+  }
+
+  Future<void> _removePlayerFromTeam(String teamId, String playerId, StateSetter setModalState) async {
+    try {
+      await _apiService.removePlayerFromTeam(teamId, playerId);
+      _showSnackBar("Player removed from team!", AppColors.primary);
+      await _fetchTeams(); // Reload teams
+      setModalState(() {}); // Force rebuild of modal sheet
+    } catch (e) {
+      String errMsg = e.toString();
+      if (e is DioException && e.response?.data?['detail'] != null) {
+        errMsg = e.response!.data['detail'].toString();
+      }
+      _showSnackBar("Failed to remove player: $errMsg", AppColors.error);
+    }
+  }
+
+  Future<void> _deleteTeam(String id) async {
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.deleteTeam(id);
+      _showSnackBar("Team deleted successfully!", AppColors.primary);
+      _fetchTeams();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      String errMsg = e.toString();
+      if (e is DioException && e.response?.data?['detail'] != null) {
+        errMsg = e.response!.data['detail'].toString();
+      }
+      _showSnackBar("Failed to delete team: $errMsg", AppColors.error);
+    }
+  }
+
+  void _confirmDeleteTeam(dynamic team) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text("Delete Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          content: Text(
+            "Are you sure you want to delete this team?",
+            style: GoogleFonts.outfit(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _deleteTeam(team['id'].toString());
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              child: const Text("Delete"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _confirmRemovePlayer(String teamId, dynamic player, StateSetter setModalState) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text("Remove Player", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          content: Text(
+            "Are you sure you want to remove ${player['name']} from this team?",
+            style: GoogleFonts.outfit(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _removePlayerFromTeam(teamId, player['id'].toString(), setModalState);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              child: const Text("Remove"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showSnackBar(String msg, Color color) {
@@ -78,6 +174,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
   }
 
   void _openCreateTeamDialog() {
+    _nameController.clear();
     showDialog(
       context: context,
       builder: (context) {
@@ -107,6 +204,108 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
               child: const Text("Create"),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _openEditTeamDialog(Map<String, dynamic> team) {
+    final teamId = team['id'].toString();
+    _nameController.text = team['name'] ?? '';
+    final players = team['players'] as List<dynamic>;
+    String? selectedCaptainId = team['captain_id']?.toString();
+    
+    // Ensure selectedCaptainId is in players list or null
+    final hasCaptainInPlayers = players.any((p) => p['id'].toString() == selectedCaptainId);
+    if (!hasCaptainInPlayers) {
+      selectedCaptainId = null;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              title: Text("Edit Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Form(
+                      key: _formKey,
+                      child: TextFormField(
+                        controller: _nameController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: "Team Name",
+                          prefixIcon: Icon(Icons.shield_outlined, color: AppColors.primary),
+                        ),
+                        validator: (val) =>
+                            val == null || val.trim().isEmpty ? "Please enter a team name" : null,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    DropdownButtonFormField<String>(
+                      value: selectedCaptainId,
+                      dropdownColor: AppColors.surface,
+                      decoration: const InputDecoration(
+                        labelText: "Select Captain",
+                        prefixIcon: Icon(Icons.person, color: AppColors.primary),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text("No Captain"),
+                        ),
+                        ...players.map((p) {
+                          return DropdownMenuItem<String>(
+                            value: p['id'].toString(),
+                            child: Text(p['name'].toString()),
+                          );
+                        }).toList(),
+                      ],
+                      onChanged: (val) {
+                        setDialogState(() {
+                          selectedCaptainId = val;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (!_formKey.currentState!.validate()) return;
+                    Navigator.pop(context); // close dialog
+                    setState(() => _isLoading = true);
+                    try {
+                      // Send UUID(int=0) to clear captain if null
+                      final capId = selectedCaptainId ?? '00000000-0000-0000-0000-000000000000';
+                      await _apiService.updateTeam(teamId, _nameController.text.trim(), captainId: capId);
+                      _showSnackBar("Team updated successfully!", AppColors.primary);
+                      _nameController.clear();
+                      _fetchTeams();
+                    } catch (e) {
+                      setState(() => _isLoading = false);
+                      String errMsg = e.toString();
+                      if (e is DioException && e.response?.data?['detail'] != null) {
+                        errMsg = e.response!.data['detail'].toString();
+                      }
+                      _showSnackBar("Failed to update team: $errMsg", AppColors.error);
+                    }
+                  },
+                  child: const Text("Save"),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -175,6 +374,8 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                         itemCount: availablePlayers.length,
                         itemBuilder: (context, index) {
                           final player = availablePlayers[index];
+                          final jersey = player['jersey_number'];
+                          final displayName = jersey != null ? "#$jersey ${player['name']}" : player['name'];
                           return ListTile(
                             leading: CircleAvatar(
                               backgroundColor: AppColors.primary.withOpacity(0.15),
@@ -185,7 +386,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                               ),
                             ),
                             title: Text(
-                              player['name'],
+                              displayName,
                               style: GoogleFonts.outfit(color: Colors.white),
                             ),
                             subtitle: Text(
@@ -210,7 +411,6 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
 
   void _showTeamPlayersSheet(Map<String, dynamic> team) {
     final teamId = team['id'].toString();
-    final players = team['players'] as List<dynamic>;
 
     showModalBottomSheet(
       context: context,
@@ -234,6 +434,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                   orElse: () => team,
                 );
                 final currentPlayers = currentTeam['players'] as List<dynamic>;
+                final captainId = currentTeam['captain_id']?.toString();
 
                 return Padding(
                   padding: const EdgeInsets.all(20.0),
@@ -278,32 +479,60 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                       const SizedBox(height: 12),
                       Expanded(
                         child: currentPlayers.isEmpty
-                          ? Center(
-                              child: Text(
-                                "No players in this team yet",
-                                style: GoogleFonts.outfit(color: AppColors.textSecondary),
+                            ? Center(
+                                child: Text(
+                                  "No players in this team yet",
+                                  style: GoogleFonts.outfit(color: AppColors.textSecondary),
+                                ),
+                              )
+                            : ListView.builder(
+                                controller: scrollController,
+                                itemCount: currentPlayers.length,
+                                itemBuilder: (context, index) {
+                                  final player = currentPlayers[index];
+                                  final isCap = player['id'].toString() == captainId;
+                                  final jersey = player['jersey_number'];
+                                  final displayName = jersey != null ? "#$jersey ${player['name']}" : player['name'];
+
+                                  return ListTile(
+                                    leading: const Icon(Icons.sports_cricket,
+                                        color: AppColors.secondary),
+                                    title: Row(
+                                      children: [
+                                        Text(
+                                          displayName,
+                                          style: GoogleFonts.outfit(color: Colors.white),
+                                        ),
+                                        if (isCap) ...[
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.accent.withOpacity(0.2),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: AppColors.accent, width: 0.5),
+                                            ),
+                                            child: Text(
+                                              "CAPT",
+                                              style: GoogleFonts.outfit(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.accent),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    subtitle: Text(
+                                      player['role'].toString().toUpperCase(),
+                                      style: GoogleFonts.outfit(
+                                          color: AppColors.textSecondary, fontSize: 11),
+                                    ),
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.remove_circle_outline, color: AppColors.error),
+                                      onPressed: () => _confirmRemovePlayer(teamId, player, setModalState),
+                                      tooltip: "Remove Player from Team",
+                                    ),
+                                  );
+                                },
                               ),
-                            )
-                          : ListView.builder(
-                              controller: scrollController,
-                              itemCount: currentPlayers.length,
-                              itemBuilder: (context, index) {
-                                final player = currentPlayers[index];
-                                return ListTile(
-                                  leading: const Icon(Icons.sports_cricket,
-                                      color: AppColors.secondary),
-                                  title: Text(
-                                    player['name'],
-                                    style: GoogleFonts.outfit(color: Colors.white),
-                                  ),
-                                  subtitle: Text(
-                                    player['role'].toString().toUpperCase(),
-                                    style: GoogleFonts.outfit(
-                                        color: AppColors.textSecondary, fontSize: 11),
-                                  ),
-                                );
-                              },
-                            ),
                       ),
                     ],
                   ),
@@ -367,7 +596,22 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                           "$squadSize registered players",
                           style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12),
                         ),
-                        trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: AppColors.textSecondary, size: 20),
+                              onPressed: () => _openEditTeamDialog(team),
+                              tooltip: "Edit Team",
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 20),
+                              onPressed: () => _confirmDeleteTeam(team),
+                              tooltip: "Delete Team",
+                            ),
+                            const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                          ],
+                        ),
                         onTap: () => _showTeamPlayersSheet(team),
                       ),
                     );

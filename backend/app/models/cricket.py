@@ -10,7 +10,7 @@ class TeamPlayer(Base):
     __tablename__ = "team_players"
 
     team_id = Column(UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True)
-    player_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="CASCADE"), primary_key=True)
+    player_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="CASCADE"), primary_key=True, unique=True)
     joined_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class TournamentTeam(Base):
@@ -29,6 +29,17 @@ class Player(Base):
     batting_style = Column(String, nullable=False) # right_hand, left_hand
     bowling_style = Column(String, nullable=False) # right_arm_fast, right_arm_spin, etc.
     profile_photo_url = Column(String, nullable=True)
+    jersey_number = Column(Integer, nullable=True)
+
+    # Career Stats
+    career_runs = Column(Integer, default=0, nullable=True)
+    career_wickets = Column(Integer, default=0, nullable=True)
+    matches_played = Column(Integer, default=0, nullable=True)
+    batting_average = Column(Float, default=0.0, nullable=True)
+    strike_rate = Column(Float, default=0.0, nullable=True)
+    economy = Column(Float, default=0.0, nullable=True)
+    highest_score = Column(Integer, default=0, nullable=True)
+    best_bowling_figures = Column(String, default="", nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="players")
@@ -42,6 +53,15 @@ class Player(Base):
             "batting_style": self.batting_style,
             "bowling_style": self.bowling_style,
             "profile_photo_url": self.profile_photo_url,
+            "jersey_number": self.jersey_number,
+            "career_runs": self.career_runs,
+            "career_wickets": self.career_wickets,
+            "matches_played": self.matches_played,
+            "batting_average": self.batting_average,
+            "strike_rate": self.strike_rate,
+            "economy": self.economy,
+            "highest_score": self.highest_score,
+            "best_bowling_figures": self.best_bowling_figures,
         }
 
 class Team(Base):
@@ -67,7 +87,10 @@ class Tournament(Base):
     organizer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
-    format = Column(String, nullable=False) # T20, ODI, Test, Custom
+    format = Column(String, nullable=False) # League, Knockout, League + Knockout
+    num_teams = Column(Integer, nullable=False, default=4)
+    status = Column(String, default="registration", nullable=False) # registration, ongoing, completed
+    winner_id = Column(UUID(as_uuid=True), ForeignKey("teams.id", ondelete="SET NULL"), nullable=True)
     banner_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -75,6 +98,7 @@ class Tournament(Base):
     organizer = relationship("User", back_populates="organized_tournaments")
     teams = relationship("Team", secondary="tournament_teams", back_populates="tournaments")
     matches = relationship("Match", back_populates="tournament")
+    winner = relationship("Team", foreign_keys=[winner_id])
 
 class Match(Base):
     __tablename__ = "matches"
@@ -93,6 +117,10 @@ class Match(Base):
     winner_id = Column(UUID(as_uuid=True), ForeignKey("teams.id", ondelete="SET NULL"), nullable=True)
     win_margin_runs = Column(Integer, nullable=True)
     win_margin_wickets = Column(Integer, nullable=True)
+    
+    # Tournament structures
+    tournament_stage = Column(String, nullable=True) # league, quarter_final, semi_final, final
+    bracket_code = Column(String, nullable=True) # QF1, QF2, QF3, QF4, SF1, SF2, F
     
     # Active Scorer State Cache (nullable when not in live scoring mode)
     current_striker_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="SET NULL"), nullable=True)

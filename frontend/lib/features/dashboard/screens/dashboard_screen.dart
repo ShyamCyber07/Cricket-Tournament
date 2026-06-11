@@ -9,6 +9,8 @@ import 'package:cricket_scorer/features/matches/screens/match_setup_screen.dart'
 import 'package:cricket_scorer/features/dashboard/screens/team_management_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/player_management_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/scoring_screen.dart';
+import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
+import 'package:cricket_scorer/features/tournaments/screens/tournament_list_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -171,13 +173,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
-              Row(
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
                 children: [
                   _buildActionCard(
                     context,
                     icon: Icons.people_outline,
                     title: "Teams",
-                    subtitle: "Manage squad players",
+                    subtitle: "Manage squads",
                     color: AppColors.secondary,
                     onTap: () {
                       Navigator.push(
@@ -186,12 +190,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       );
                     },
                   ),
-                  const SizedBox(width: 16),
+                  _buildActionCard(
+                    context,
+                    icon: Icons.emoji_events_outlined,
+                    title: "Tournaments",
+                    subtitle: "Leagues & Cups",
+                    color: const Color(0xFFA855F7),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const TournamentListScreen()),
+                      );
+                    },
+                  ),
                   _buildActionCard(
                     context,
                     icon: Icons.person_search_outlined,
                     title: "Players",
-                    subtitle: "Register & view stats",
+                    subtitle: "Register & stats",
                     color: AppColors.accent,
                     onTap: () {
                       Navigator.push(
@@ -266,46 +282,79 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             
                             return Card(
                               margin: const EdgeInsets.only(bottom: 12),
-                              child: ListTile(
-                                leading: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: isLive ? AppColors.primary.withOpacity(0.15) : AppColors.surface,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isLive ? AppColors.primary : Colors.white24,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    isLive ? "LIVE" : "COMPLETED",
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: isLive ? AppColors.primary : AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ),
-                                title: Text(
-                                  "Match #${match['id'].toString().substring(0, 5)} @ ${match['venue']}",
-                                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Text(
-                                  "Type: ${match['match_type']} • Overs: ${match['over_limit']}",
-                                  style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
-                                ),
-                                trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-                                onTap: () async {
-                                  // Navigate to scoring screen (can read details from server)
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ScoringScreen(
-                                        matchId: match['id'],
+                              child: Column(
+                                children: [
+                                  ListTile(
+                                    leading: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: isLive ? AppColors.primary.withOpacity(0.15) : AppColors.surface,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: isLive ? AppColors.primary : Colors.white24,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        isLive ? "LIVE" : "COMPLETED",
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: isLive ? AppColors.primary : AppColors.textSecondary,
+                                        ),
                                       ),
                                     ),
-                                  );
-                                  _fetchMatches();
-                                },
+                                    title: Text(
+                                      "Match #${match['id'].toString().substring(0, 5)} @ ${match['venue']}",
+                                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                                    ),
+                                    subtitle: Text(
+                                      "Type: ${match['match_type']} • Overs: ${match['over_limit']}",
+                                      style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
+                                    ),
+                                    trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                                    onTap: () async {
+                                      // Navigate to scoring screen (can read details from server)
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => ScoringScreen(
+                                            matchId: match['id'],
+                                          ),
+                                        ),
+                                      );
+                                      _fetchMatches();
+                                    },
+                                  ),
+                                  if (!isLive) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 12.0),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          TextButton.icon(
+                                            onPressed: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => ScorecardScreen(matchId: match['id']),
+                                                ),
+                                              );
+                                            },
+                                            icon: const Icon(Icons.analytics_outlined, size: 18, color: AppColors.primary),
+                                            label: Text(
+                                              "View Scorecard",
+                                              style: GoogleFonts.outfit(
+                                                color: AppColors.primary,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             );
                           },
@@ -325,39 +374,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFF334155), width: 1.5),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: color, size: 24),
+    final double cardWidth = (MediaQuery.of(context).size.width - 52) / 2;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: cardWidth,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF334155), width: 1.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
-              ),
-            ],
-          ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ],
         ),
       ),
     );

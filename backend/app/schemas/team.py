@@ -11,6 +11,10 @@ class TeamBase(BaseModel):
 class TeamCreate(TeamBase):
     captain_id: Optional[UUID] = None
 
+class TeamUpdate(BaseModel):
+    name: Optional[str] = None
+    captain_id: Optional[UUID] = None
+
 class TeamResponse(TeamBase):
     id: UUID
     captain_id: Optional[UUID] = None

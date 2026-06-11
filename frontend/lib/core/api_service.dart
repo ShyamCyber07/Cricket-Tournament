@@ -144,7 +144,7 @@ class ApiService {
     return await _dio.get('/players/$id/stats');
   }
 
-  Future<Response> createPlayer(String name, String role, String batting, String bowling) async {
+  Future<Response> createPlayer(String name, String role, String batting, String bowling, {int? jerseyNumber}) async {
     return await _dio.post(
       '/players/',
       data: {
@@ -152,8 +152,26 @@ class ApiService {
         'role': role,
         'batting_style': batting,
         'bowling_style': bowling,
+        if (jerseyNumber != null) 'jersey_number': jerseyNumber,
       },
     );
+  }
+
+  Future<Response> updatePlayer(String id, String name, String role, String batting, String bowling, {int? jerseyNumber}) async {
+    return await _dio.put(
+      '/players/$id',
+      data: {
+        'name': name,
+        'role': role,
+        'batting_style': batting,
+        'bowling_style': bowling,
+        'jersey_number': jerseyNumber,
+      },
+    );
+  }
+
+  Future<Response> deletePlayer(String id) async {
+    return await _dio.delete('/players/$id');
   }
 
   // TEAMS
@@ -180,6 +198,24 @@ class ApiService {
       '/teams/$teamId/players',
       data: {'player_id': playerId},
     );
+  }
+
+  Future<Response> removePlayerFromTeam(String teamId, String playerId) async {
+    return await _dio.delete('/teams/$teamId/players/$playerId');
+  }
+
+  Future<Response> updateTeam(String id, String name, {String? captainId}) async {
+    return await _dio.put(
+      '/teams/$id',
+      data: {
+        'name': name,
+        'captain_id': captainId,
+      },
+    );
+  }
+
+  Future<Response> deleteTeam(String id) async {
+    return await _dio.delete('/teams/$id');
   }
 
   Future<Response> getTeamStats(String teamId) async {
@@ -242,6 +278,10 @@ class ApiService {
     return await _dio.get('/matches/$matchId/live');
   }
 
+  Future<Response> getMatchScorecard(String matchId) async {
+    return await _dio.get('/matches/$matchId/scorecard');
+  }
+
   Future<Response> submitBall(String matchId, Map<String, dynamic> ballData) async {
     return await _dio.post(
       '/matches/$matchId/balls',
@@ -258,6 +298,10 @@ class ApiService {
     return await _dio.get('/tournaments/');
   }
 
+  Future<Response> getTournament(String tournamentId) async {
+    return await _dio.get('/tournaments/$tournamentId');
+  }
+
   Future<Response> getTournamentStandings(String tournamentId) async {
     return await _dio.get('/tournaments/$tournamentId/points-table');
   }
@@ -267,6 +311,8 @@ class ApiService {
     required String startDate,
     required String endDate,
     required String format,
+    required int numTeams,
+    String? bannerUrl,
   }) async {
     return await _dio.post(
       '/tournaments/',
@@ -275,8 +321,49 @@ class ApiService {
         'start_date': startDate,
         'end_date': endDate,
         'format': format,
+        'num_teams': numTeams,
+        'banner_url': bannerUrl,
       },
     );
+  }
+
+  Future<Response> registerTeam(String tournamentId, String teamId) async {
+    return await _dio.post(
+      '/tournaments/$tournamentId/teams',
+      queryParameters: {'team_id': teamId},
+    );
+  }
+
+  Future<Response> deregisterTeam(String tournamentId, String teamId) async {
+    return await _dio.delete(
+      '/tournaments/$tournamentId/teams/$teamId',
+    );
+  }
+
+  Future<Response> generateFixtures(
+    String tournamentId, {
+    bool homeAway = false,
+    String venue = "Main Ground",
+    int overLimit = 20,
+    String matchType = "T20",
+  }) async {
+    return await _dio.post(
+      '/tournaments/$tournamentId/fixtures/generate',
+      data: {
+        'home_away': homeAway,
+        'venue': venue,
+        'over_limit': overLimit,
+        'match_type': matchType,
+      },
+    );
+  }
+
+  Future<Response> getTournamentLeaderboards(String tournamentId) async {
+    return await _dio.get('/tournaments/$tournamentId/leaderboards');
+  }
+
+  Future<Response> getTournamentDashboard(String tournamentId) async {
+    return await _dio.get('/tournaments/$tournamentId/dashboard');
   }
 
   Future<Response> testConnection() async {

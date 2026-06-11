@@ -119,3 +119,70 @@ class LiveMatchState(BaseModel):
     current_innings: Optional[InningsSummarySchema] = None
     previous_innings: Optional[InningsSummarySchema] = None
     recent_balls: List[RecentBallSchema] = []
+
+# Scorecard response schemas
+class BatsmanScorecardEntry(BaseModel):
+    name: str
+    runs: int
+    balls: int
+    fours: int
+    sixes: int
+    strike_rate: float
+    dismissal_info: str
+
+class BowlerScorecardEntry(BaseModel):
+    name: str
+    overs: float
+    maidens: int
+    runs_conceded: int
+    wickets: int
+    economy: float
+
+class ExtrasBreakdownSchema(BaseModel):
+    wides: int
+    no_balls: int
+    byes: int
+    leg_byes: int
+    total: int
+
+class FallOfWicketEntry(BaseModel):
+    score: str
+    player_name: str
+    over: str
+
+class PartnershipEntry(BaseModel):
+    player1_name: str
+    player2_name: str
+    runs: int
+    balls: int
+
+class InningsScorecardSchema(BaseModel):
+    innings_number: int
+    batting_team_name: str
+    total_runs: int
+    total_wickets: int
+    total_overs: float
+    run_rate: float
+    extras: ExtrasBreakdownSchema
+    batting: List[BatsmanScorecardEntry]
+    bowling: List[BowlerScorecardEntry]
+    fall_of_wickets: List[FallOfWicketEntry]
+    partnerships: List[PartnershipEntry]
+
+class MatchSummaryCardSchema(BaseModel):
+    match_id: UUID
+    venue: str
+    match_type: str
+    date: datetime
+    team1_name: str
+    team2_name: str
+    toss_winner_name: Optional[str] = None
+    toss_decision: Optional[str] = None
+    winner_name: Optional[str] = None
+    win_margin_runs: Optional[int] = None
+    win_margin_wickets: Optional[int] = None
+    win_margin_text: str
+
+class MatchScorecardResponse(BaseModel):
+    match_summary: MatchSummaryCardSchema
+    innings: List[InningsScorecardSchema]

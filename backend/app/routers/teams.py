@@ -6,8 +6,8 @@ from uuid import UUID
 from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User
-from app.models.cricket import Team, Player, TeamPlayer, Match
-from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse
+from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad
+from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate
 
 router = APIRouter()
 
@@ -74,14 +74,18 @@ def add_player_to_team(
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    # Check if already in team
-    exists = db.query(TeamPlayer).filter(
-        TeamPlayer.team_id == id,
-        TeamPlayer.player_id == req.player_id
-    ).first()
-    
-    if exists:
-        raise HTTPException(status_code=400, detail="Player already in this team")
+    # Check if player is already assigned to any team (duplicate active membership prevention)
+    existing_membership = db.query(TeamPlayer).filter(TeamPlayer.player_id == req.player_id).first()
+    if existing_membership:
+        assigned_team = db.query(Team).filter(Team.id == existing_membership.team_id).first()
+        team_name = assigned_team.name if assigned_team else "another team"
+        if existing_membership.team_id == id:
+            raise HTTPException(status_code=400, detail="Player already in this team")
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Player already belongs to Team {team_name}."
+            )
 
     assoc = TeamPlayer(team_id=id, player_id=req.player_id)
     db.add(assoc)
@@ -125,3 +129,134 @@ def get_team_stats(id: UUID, db: Session = Depends(get_db)):
         matches_tied=tied,
         net_run_rate=0.0  # Optional NRR placeholder
     )
+
+
+@router.put("/{id}", response_model=TeamResponse)
+def update_team(
+    id: UUID,
+    team_in: TeamUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    # Check authorization (only creator can edit)
+    if team.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to manage this team")
+
+    # Update name if provided and verify uniqueness
+    if team_in.name is not None and team_in.name != team.name:
+        existing = db.query(Team).filter(Team.name == team_in.name, Team.id != id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Team name already taken")
+        team.name = team_in.name
+
+    # Update captain if provided and check membership
+    if team_in.captain_id is not None:
+        if team_in.captain_id == UUID(int=0):  # Handle clearing captain (e.g. empty or null)
+            team.captain_id = None
+        else:
+            # Check if captain player is in the team
+            member = db.query(TeamPlayer).filter(
+                TeamPlayer.team_id == id,
+                TeamPlayer.player_id == team_in.captain_id
+            ).first()
+            if not member:
+                raise HTTPException(status_code=400, detail="Captain must be a member of the team")
+            team.captain_id = team_in.captain_id
+
+    db.add(team)
+    db.commit()
+    db.refresh(team)
+    return team
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_team(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    # Check authorization
+    if team.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to manage this team")
+
+    # Block deletion if team belongs to active tournament (status == ongoing)
+    active_tour = db.query(Tournament).join(TournamentTeam).filter(
+        TournamentTeam.team_id == id,
+        Tournament.status == "ongoing"
+    ).first()
+    if active_tour:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete team because it is registered in an active tournament: {active_tour.name}."
+        )
+
+    # Block deletion if team has scheduled/ongoing matches (status not in completed/abandoned)
+    active_match = db.query(Match).filter(
+        ((Match.team1_id == id) | (Match.team2_id == id)),
+        ~Match.status.in_(["completed", "abandoned"])
+    ).first()
+    if active_match:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete team because it has scheduled or active matches: {active_match.team1.name} vs {active_match.team2.name}."
+        )
+
+    db.delete(team)
+    db.commit()
+    return None
+
+
+@router.delete("/{id}/players/{player_id}", response_model=TeamResponse)
+def remove_player_from_team(
+    id: UUID,
+    player_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    # Check authorization
+    if team.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to manage this team")
+
+    # Check if player is a member
+    assoc = db.query(TeamPlayer).filter(
+        TeamPlayer.team_id == id,
+        TeamPlayer.player_id == player_id
+    ).first()
+    if not assoc:
+        raise HTTPException(status_code=404, detail="Player is not a member of this team")
+
+    # Block removal if player is in an active (non-completed/non-abandoned) match squad of this team
+    active_squad = db.query(Match).join(MatchSquad).filter(
+        MatchSquad.player_id == player_id,
+        MatchSquad.team_id == id,
+        ~Match.status.in_(["completed", "abandoned"])
+    ).first()
+    if active_squad:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot remove player because they are part of an active match squad: {active_squad.team1.name} vs {active_squad.team2.name}."
+        )
+
+    # Delete membership relation
+    db.delete(assoc)
+
+    # Set captain_id to None if the removed player was the captain
+    if team.captain_id == player_id:
+        team.captain_id = None
+
+    db.add(team)
+    db.commit()
+    db.refresh(team)
+    return team
