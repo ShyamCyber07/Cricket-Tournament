@@ -16,8 +16,18 @@ void main() {
   // Runtime Diagnostics
   debugPrint("==================================================");
   debugPrint("[Startup Diagnostic] APP_ENV=${AppConfig.env}");
-  debugPrint("[Startup Diagnostic] LAN_IP=${AppConfig.lanIp}");
   debugPrint("[Startup Diagnostic] BASE_URL=${AppConfig.baseUrl}");
+  
+  if (AppConfig.env != 'production') {
+    debugPrint("--------------------------------------------------");
+    debugPrint("[WARNING] APP_ENV is not set to 'production'!");
+    debugPrint("[WARNING] Defaulting to LOCAL EMULATOR BACKEND: ${AppConfig.baseUrl}");
+    debugPrint("[WARNING] To target the production Railway backend, run with:");
+    debugPrint("[WARNING] flutter run -d emulator-5554 --dart-define=APP_ENV=production");
+    debugPrint("--------------------------------------------------");
+  } else {
+    debugPrint("[INFO] Running in PRODUCTION mode against Railway backend.");
+  }
   debugPrint("==================================================");
 
   runApp(const MyApp());
