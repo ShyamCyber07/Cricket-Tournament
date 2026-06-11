@@ -1,26 +1,33 @@
 import pytest
 from uuid import UUID
 
-def test_auth_and_signup(client):
+def test_auth_and_signup(client, db):
     # Signup
     response = client.post(
         "/api/v1/auth/signup",
         json={
+            "username": "cricketer",
             "email": "cricketer@example.com",
-            "password": "strongpassword123",
-            "full_name": "Sachin Tendulkar"
+            "password": "StrongPassword123!",
+            "confirm_password": "StrongPassword123!"
         }
     )
     assert response.status_code == 201
     assert response.json()["email"] == "cricketer@example.com"
-    assert response.json()["full_name"] == "Sachin Tendulkar"
+    assert response.json()["username"] == "cricketer"
+
+    # Verify
+    from app.models.user import User
+    user = db.query(User).filter(User.email == "cricketer@example.com").first()
+    user.email_verified = True
+    db.commit()
 
     # Login
     response = client.post(
         "/api/v1/auth/login",
         data={
             "username": "cricketer@example.com",
-            "password": "strongpassword123"
+            "password": "StrongPassword123!"
         }
     )
     assert response.status_code == 200

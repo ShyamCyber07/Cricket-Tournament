@@ -6,7 +6,9 @@ import 'package:flutter/foundation.dart';
 class ApiService {
   final Dio _dio = Dio();
   static String? _token;
+  static String? _refreshToken;
   static const String _tokenKey = "jwt_auth_token";
+  static const String _refreshTokenKey = "jwt_refresh_token";
 
   ApiService() {
     _dio.options.baseUrl = AppConfig.baseUrl;
@@ -49,9 +51,39 @@ class ApiService {
           return handler.next(options);
         },
         onError: (DioException e, handler) async {
-          // Global 401 error handling
+          // Global 401 error handling with token refresh
           if (e.response?.statusCode == 401) {
-            await clearToken();
+            if (_refreshToken != null) {
+              try {
+                debugPrint("[Dio Interceptor] Access token expired, attempting refresh...");
+                final refreshDio = Dio();
+                refreshDio.options.baseUrl = AppConfig.baseUrl;
+                refreshDio.options.connectTimeout = const Duration(seconds: 5);
+                refreshDio.options.receiveTimeout = const Duration(seconds: 5);
+                final refreshRes = await refreshDio.post(
+                  '/auth/refresh',
+                  data: {'refresh_token': _refreshToken},
+                );
+                if (refreshRes.statusCode == 200) {
+                  final newAccessToken = refreshRes.data['access_token'];
+                  final newRefreshToken = refreshRes.data['refresh_token'];
+                  debugPrint("[Dio Interceptor] Token refresh successful. Retrying original request...");
+                  await persistToken(newAccessToken, newRefreshToken);
+                  
+                  // Retry the original request
+                  final options = e.requestOptions;
+                  options.headers["Authorization"] = "Bearer $newAccessToken";
+                  
+                  final cloneResponse = await _dio.fetch(options);
+                  return handler.resolve(cloneResponse);
+                }
+              } catch (refreshErr) {
+                debugPrint("[Dio Interceptor] Token refresh failed: $refreshErr. Clearing credentials.");
+                await clearToken();
+              }
+            } else {
+              await clearToken();
+            }
           }
           return handler.next(e);
         },
@@ -63,33 +95,43 @@ class ApiService {
     try {
       final prefs = await SharedPreferences.getInstance();
       _token = prefs.getString(_tokenKey);
+      _refreshToken = prefs.getString(_refreshTokenKey);
     } catch (_) {
       _token = null;
+      _refreshToken = null;
     }
   }
 
-  static Future<void> persistToken(String token) async {
+  static Future<void> persistToken(String token, [String? refreshToken]) async {
     _token = token;
+    if (refreshToken != null) {
+      _refreshToken = refreshToken;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_tokenKey, token);
+      if (refreshToken != null) {
+        await prefs.setString(_refreshTokenKey, refreshToken);
+      }
     } catch (_) {}
   }
 
   static Future<void> clearToken() async {
     _token = null;
+    _refreshToken = null;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_tokenKey);
+      await prefs.remove(_refreshTokenKey);
     } catch (_) {}
   }
 
   static void setToken(String? token) {
     _token = token;
-    if (token != null) {
-      persistToken(token);
-    } else {
+    if (token == null) {
       clearToken();
+    } else {
+      persistToken(token);
     }
   }
 
@@ -103,18 +145,82 @@ class ApiService {
     });
     final response = await _dio.post('/auth/login', data: formData);
     if (response.statusCode == 200) {
-      await persistToken(response.data['access_token']);
+      await persistToken(response.data['access_token'], response.data['refresh_token']);
     }
     return response;
   }
 
-  Future<Response> signup(String email, String password, String fullName) async {
+  Future<Response> signup(String email, String password, String username, String confirmPassword) async {
     return await _dio.post(
       '/auth/signup',
       data: {
+        'username': username,
         'email': email,
         'password': password,
+        'confirm_password': confirmPassword,
+      },
+    );
+  }
+
+  Future<Response> verifyOtp(String email, String otpCode) async {
+    final response = await _dio.post(
+      '/auth/verify-otp',
+      data: {
+        'email': email,
+        'otp_code': otpCode,
+      },
+    );
+    if (response.statusCode == 200) {
+      await persistToken(response.data['access_token'], response.data['refresh_token']);
+    }
+    return response;
+  }
+
+  Future<Response> resendOtp(String email) async {
+    return await _dio.post(
+      '/auth/resend-otp',
+      data: {
+        'email': email,
+      },
+    );
+  }
+
+  Future<Response> forgotPassword(String email) async {
+    return await _dio.post(
+      '/auth/forgot-password',
+      data: {
+        'email': email,
+      },
+    );
+  }
+
+  Future<Response> resetPassword(String email, String otpCode, String newPassword, String confirmPassword) async {
+    return await _dio.post(
+      '/auth/reset-password',
+      data: {
+        'email': email,
+        'otp_code': otpCode,
+        'new_password': newPassword,
+        'confirm_password': confirmPassword,
+      },
+    );
+  }
+
+  Future<Response> completeProfile(
+    String fullName,
+    String displayName, {
+    String? profilePicture,
+    String? country,
+    String? favoriteTeam,
+  }) async {
+    return await _dio.post(
+      '/auth/complete-profile',
+      data: {
         'full_name': fullName,
+        'display_name': displayName,
+        if (profilePicture != null) 'profile_picture': profilePicture,
+        if (country != null) 'country': country,
+        if (favoriteTeam != null) 'favorite_team': favoriteTeam,
       },
     );
   }
@@ -125,13 +231,19 @@ class ApiService {
       data: {'token': googleToken},
     );
     if (response.statusCode == 200) {
-      await persistToken(response.data['access_token']);
+      await persistToken(response.data['access_token'], response.data['refresh_token']);
     }
     return response;
   }
 
   Future<Response> getMe() async {
     return await _dio.get('/auth/me');
+  }
+
+  Future<Response> logout() async {
+    final response = await _dio.post('/auth/logout');
+    await clearToken();
+    return response;
   }
 
   // PLAYERS

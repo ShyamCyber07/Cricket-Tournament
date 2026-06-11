@@ -1,20 +1,38 @@
 import pytest
 from app.models.cricket import Team, Player, Match
+from app.models.user import User
 
 def test_data_isolation_teams_and_players(client, db):
     # Create two users via signup
-    res_u1 = client.post("/api/v1/auth/signup", json={"email": "usera@example.com", "password": "password123", "full_name": "User A"})
-    res_u2 = client.post("/api/v1/auth/signup", json={"email": "userb@example.com", "password": "password123", "full_name": "User B"})
+    res_u1 = client.post("/api/v1/auth/signup", json={
+        "username": "usera",
+        "email": "usera@example.com",
+        "password": "Password123!",
+        "confirm_password": "Password123!"
+    })
+    res_u2 = client.post("/api/v1/auth/signup", json={
+        "username": "userb",
+        "email": "userb@example.com",
+        "password": "Password123!",
+        "confirm_password": "Password123!"
+    })
     assert res_u1.status_code == 201
     assert res_u2.status_code == 201
 
+    # Verify emails in db
+    u1 = db.query(User).filter(User.email == "usera@example.com").first()
+    u2 = db.query(User).filter(User.email == "userb@example.com").first()
+    u1.email_verified = True
+    u2.email_verified = True
+    db.commit()
+
     # Login User A
-    res_login_a = client.post("/api/v1/auth/login", data={"username": "usera@example.com", "password": "password123"})
+    res_login_a = client.post("/api/v1/auth/login", data={"username": "usera@example.com", "password": "Password123!"})
     token_a = res_login_a.json()["access_token"]
     headers_a = {"Authorization": f"Bearer {token_a}"}
 
     # Login User B
-    res_login_b = client.post("/api/v1/auth/login", data={"username": "userb@example.com", "password": "password123"})
+    res_login_b = client.post("/api/v1/auth/login", data={"username": "userb@example.com", "password": "Password123!"})
     token_b = res_login_b.json()["access_token"]
     headers_b = {"Authorization": f"Bearer {token_b}"}
 
@@ -57,14 +75,26 @@ def test_data_isolation_teams_and_players(client, db):
     res_player_update = client.put(f"/api/v1/players/{player_a_id}", json={"name": "Hacked Name"}, headers=headers_b)
     assert res_player_update.status_code == 403
 
+    # 8. User B tries to delete Player A -> 403
     res_player_delete = client.delete(f"/api/v1/players/{player_a_id}", headers=headers_b)
     assert res_player_delete.status_code == 403
 
 
-def test_bulk_player_assignment_and_validation(client):
-    # Login existing user A (we can use User A created before, or register fresh one)
-    res_u = client.post("/api/v1/auth/signup", json={"email": "userc@example.com", "password": "password123", "full_name": "User C"})
-    token = client.post("/api/v1/auth/login", data={"username": "userc@example.com", "password": "password123"}).json()["access_token"]
+def test_bulk_player_assignment_and_validation(client, db):
+    # Register fresh user
+    res_u = client.post("/api/v1/auth/signup", json={
+        "username": "userc",
+        "email": "userc@example.com",
+        "password": "Password123!",
+        "confirm_password": "Password123!"
+    })
+    assert res_u.status_code == 201
+
+    u = db.query(User).filter(User.email == "userc@example.com").first()
+    u.email_verified = True
+    db.commit()
+
+    token = client.post("/api/v1/auth/login", data={"username": "userc@example.com", "password": "Password123!"}).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
     # Create two teams
@@ -89,14 +119,33 @@ def test_bulk_player_assignment_and_validation(client):
     assert "Player already assigned to Team Team 1 C" in res_bulk_fail.json()["detail"]
 
 
-def test_match_ownership_scoring(client):
+def test_match_ownership_scoring(client, db):
     # Signup and login User D (Owner) and User E (Viewer)
-    client.post("/api/v1/auth/signup", json={"email": "userd@example.com", "password": "password123", "full_name": "User D"})
-    token_d = client.post("/api/v1/auth/login", data={"username": "userd@example.com", "password": "password123"}).json()["access_token"]
+    res_d = client.post("/api/v1/auth/signup", json={
+        "username": "userd",
+        "email": "userd@example.com",
+        "password": "Password123!",
+        "confirm_password": "Password123!"
+    })
+    res_e = client.post("/api/v1/auth/signup", json={
+        "username": "usere",
+        "email": "usere@example.com",
+        "password": "Password123!",
+        "confirm_password": "Password123!"
+    })
+    assert res_d.status_code == 201
+    assert res_e.status_code == 201
+
+    u_d = db.query(User).filter(User.email == "userd@example.com").first()
+    u_e = db.query(User).filter(User.email == "usere@example.com").first()
+    u_d.email_verified = True
+    u_e.email_verified = True
+    db.commit()
+
+    token_d = client.post("/api/v1/auth/login", data={"username": "userd@example.com", "password": "Password123!"}).json()["access_token"]
     headers_d = {"Authorization": f"Bearer {token_d}"}
 
-    client.post("/api/v1/auth/signup", json={"email": "usere@example.com", "password": "password123", "full_name": "User E"})
-    token_e = client.post("/api/v1/auth/login", data={"username": "usere@example.com", "password": "password123"}).json()["access_token"]
+    token_e = client.post("/api/v1/auth/login", data={"username": "usere@example.com", "password": "Password123!"}).json()["access_token"]
     headers_e = {"Authorization": f"Bearer {token_e}"}
 
     # User D creates teams, players and a match

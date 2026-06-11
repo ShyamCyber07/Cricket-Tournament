@@ -6,6 +6,8 @@ import 'package:cricket_scorer/features/auth/bloc/auth_bloc.dart';
 import 'package:cricket_scorer/features/auth/bloc/auth_event.dart';
 import 'package:cricket_scorer/features/auth/bloc/auth_state.dart';
 import 'package:cricket_scorer/features/auth/screens/login_screen.dart';
+import 'package:cricket_scorer/features/auth/screens/verify_otp_screen.dart';
+import 'package:cricket_scorer/features/auth/screens/complete_profile_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/dashboard_screen.dart';
 
 import 'package:cricket_scorer/core/app_config.dart';
@@ -65,6 +67,10 @@ class AuthGate extends StatelessWidget {
       builder: (context, state) {
         if (state is AuthAuthenticated) {
           return DashboardScreen(user: state.user);
+        } else if (state is AuthNeedsVerification) {
+          return VerifyOtpScreen(email: state.email);
+        } else if (state is AuthProfileIncomplete) {
+          return CompleteProfileScreen(user: state.user);
         } else if (state is AuthLoading) {
           return const Scaffold(
             body: Center(

@@ -6,6 +6,7 @@ import 'package:cricket_scorer/features/auth/bloc/auth_bloc.dart';
 import 'package:cricket_scorer/features/auth/bloc/auth_event.dart';
 import 'package:cricket_scorer/features/auth/bloc/auth_state.dart';
 import 'signup_screen.dart'; // We will create this next
+import 'forgot_password_screen.dart';
 import 'package:cricket_scorer/core/app_config.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 
@@ -140,13 +141,38 @@ class _LoginScreenState extends State<LoginScreen> {
                             prefixIcon: Icon(Icons.lock_outlined, color: AppColors.textSecondary),
                           ),
                           validator: (value) {
-                            if (value == null || value.isEmpty || value.length < 6) {
-                              return "Password must be at least 6 characters";
+                            if (value == null || value.isEmpty) {
+                              return "Password is required";
                             }
                             return null;
                           },
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
+                              );
+                            },
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(
+                              "Forgot Password?",
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
                         // Login Button
                         BlocBuilder<AuthBloc, AuthState>(
                           builder: (context, state) {

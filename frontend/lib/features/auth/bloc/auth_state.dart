@@ -20,6 +20,37 @@ class AuthAuthenticated extends AuthState {
   List<Object?> get props => [user];
 }
 
+class AuthNeedsVerification extends AuthState {
+  final String email;
+
+  const AuthNeedsVerification({required this.email});
+
+  @override
+  List<Object?> get props => [email];
+}
+
+class AuthProfileIncomplete extends AuthState {
+  final Map<String, dynamic> user;
+
+  const AuthProfileIncomplete({required this.user});
+
+  @override
+  List<Object?> get props => [user];
+}
+
+class AuthForgotPasswordOtpSent extends AuthState {
+  final String email;
+
+  const AuthForgotPasswordOtpSent({required this.email});
+
+  @override
+  List<Object?> get props => [email];
+}
+
+class AuthPasswordResetSuccess extends AuthState {}
+
+class AuthOtpResentSuccess extends AuthState {}
+
 class AuthUnauthenticated extends AuthState {}
 
 class AuthError extends AuthState {

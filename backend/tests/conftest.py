@@ -50,8 +50,11 @@ def auth_headers(client, db):
     # Create seed user
     user = User(
         email="testscorer@example.com",
+        username="testscorer",
         hashed_password=get_password_hash("testpassword123"),
-        full_name="Test Scorer"
+        full_name="Test Scorer",
+        email_verified=True,
+        profile_completed=True
     )
     db.add(user)
     db.commit()

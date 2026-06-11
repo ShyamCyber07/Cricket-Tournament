@@ -1,5 +1,5 @@
 from app.core.database import Base
-from app.models.user import User
+from app.models.user import User, RefreshToken
 from app.models.cricket import (
     Player,
     Team,
@@ -15,6 +15,7 @@ from app.models.cricket import (
 __all__ = [
     "Base",
     "User",
+    "RefreshToken",
     "Player",
     "Team",
     "TeamPlayer",

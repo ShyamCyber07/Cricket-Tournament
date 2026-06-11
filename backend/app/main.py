@@ -18,6 +18,49 @@ def patch_database_schema(db_engine):
         is_postgres = db_engine.dialect.name == 'postgresql'
         uuid_type = "UUID" if is_postgres else "CHAR(32)"
         
+        # 0. Patch users table
+        if 'users' in inspector.get_table_names():
+            columns_user = [col['name'] for col in inspector.get_columns('users')]
+            bool_type = "BOOLEAN DEFAULT FALSE" if is_postgres else "BOOLEAN DEFAULT 0"
+            int_type = "INTEGER DEFAULT 0"
+            timestamp_type = "TIMESTAMP" if is_postgres else "DATETIME"
+            
+            new_user_cols = [
+                ("username", "VARCHAR DEFAULT NULL"),
+                ("display_name", "VARCHAR DEFAULT NULL"),
+                ("profile_picture", "VARCHAR DEFAULT NULL"),
+                ("email_verified", bool_type),
+                ("profile_completed", bool_type),
+                ("provider", "VARCHAR DEFAULT 'local'"),
+                ("otp_code", "VARCHAR DEFAULT NULL"),
+                ("otp_expiry", timestamp_type),
+                ("last_login", timestamp_type),
+                ("failed_login_attempts", int_type),
+                ("lockout_until", timestamp_type),
+                ("last_otp_sent_at", timestamp_type)
+            ]
+            with db_engine.begin() as conn:
+                for col_name, col_type in new_user_cols:
+                    if col_name not in columns_user:
+                        conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
+                if is_postgres:
+                    try:
+                        conn.execute(text("ALTER TABLE users ALTER COLUMN full_name DROP NOT NULL"))
+                        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)"))
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)"))
+                    except Exception:
+                        pass
+            
+            # Backwards compatibility migration for legacy users
+            with db_engine.begin() as conn:
+                conn.execute(text("UPDATE users SET username = email WHERE username IS NULL"))
+                conn.execute(text("UPDATE users SET email_verified = 1 WHERE email_verified IS NULL OR email_verified = 0"))
+                conn.execute(text("UPDATE users SET profile_completed = 1 WHERE profile_completed IS NULL OR profile_completed = 0"))
+
         # 1. Patch players table
         if 'players' in inspector.get_table_names():
             columns = [col['name'] for col in inspector.get_columns('players')]

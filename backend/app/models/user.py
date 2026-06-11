@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime
+from sqlalchemy import Column, String, DateTime, Boolean, Integer, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -10,14 +10,35 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    username = Column(String, unique=True, index=True, nullable=True)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=True)
     google_id = Column(String, unique=True, index=True, nullable=True)
-    full_name = Column(String, nullable=False)
+    full_name = Column(String, nullable=True) # Changed to nullable=True to support multi-step signup/onboarding
+    display_name = Column(String, nullable=True)
     profile_photo_url = Column(String, nullable=True)
+    profile_picture = Column(String, nullable=True)
+    email_verified = Column(Boolean, default=False)
+    profile_completed = Column(Boolean, default=False)
+    provider = Column(String, default="local")
+    otp_code = Column(String, nullable=True)
+    otp_expiry = Column(DateTime, nullable=True)
+    last_login = Column(DateTime, nullable=True)
+    failed_login_attempts = Column(Integer, default=0)
+    lockout_until = Column(DateTime, nullable=True)
+    last_otp_sent_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     players = relationship("Player", back_populates="user", uselist=False, foreign_keys="[Player.user_id]")
     created_teams = relationship("Team", back_populates="creator")
     organized_tournaments = relationship("Tournament", back_populates="organizer", foreign_keys="[Tournament.organizer_id]")
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token = Column(String, unique=True, index=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

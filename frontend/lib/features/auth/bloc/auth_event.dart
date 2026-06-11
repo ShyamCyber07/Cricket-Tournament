@@ -20,18 +20,39 @@ class LoginRequested extends AuthEvent {
 }
 
 class SignupRequested extends AuthEvent {
+  final String username;
   final String email;
   final String password;
-  final String fullName;
+  final String confirmPassword;
 
   const SignupRequested({
+    required this.username,
     required this.email,
     required this.password,
-    required this.fullName,
+    required this.confirmPassword,
   });
 
   @override
-  List<Object?> get props => [email, password, fullName];
+  List<Object?> get props => [username, email, password, confirmPassword];
+}
+
+class VerifyOtpRequested extends AuthEvent {
+  final String email;
+  final String otpCode;
+
+  const VerifyOtpRequested({required this.email, required this.otpCode});
+
+  @override
+  List<Object?> get props => [email, otpCode];
+}
+
+class ResendOtpRequested extends AuthEvent {
+  final String email;
+
+  const ResendOtpRequested({required this.email});
+
+  @override
+  List<Object?> get props => [email];
 }
 
 class GoogleLoginRequested extends AuthEvent {
@@ -41,6 +62,51 @@ class GoogleLoginRequested extends AuthEvent {
 
   @override
   List<Object?> get props => [googleToken];
+}
+
+class CompleteProfileRequested extends AuthEvent {
+  final String fullName;
+  final String displayName;
+  final String? profilePicture;
+  final String? country;
+  final String? favoriteTeam;
+
+  const CompleteProfileRequested({
+    required this.fullName,
+    required this.displayName,
+    this.profilePicture,
+    this.country,
+    this.favoriteTeam,
+  });
+
+  @override
+  List<Object?> get props => [fullName, displayName, profilePicture, country, favoriteTeam];
+}
+
+class ForgotPasswordRequested extends AuthEvent {
+  final String email;
+
+  const ForgotPasswordRequested({required this.email});
+
+  @override
+  List<Object?> get props => [email];
+}
+
+class ResetPasswordRequested extends AuthEvent {
+  final String email;
+  final String otpCode;
+  final String newPassword;
+  final String confirmPassword;
+
+  const ResetPasswordRequested({
+    required this.email,
+    required this.otpCode,
+    required this.newPassword,
+    required this.confirmPassword,
+  });
+
+  @override
+  List<Object?> get props => [email, otpCode, newPassword, confirmPassword];
 }
 
 class LogoutRequested extends AuthEvent {}
