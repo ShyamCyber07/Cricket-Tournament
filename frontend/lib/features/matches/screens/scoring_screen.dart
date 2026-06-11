@@ -754,6 +754,62 @@ class _ScoringScreenState extends State<ScoringScreen> {
     );
   }
 
+  void _openNoBallDialog() {
+    int batRuns = 0; // Default: 0 runs off the bat (dot ball on no-ball)
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              title: Text("Log No Ball Extra", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Runs scored off the bat from this No Ball:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: Wrap(
+                      spacing: 8.0,
+                      runSpacing: 8.0,
+                      alignment: WrapAlignment.center,
+                      children: [0, 1, 2, 3, 4, 5, 6].map((run) {
+                        return ChoiceChip(
+                          label: Text(run.toString()),
+                          selected: batRuns == run,
+                          onSelected: (selected) {
+                            if (selected) setDialogState(() => batRuns = run);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    // No Ball gives 1 extra run penalty, plus the runs scored off the bat
+                    _scoreBall(batRuns, 1, "no_ball");
+                  },
+                  child: const Text("Log No Ball"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading && _liveState == null) {
@@ -1102,7 +1158,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           _buildExtraButton("WD", () => _openExtrasDialog("wide")),
-                          _buildExtraButton("NB", () => _openExtrasDialog("no_ball")),
+                          _buildExtraButton("NB", () => _openNoBallDialog()),
                           _buildExtraButton("BYE", () => _openExtrasDialog("bye")),
                           _buildExtraButton("LB", () => _openExtrasDialog("leg_bye")),
                         ],

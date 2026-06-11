@@ -272,3 +272,148 @@ def test_valid_uuid_nonexistent_user(client):
     assert response.status_code == 401
     assert response.json()["detail"] == "Could not validate credentials"
 
+
+def test_no_ball_scoring_variations(client, auth_headers):
+    # 1. Create Players
+    player_ids = []
+    player_names = ["Virat", "Rohit", "Dhoni", "Bumrah", "Shami"]
+    for name in player_names:
+        response = client.post(
+            "/api/v1/players/",
+            json={
+                "name": name,
+                "role": "batsman" if name != "Bumrah" and name != "Shami" else "bowler",
+                "batting_style": "right_hand",
+                "bowling_style": "right_arm_fast"
+            },
+            headers=auth_headers
+        )
+        assert response.status_code == 201
+        player_ids.append(response.json()["id"])
+        
+    p_virat, p_rohit, p_dhoni, p_bumrah, p_shami = player_ids
+
+    # 2. Create Teams
+    res_t1 = client.post(
+        "/api/v1/teams/",
+        json={"name": "India A", "captain_id": p_virat},
+        headers=auth_headers
+    )
+    assert res_t1.status_code == 201
+    team1_id = res_t1.json()["id"]
+
+    res_t2 = client.post(
+        "/api/v1/teams/",
+        json={"name": "India B", "captain_id": p_dhoni},
+        headers=auth_headers
+    )
+    assert res_t2.status_code == 201
+    team2_id = res_t2.json()["id"]
+
+    # Add players to teams
+    for p in [p_virat, p_rohit, p_shami]:
+        client.post(f"/api/v1/teams/{team1_id}/players", json={"player_id": p}, headers=auth_headers)
+    for p in [p_dhoni, p_bumrah]:
+        client.post(f"/api/v1/teams/{team2_id}/players", json={"player_id": p}, headers=auth_headers)
+
+    # 3. Create Match
+    match_res = client.post(
+        "/api/v1/matches/",
+        json={
+            "venue": "Wankhede Stadium",
+            "match_date": "2026-06-10T15:00:00Z",
+            "match_type": "T20",
+            "over_limit": 5,
+            "team1_id": team1_id,
+            "team2_id": team2_id
+        },
+        headers=auth_headers
+    )
+    assert match_res.status_code == 201
+    match_id = match_res.json()["id"]
+
+    # 4. Submit Toss
+    toss_res = client.post(
+        f"/api/v1/matches/{match_id}/toss",
+        json={"toss_winner_id": team1_id, "toss_decision": "bat"},
+        headers=auth_headers
+    )
+    assert toss_res.status_code == 200
+
+    # 5. Submit Squad Selection
+    client.post(
+        f"/api/v1/matches/{match_id}/squads",
+        json={
+            "team_id": team1_id,
+            "players": [
+                {"player_id": p_virat, "is_captain": True},
+                {"player_id": p_rohit},
+                {"player_id": p_shami}
+            ]
+        },
+        headers=auth_headers
+    )
+    
+    sq2_res = client.post(
+        f"/api/v1/matches/{match_id}/squads",
+        json={
+            "team_id": team2_id,
+            "players": [
+                {"player_id": p_dhoni, "is_captain": True, "is_wicketkeeper": True},
+                {"player_id": p_bumrah}
+            ]
+        },
+        headers=auth_headers
+    )
+    assert sq2_res.json()["match_status"] == "innings1"
+
+    # Set initial striker and bowler
+    # (FastAPI backend will auto-initialize/sync caches as we post balls)
+    
+    # 6. Test No Ball combinations from 0 to 6 batsman runs
+    # We will submit 7 No Balls, each with batsman runs from 0 to 6
+    expected_team_runs = 0
+    expected_extras_nb = 0
+    expected_batsman_runs = 0
+
+    for bat_runs in range(7):
+        ball_res = client.post(
+            f"/api/v1/matches/{match_id}/balls",
+            json={
+                "bowler_id": p_bumrah,
+                "batsman_id": p_virat,
+                "non_striker_id": p_rohit,
+                "runs_batsman": bat_runs,
+                "runs_extras": 1, # 1 run penalty for No Ball
+                "extra_type": "no_ball",
+                "is_wicket": False
+            },
+            headers=auth_headers
+        )
+        assert ball_res.status_code == 201
+        
+        expected_team_runs += (1 + bat_runs)
+        expected_extras_nb += 1
+        expected_batsman_runs += bat_runs
+
+        # Verify live scoreboard values
+        live_state = client.get(f"/api/v1/matches/{match_id}/live").json()
+        assert live_state["current_innings"]["total_runs"] == expected_team_runs
+        assert live_state["current_innings"]["extras_noballs"] == expected_extras_nb
+        
+        # Verify batsman runs for Virat (strike rotates on odd runs)
+        virat_runs = 0
+        if live_state["striker"] and live_state["striker"]["player_id"] == str(p_virat):
+            virat_runs = live_state["striker"]["runs"]
+        elif live_state["non_striker"] and live_state["non_striker"]["player_id"] == str(p_virat):
+            virat_runs = live_state["non_striker"]["runs"]
+        assert virat_runs == expected_batsman_runs
+
+
+    # Verify scorecard batsman details
+    scorecard = client.get(f"/api/v1/matches/{match_id}/scorecard").json()
+    virat_card = next(b for b in scorecard["innings"][0]["batting"] if b["name"] == "Virat")
+    assert virat_card["runs"] == expected_batsman_runs
+    assert scorecard["innings"][0]["extras"]["no_balls"] == expected_extras_nb
+
+
