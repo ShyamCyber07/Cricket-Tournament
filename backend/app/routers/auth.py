@@ -452,14 +452,3 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
-@router.get("/debug-db")
-def debug_db(db: Session = Depends(get_db)):
-    import os
-    from app.core.config import settings
-    return {
-        "database_url": settings.DATABASE_URL,
-        "database_dialect": db.bind.dialect.name,
-        "database_url_from_env": os.getenv("DATABASE_URL"),
-        "app_env": settings.APP_ENV
-    }
-
