@@ -3,6 +3,7 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from uuid import UUID
 
@@ -73,7 +74,7 @@ def create_refresh_token(db: Session, user_id: UUID) -> str:
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def signup(user_in: UserSignup, db: Session = Depends(get_db)):
     # 1. Unique email check
-    email_user = db.query(User).filter(User.email == user_in.email).first()
+    email_user = db.query(User).filter(func.lower(User.email) == func.lower(user_in.email)).first()
     if email_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -130,7 +131,7 @@ def signup(user_in: UserSignup, db: Session = Depends(get_db)):
 
 @router.post("/verify-otp", response_model=Token)
 def verify_otp(req: VerifyOTPRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == req.email).first()
+    user = db.query(User).filter(func.lower(User.email) == func.lower(req.email)).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -167,7 +168,7 @@ def verify_otp(req: VerifyOTPRequest, db: Session = Depends(get_db)):
 
 @router.post("/resend-otp")
 def resend_otp(req: ResendOTPRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == req.email).first()
+    user = db.query(User).filter(func.lower(User.email) == func.lower(req.email)).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -197,7 +198,8 @@ def resend_otp(req: ResendOTPRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == form_data.username).first()
+    email = form_data.username.strip().lower() if form_data.username else ""
+    user = db.query(User).filter(func.lower(User.email) == func.lower(email)).first()
     if not user:
         # Prevent user enumeration information leakage, but keep error simple
         raise HTTPException(
@@ -289,7 +291,7 @@ def logout(current_user: User = Depends(get_current_user), db: Session = Depends
 
 @router.post("/forgot-password")
 def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == req.email).first()
+    user = db.query(User).filter(func.lower(User.email) == func.lower(req.email)).first()
     if not user:
         # To avoid enumeration, return success even if email does not exist
         return {"message": "If the email is registered, a reset code has been sent."}
@@ -317,7 +319,7 @@ def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
 
 @router.post("/reset-password")
 def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == req.email).first()
+    user = db.query(User).filter(func.lower(User.email) == func.lower(req.email)).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -392,7 +394,7 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
         email = f"{raw_token.lower().replace(' ', '')}@gmail.com"
         name = raw_token
         
-    user = db.query(User).filter(User.email == email).first()
+    user = db.query(User).filter(func.lower(User.email) == func.lower(email)).first()
     
     if user:
         # Link Google account if not linked

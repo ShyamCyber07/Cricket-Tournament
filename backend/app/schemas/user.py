@@ -3,11 +3,19 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, model_validator
 from uuid import UUID
 
-class UserBase(BaseModel):
+class EmailNormalizedModel(BaseModel):
+    @field_validator('email', mode='before', check_fields=False)
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
+class UserBase(EmailNormalizedModel):
     email: EmailStr
     full_name: Optional[str] = None
 
-class UserSignup(BaseModel):
+class UserSignup(EmailNormalizedModel):
     username: str
     email: EmailStr
     password: str
@@ -67,11 +75,11 @@ class TokenRefreshRequest(BaseModel):
 class GoogleLoginRequest(BaseModel):
     token: str
 
-class VerifyOTPRequest(BaseModel):
+class VerifyOTPRequest(EmailNormalizedModel):
     email: EmailStr
     otp_code: str
 
-class ResendOTPRequest(BaseModel):
+class ResendOTPRequest(EmailNormalizedModel):
     email: EmailStr
 
 class CompleteProfileRequest(BaseModel):
@@ -81,10 +89,10 @@ class CompleteProfileRequest(BaseModel):
     country: Optional[str] = None
     favorite_team: Optional[str] = None
 
-class ForgotPasswordRequest(BaseModel):
+class ForgotPasswordRequest(EmailNormalizedModel):
     email: EmailStr
 
-class ResetPasswordRequest(BaseModel):
+class ResetPasswordRequest(EmailNormalizedModel):
     email: EmailStr
     otp_code: str
     new_password: str
