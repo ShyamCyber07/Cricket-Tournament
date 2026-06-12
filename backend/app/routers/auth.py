@@ -16,6 +16,7 @@ from app.schemas.user import (
     GoogleLoginRequest, VerifyOTPRequest, ResendOTPRequest,
     CompleteProfileRequest, ForgotPasswordRequest, ResetPasswordRequest
 )
+from app.core.email import send_otp_email
 
 router = APIRouter()
 
@@ -91,8 +92,8 @@ def signup(user_in: UserSignup, db: Session = Depends(get_db)):
     otp_code = f"{secrets.randbelow(900000) + 100000:06d}"
     otp_expiry = get_utc_now() + timedelta(minutes=10)
     
-    # Log OTP in the console
-    print(f"[EMAIL SERVICE] Verification OTP for {user_in.email} is: {otp_code}")
+    # Send verification email via Brevo
+    send_otp_email(user_in.email, otp_code, subject="Verify your CricUP account")
     
     hashed_pwd = get_password_hash(user_in.password)
     db_user = User(
@@ -184,7 +185,8 @@ def resend_otp(req: ResendOTPRequest, db: Session = Depends(get_db)):
     otp_code = f"{secrets.randbelow(900000) + 100000:06d}"
     otp_expiry = get_utc_now() + timedelta(minutes=10)
     
-    print(f"[EMAIL SERVICE] Verification OTP for {user.email} is: {otp_code}")
+    # Send verification email via Brevo
+    send_otp_email(user.email, otp_code, subject="Verify your CricUP account")
     
     user.otp_code = otp_code
     user.otp_expiry = otp_expiry
@@ -303,7 +305,8 @@ def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
     otp_code = f"{secrets.randbelow(900000) + 100000:06d}"
     otp_expiry = get_utc_now() + timedelta(minutes=10)
     
-    print(f"[EMAIL SERVICE] Password Reset OTP for {user.email} is: {otp_code}")
+    # Send password reset email via Brevo
+    send_otp_email(user.email, otp_code, subject="Reset your CricUP password")
     
     user.otp_code = otp_code
     user.otp_expiry = otp_expiry

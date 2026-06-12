@@ -12,6 +12,8 @@ import 'package:cricket_scorer/features/dashboard/screens/dashboard_screen.dart'
 
 import 'package:cricket_scorer/core/app_config.dart';
 
+import 'package:cricket_scorer/features/auth/screens/splash_screen.dart';
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -49,10 +51,10 @@ class MyApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'CricHeroes MVP',
+        title: 'CRICUP',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
-        home: const AuthGate(),
+        home: const SplashScreen(),
       ),
     );
   }

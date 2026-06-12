@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:dio/dio.dart';
@@ -363,63 +364,9 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Completed Winner Card
+            // Completed Winner Card with Trophy & Confetti Particles
             if (status.toLowerCase() == 'completed' && winnerName != null) ...[
-              Container(
-                margin: const EdgeInsets.only(bottom: 20),
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFD97706), Color(0xFFF59E0B)], // Rich Amber gradient
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.accent.withOpacity(0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    )
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.emoji_events, size: 64, color: Colors.white),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "TOURNAMENT CHAMPION",
-                            style: GoogleFonts.outfit(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white70,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            winnerName,
-                            style: GoogleFonts.outfit(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            "Congratulations to the winners of this tournament!",
-                            style: GoogleFonts.outfit(fontSize: 12, color: Colors.white.withOpacity(0.9)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildChampionsCelebrationCard(winnerName),
             ],
 
             // Current Stage Section
@@ -548,6 +495,106 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
     );
   }
 
+  Widget _buildChampionsCelebrationCard(String winnerName) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      height: 160,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
+            // Dark Gold Background Gradient
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF2E1C00), Color(0xFF6B4500)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            // Custom Confetti/Stars Particle Painter overlay
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _CelebrationParticlesPainter(),
+              ),
+            ),
+            // Glass overlay shadow
+            Container(
+              color: Colors.black.withOpacity(0.15),
+            ),
+            // Core Card Contents
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  // Glowing Trophy Circle
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.accent.withOpacity(0.15),
+                          border: Border.all(color: AppColors.accent.withOpacity(0.3), width: 1),
+                        ),
+                      ),
+                      const Icon(
+                        Icons.emoji_events_rounded,
+                        size: 44,
+                        color: AppColors.accent,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          "TOURNAMENT CHAMPION",
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.accent,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          winnerName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Congratulations to the champions for an outstanding victory!",
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            color: Colors.white.withOpacity(0.8),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // STANDINGS TAB
   Widget _buildStandingsTab() {
     final standings = _dashboardData['points_table'] as List<dynamic>? ?? [];
@@ -569,32 +616,68 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: Container(
-            color: AppColors.surface,
+            decoration: AppColors.glassDecoration(
+              borderRadius: BorderRadius.circular(12),
+              borderColor: const Color(0x14FFFFFF),
+            ),
             child: DataTable(
-              headingRowColor: MaterialStateProperty.all(const Color(0xFF1E293B)),
-              dataRowColor: MaterialStateProperty.all(AppColors.surface),
-              horizontalMargin: 12,
-              columnSpacing: 14,
+              headingRowColor: MaterialStateProperty.all(const Color(0x1FFFFFFF)),
+              dataRowColor: MaterialStateProperty.all(Colors.transparent),
+              horizontalMargin: 16,
+              columnSpacing: 16,
               columns: [
-                DataColumn(label: Text("Rank", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text("Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text("P", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text("W", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text("L", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text("T", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text("NR", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text("NRR", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text("Pts", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.accent))),
+                DataColumn(label: Text("Rank", style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, color: Colors.white))),
+                DataColumn(label: Text("Team", style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, color: Colors.white))),
+                DataColumn(label: Text("P", style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.textSecondary))),
+                DataColumn(label: Text("W", style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.primary))),
+                DataColumn(label: Text("L", style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.error))),
+                DataColumn(label: Text("T", style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.textSecondary))),
+                DataColumn(label: Text("NR", style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.textSecondary))),
+                DataColumn(label: Text("NRR", style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.secondary))),
+                DataColumn(label: Text("Pts", style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.accent))),
               ],
               rows: List.generate(standings.length, (index) {
                 final entry = standings[index];
+                final rank = index + 1;
+                
+                // Top Rank styling
+                Color rankColor = AppColors.textSecondary;
+                Color rankBgColor = Colors.transparent;
+                if (rank == 1) {
+                  rankColor = const Color(0xFFFFD700); // Gold
+                  rankBgColor = rankColor.withOpacity(0.12);
+                } else if (rank == 2) {
+                  rankColor = const Color(0xFFC0C0C0); // Silver
+                  rankBgColor = rankColor.withOpacity(0.12);
+                } else if (rank == 3) {
+                  rankColor = const Color(0xFFCD7F32); // Bronze
+                  rankBgColor = rankColor.withOpacity(0.12);
+                }
+
                 return DataRow(
                   cells: [
-                    DataCell(Text("#${index + 1}", style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold))),
-                    DataCell(Text(entry['team_name'] ?? '', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold))),
-                    DataCell(Text("${entry['played']}", style: GoogleFonts.outfit(fontSize: 12))),
-                    DataCell(Text("${entry['won']}", style: GoogleFonts.outfit(fontSize: 12))),
-                    DataCell(Text("${entry['lost']}", style: GoogleFonts.outfit(fontSize: 12))),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: rankBgColor,
+                          borderRadius: BorderRadius.circular(6),
+                          border: rankBgColor != Colors.transparent ? Border.all(color: rankColor.withOpacity(0.3)) : null,
+                        ),
+                        child: Text(
+                          "#$rank",
+                          style: GoogleFonts.outfit(
+                            fontSize: 12, 
+                            fontWeight: FontWeight.w900,
+                            color: rankBgColor != Colors.transparent ? rankColor : Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    DataCell(Text(entry['team_name'] ?? '', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white))),
+                    DataCell(Text("${entry['played']}", style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold))),
+                    DataCell(Text("${entry['won']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold))),
+                    DataCell(Text("${entry['lost']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.error))),
                     DataCell(Text("${entry['tied']}", style: GoogleFonts.outfit(fontSize: 12))),
                     DataCell(Text("${entry['no_result']}", style: GoogleFonts.outfit(fontSize: 12))),
                     DataCell(
@@ -612,7 +695,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                         "${entry['points']}",
                         style: GoogleFonts.outfit(
                           fontSize: 13,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w900,
                           color: AppColors.accent,
                         ),
                       ),
@@ -940,4 +1023,44 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
       ),
     );
   }
+}
+
+class _CelebrationParticlesPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final random = math.Random(12345);
+    
+    for (int i = 0; i < 30; i++) {
+      final x = random.nextDouble() * w;
+      final y = random.nextDouble() * h;
+      final sizeFactor = random.nextDouble() * 5 + 3;
+      final colorVal = random.nextInt(3);
+      
+      Color pColor;
+      if (colorVal == 0) {
+        pColor = const Color(0xFFD97706);
+      } else if (colorVal == 1) {
+        pColor = const Color(0xFFFFD700);
+      } else {
+        pColor = const Color(0xFFFF5E00);
+      }
+      
+      final particlePaint = Paint()
+        ..color = pColor.withOpacity(random.nextDouble() * 0.4 + 0.3)
+        ..style = PaintingStyle.fill;
+      
+      final path = Path();
+      path.moveTo(x, y - sizeFactor);
+      path.lineTo(x + sizeFactor, y);
+      path.lineTo(x, y + sizeFactor);
+      path.lineTo(x - sizeFactor, y);
+      path.close();
+      canvas.drawPath(path, particlePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

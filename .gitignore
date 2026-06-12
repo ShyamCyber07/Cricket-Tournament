@@ -37,3 +37,10 @@ frontend/ios/Flutter/flutter_export_environment.sh
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Environment variables
+.env
+.env.*
+backend/.env
+frontend/.env
+

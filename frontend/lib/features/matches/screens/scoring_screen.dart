@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -41,6 +42,25 @@ class _ScoringScreenState extends State<ScoringScreen> {
   List<dynamic> _battingSquad = [];
   List<dynamic> _bowlingSquad = [];
   bool _isPrompting = false;
+
+  // Celebration overlay fields
+  String? _celebrationText;
+  bool _showCelebration = false;
+
+  void _triggerCelebration(String text) {
+    if (_showCelebration) return;
+    setState(() {
+      _celebrationText = text;
+      _showCelebration = true;
+    });
+    Future.delayed(const Duration(milliseconds: 1600), () {
+      if (mounted) {
+        setState(() {
+          _showCelebration = false;
+        });
+      }
+    });
+  }
 
   // WebSocket fields
   WebSocket? _webSocket;
@@ -133,6 +153,25 @@ class _ScoringScreenState extends State<ScoringScreen> {
     if (_isDisposed) return;
     try {
       final Map<String, dynamic> data = jsonDecode(message.toString());
+      
+      final oldInnings = _liveState?['current_innings'];
+      final newInnings = data['current_innings'];
+      
+      if (oldInnings != null && newInnings != null) {
+        final oldRuns = oldInnings['total_runs'] as int;
+        final newRuns = newInnings['total_runs'] as int;
+        final oldWkts = oldInnings['total_wickets'] as int;
+        final newWkts = newInnings['total_wickets'] as int;
+        
+        if (newWkts > oldWkts) {
+          _triggerCelebration("OUT!");
+        } else if (newRuns - oldRuns == 4) {
+          _triggerCelebration("FOUR!");
+        } else if (newRuns - oldRuns == 6) {
+          _triggerCelebration("SIX!");
+        }
+      }
+
       setState(() {
         _liveState = data;
         _isLoading = false;
@@ -678,6 +717,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
     }
 
     try {
+      if (runsBatsman == 4) {
+        _triggerCelebration("FOUR!");
+      } else if (runsBatsman == 6) {
+        _triggerCelebration("SIX!");
+      }
+
       final res = await _apiService.submitBall(
         widget.matchId,
         {
@@ -713,6 +758,8 @@ class _ScoringScreenState extends State<ScoringScreen> {
     }
 
     try {
+      _triggerCelebration("OUT!");
+
       final res = await _apiService.submitBall(
         widget.matchId,
         {
@@ -1026,385 +1073,521 @@ class _ScoringScreenState extends State<ScoringScreen> {
           ],
         ],
       ),
-      body: isCompleted
-          ? Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Icon(Icons.emoji_events_outlined, size: 80, color: AppColors.accent),
-                  const SizedBox(height: 24),
-                  Text(
-                    "Match Result",
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    resultText,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(fontSize: 18, color: Colors.white, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 32),
-                  if (prevInnings != null && currentInnings != null) ...[
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20.0),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(prevInnings['batting_team_name'], style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                                Text("${prevInnings['total_runs']}/${prevInnings['total_wickets']} (${prevInnings['total_overs']} ov)", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                            const Divider(height: 24),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(currentInnings['batting_team_name'], style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                                Text("${currentInnings['total_runs']}/${currentInnings['total_wickets']} (${currentInnings['total_overs']} ov)", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 48),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ScorecardScreen(matchId: widget.matchId),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.secondary,
-                    ),
-                    child: const Text("View Scorecard"),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.white30),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: Text(
-                      "Return to Dashboard",
-                      style: GoogleFonts.outfit(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
+      body: Stack(
+        children: [
+          // Background glow
+          Positioned(
+            top: -100,
+            right: -100,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primary.withOpacity(0.06),
               ),
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // 1. Digital Scoreboard Card
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: AppColors.pitchGradient,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(color: AppColors.primary.withOpacity(0.25), blurRadius: 10, offset: const Offset(0, 5))
-                    ],
-                  ),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 70, sigmaY: 70),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+          ),
+          // Core Content body
+          isCompleted
+              ? Padding(
+                  padding: const EdgeInsets.all(24.0),
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            currentInnings != null
-                                ? currentInnings['batting_team_name'].toString().toUpperCase()
-                                : "BATTING TEAM",
-                            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70),
-                          ),
-                          if (_liveState!['target'] != null)
-                            Text(
-                              "TARGET: ${_liveState!['target']}",
-                              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.accent),
-                            ),
-                        ],
+                      const Icon(Icons.emoji_events_outlined, size: 80, color: AppColors.accent),
+                      const SizedBox(height: 24),
+                      Text(
+                        "Match Result",
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            currentInnings != null
-                                ? "${currentInnings['total_runs']}/${currentInnings['total_wickets']}"
-                                : "0/0",
-                            style: GoogleFonts.outfit(fontSize: 48, fontWeight: FontWeight.w800, color: Colors.white),
-                          ),
-                          Text(
-                            currentInnings != null
-                                ? "Overs: ${currentInnings['total_overs']}"
-                                : "Overs: 0.0",
-                            style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white.withOpacity(0.9)),
-                          ),
-                        ],
+                      Text(
+                        resultText,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(fontSize: 18, color: Colors.white, fontWeight: FontWeight.w600),
                       ),
-                      const Divider(color: Colors.white24, height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            currentInnings != null
-                                ? "CRR: ${((currentInnings['total_runs'] as int) / (currentInnings['total_overs'] == 0 ? 1 : currentInnings['total_overs'] as double)).toStringAsFixed(2)}"
-                                : "CRR: 0.00",
-                            style: GoogleFonts.outfit(color: Colors.white70),
-                          ),
-                          Text(
-                            currentInnings != null
-                                ? "Extras: ${currentInnings['extras_wides'] + currentInnings['extras_noballs'] + currentInnings['extras_byes'] + currentInnings['extras_legbyes']}"
-                                : "Extras: 0",
-                            style: GoogleFonts.outfit(color: Colors.white70),
-                          ),
-                        ],
-                      )
-                    ],
-                  ),
-                ),
-
-                // 2. Batter / Bowler Card Setup
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    children: [
-                      // Batsmen Panel
-                      Expanded(
-                        flex: 3,
-                        child: Card(
-                          color: AppColors.surface,
+                      const SizedBox(height: 32),
+                      if (prevInnings != null && currentInnings != null) ...[
+                        Card(
                           child: Padding(
-                            padding: const EdgeInsets.all(12.0),
+                            padding: const EdgeInsets.all(20.0),
                             child: Column(
                               children: [
-                                _buildBatsmanRow(striker, isOnStrike: true),
-                                const Divider(color: Colors.white12, height: 16),
-                                _buildBatsmanRow(nonStriker, isOnStrike: false),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(prevInnings['batting_team_name'], style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                                    Text("${prevInnings['total_runs']}/${prevInnings['total_wickets']} (${prevInnings['total_overs']} ov)", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                                const Divider(height: 24),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(currentInnings['batting_team_name'], style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                                    Text("${currentInnings['total_runs']}/${currentInnings['total_wickets']} (${currentInnings['total_overs']} ov)", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
                         ),
+                      ],
+                      const SizedBox(height: 48),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ScorecardScreen(matchId: widget.matchId),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.secondary,
+                        ),
+                        child: const Text("View Scorecard"),
                       ),
-                      const SizedBox(width: 8),
-                      // Bowler Panel
-                      Expanded(
-                        flex: 2,
-                        child: Card(
-                          color: AppColors.surface,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: bowler == null
-                                ? Center(
-                                    child: Text("Select\nBowler",
-                                        style: GoogleFonts.outfit(fontSize: 12),
-                                        textAlign: TextAlign.center))
-                                : Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.circle, color: AppColors.secondary, size: 8),
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: Text(
-                                              bowler['name'],
-                                              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text("Overs: ${bowler['overs']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
-                                      Text("Mdns: ${bowler['maidens']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
-                                      Text("Runs: ${bowler['runs']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
-                                      Text("Wkts: ${bowler['wickets']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
-                                    ],
-                                  ),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.white30),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text(
+                          "Return to Dashboard",
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      )
+                      ),
                     ],
                   ),
-                ),
-
-                const Spacer(),
-
-                // 3. Chronological Ball History Ticker
-                if (recentBalls.isNotEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Text("This Over:", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
-                  ),
-                  Container(
-                    height: 40,
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: recentBalls.length,
-                      itemBuilder: (context, index) {
-                        final ball = recentBalls[index];
-                        bool isWkt = ball['is_wicket'];
-                        return Container(
-                          width: 32,
-                          height: 32,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            color: isWkt ? AppColors.error : AppColors.surface,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: const Color(0xFF334155)),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            ball['ball_label'],
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
-                              color: isWkt ? Colors.white : AppColors.textPrimary,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-
-                // 4. Large Circle Scoring Controls Pad
-                if (!_isViewerMode)
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-                    decoration: const BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                    ),
-                    child: Column(
-                      children: [
-                        // Top control buttons (Wicket, Undo, Extras)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            ElevatedButton(
-                              onPressed: _openWicketDialog,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.error.withOpacity(0.2),
-                                foregroundColor: AppColors.error,
-                                elevation: 0,
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // 1. Digital Scoreboard Card
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: AppColors.pitchGradient,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(color: AppColors.primary.withOpacity(0.25), blurRadius: 10, offset: const Offset(0, 5))
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                currentInnings != null
+                                    ? currentInnings['batting_team_name'].toString().toUpperCase()
+                                    : "BATTING TEAM",
+                                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70),
                               ),
-                              child: const Text("WICKET"),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: _undo,
-                              icon: const Icon(Icons.undo, size: 16),
-                              label: const Text("UNDO"),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF334155),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        // Extras toggles
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _buildExtraButton("WD", () => _openExtrasDialog("wide")),
-                            _buildExtraButton("NB", () => _openNoBallDialog()),
-                            _buildExtraButton("BYE", () => _openExtrasDialog("bye")),
-                            _buildExtraButton("LB", () => _openExtrasDialog("leg_bye")),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        // Runs pads row (0, 1, 2, 3, 4, 6)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [0, 1, 2, 3, 4, 6].map((runs) {
-                            return GestureDetector(
-                              onTap: () => _scoreBall(runs, 0, "none"),
-                              child: Container(
-                                width: 50,
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  color: runs == 4 || runs == 6
-                                      ? AppColors.primary
-                                      : const Color(0xFF1E293B),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: const Color(0xFF334155), width: 1.5),
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  runs.toString(),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                              if (_liveState!['target'] != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(6),
                                   ),
+                                  child: Text(
+                                    "TARGET: ${_liveState!['target']}",
+                                    style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.accent),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              // Animated scale-up total score text on change
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 300),
+                                transitionBuilder: (Widget child, Animation<double> animation) {
+                                  return ScaleTransition(
+                                    scale: animation,
+                                    child: child,
+                                  );
+                                },
+                                child: Text(
+                                  currentInnings != null
+                                      ? "${currentInnings['total_runs']}/${currentInnings['total_wickets']}"
+                                      : "0/0",
+                                  key: ValueKey<String>(currentInnings != null
+                                      ? "${currentInnings['total_runs']}/${currentInnings['total_wickets']}"
+                                      : "0/0"),
+                                  style: GoogleFonts.outfit(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.white),
+                                ),
+                              ),
+                              Text(
+                                currentInnings != null
+                                    ? "Overs: ${currentInnings['total_overs']}"
+                                    : "Overs: 0.0",
+                                style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white.withOpacity(0.9)),
+                              ),
+                            ],
+                          ),
+                          const Divider(color: Colors.white24, height: 20),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                currentInnings != null
+                                    ? "CRR: ${((currentInnings['total_runs'] as int) / (currentInnings['total_overs'] == 0 ? 1 : currentInnings['total_overs'] as double)).toStringAsFixed(2)}"
+                                    : "CRR: 0.00",
+                                style: GoogleFonts.outfit(color: Colors.white70, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                currentInnings != null
+                                    ? "Extras: ${currentInnings['extras_wides'] + currentInnings['extras_noballs'] + currentInnings['extras_byes'] + currentInnings['extras_legbyes']}"
+                                    : "Extras: 0",
+                                style: GoogleFonts.outfit(color: Colors.white70, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          )
+                        ],
+                      ),
+                    ),
+
+                    // 2. Batter / Bowler Card Setup
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Row(
+                        children: [
+                          // Batsmen Panel
+                          Expanded(
+                            flex: 3,
+                            child: Card(
+                              color: AppColors.surface,
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Column(
+                                  children: [
+                                    _buildBatsmanRow(striker, isOnStrike: true),
+                                    const Divider(color: Colors.white12, height: 16),
+                                    _buildBatsmanRow(nonStriker, isOnStrike: false),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Bowler Panel
+                          Expanded(
+                            flex: 2,
+                            child: Card(
+                              color: AppColors.surface,
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: bowler == null
+                                    ? Center(
+                                        child: Text("Select\nBowler",
+                                            style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                                            textAlign: TextAlign.center))
+                                    : Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.circle, color: AppColors.secondary, size: 8),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Text(
+                                                  bowler['name'],
+                                                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text("Overs: ${bowler['overs']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                                          Text("Mdns: ${bowler['maidens']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                                          Text("Runs: ${bowler['runs']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                                          Text("Wkts: ${bowler['wickets']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                                        ],
+                                      ),
+                              ),
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
+
+                    const Spacer(),
+
+                    // 3. Chronological Ball History Ticker (Color coded)
+                    if (recentBalls.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Text("This Over:", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+                      ),
+                      Container(
+                        height: 40,
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: recentBalls.length,
+                          itemBuilder: (context, index) {
+                            final ball = recentBalls[index];
+                            final label = ball['ball_label']?.toString() ?? '';
+                            final isWkt = ball['is_wicket'] == true;
+
+                            Color ballBgColor = const Color(0x0DFFFFFF);
+                            Color ballTextColor = Colors.white;
+
+                            if (isWkt) {
+                              ballBgColor = AppColors.error;
+                              ballTextColor = Colors.white;
+                            } else if (label == '4') {
+                              ballBgColor = AppColors.primary;
+                              ballTextColor = Colors.black;
+                            } else if (label == '6') {
+                              ballBgColor = AppColors.secondary;
+                              ballTextColor = Colors.black;
+                            } else if (label == '0' || label == '•') {
+                              ballBgColor = Colors.white.withOpacity(0.04);
+                              ballTextColor = AppColors.textSecondary;
+                            } else if (label.toLowerCase().contains('wd') ||
+                                       label.toLowerCase().contains('nb') ||
+                                       label.toLowerCase().contains('lb') ||
+                                       label.toLowerCase().contains('b')) {
+                              ballBgColor = AppColors.accent;
+                              ballTextColor = Colors.black;
+                            }
+
+                            return Container(
+                              width: 34,
+                              height: 34,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                color: ballBgColor,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isWkt 
+                                      ? AppColors.error 
+                                      : (label == '4' || label == '6' ? Colors.transparent : const Color(0x14FFFFFF)),
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                label,
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                  color: ballTextColor,
                                 ),
                               ),
                             );
-                          }).toList(),
-                        )
-                      ],
-                    ),
-                  )
-                else
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 36),
-                    decoration: const BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                    ),
+                          },
+                        ),
+                      ),
+                    ],
+
+                    // 4. Large Circle Scoring Controls Pad
+                    if (!_isViewerMode)
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+                        decoration: const BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                        ),
+                        child: Column(
+                          children: [
+                            // Top control buttons (Wicket, Undo, Extras)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                ElevatedButton(
+                                  onPressed: _openWicketDialog,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.error.withOpacity(0.2),
+                                    foregroundColor: AppColors.error,
+                                    elevation: 0,
+                                  ),
+                                  child: const Text("WICKET"),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: _undo,
+                                  icon: const Icon(Icons.undo_rounded, size: 16),
+                                  label: const Text("UNDO"),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0x14FFFFFF),
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            // Extras toggles
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _buildExtraButton("WD", () => _openExtrasDialog("wide")),
+                                _buildExtraButton("NB", () => _openNoBallDialog()),
+                                _buildExtraButton("BYE", () => _openExtrasDialog("bye")),
+                                _buildExtraButton("LB", () => _openExtrasDialog("leg_bye")),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            // Runs pads row (0, 1, 2, 3, 4, 6)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [0, 1, 2, 3, 4, 6].map((runs) {
+                                return GestureDetector(
+                                  onTap: () => _scoreBall(runs, 0, "none"),
+                                  child: Container(
+                                    width: 50,
+                                    height: 50,
+                                    decoration: BoxDecoration(
+                                      color: runs == 4 || runs == 6
+                                          ? AppColors.primary
+                                          : const Color(0x0DFFFFFF),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: runs == 4 || runs == 6 ? Colors.transparent : const Color(0x14FFFFFF),
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      runs.toString(),
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: runs == 4 || runs == 6 ? Colors.black : Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            )
+                          ],
+                        ),
+                      )
+                    else
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(20, 24, 20, 36),
+                        decoration: const BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.remove_red_eye_outlined, color: AppColors.primary, size: 28),
+                            const SizedBox(height: 8),
+                            Text(
+                              "VIEWER MODE",
+                              style: GoogleFonts.outfit(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: AppColors.primary,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "Live score updates are received in real-time.",
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                  ],
+                ),
+          // Celebration Overlay
+          if (_showCelebration && _celebrationText != null)
+            Positioned.fill(
+              child: Container(
+                color: _celebrationText == "OUT!"
+                    ? Colors.red.withOpacity(0.35)
+                    : (_celebrationText == "SIX!" ? AppColors.secondary.withOpacity(0.25) : AppColors.primary.withOpacity(0.25)),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                  child: Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.remove_red_eye_outlined, color: AppColors.primary, size: 28),
-                        const SizedBox(height: 8),
+                        TweenAnimationBuilder<double>(
+                          tween: Tween<double>(begin: 0.5, end: 1.25),
+                          duration: const Duration(milliseconds: 450),
+                          curve: Curves.elasticOut,
+                          builder: (context, scale, child) {
+                            return Transform.scale(
+                              scale: scale,
+                              child: Text(
+                                _celebrationText!,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 84,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                  letterSpacing: 2,
+                                  shadows: [
+                                    Shadow(
+                                      color: _celebrationText == "OUT!"
+                                          ? Colors.red
+                                          : (_celebrationText == "SIX!" ? AppColors.secondary : AppColors.primary),
+                                      blurRadius: 30,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
                         Text(
-                          "VIEWER MODE",
+                          _celebrationText == "OUT!" ? "WICKET FALLS!" : "SUPERB SHOT!",
                           style: GoogleFonts.outfit(
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: AppColors.primary,
-                            letterSpacing: 1.5,
+                            color: Colors.white,
+                            letterSpacing: 3,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withOpacity(0.5),
+                                blurRadius: 4,
+                              )
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "Live score updates are received in real-time.",
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
+                        )
                       ],
                     ),
-                  )
-              ],
+                  ),
+                ),
+              ),
             ),
+        ],
+      ),
     );
   }
 

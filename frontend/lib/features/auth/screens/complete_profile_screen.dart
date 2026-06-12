@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -31,7 +32,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   @override
   void initState() {
     super.initState();
-    // Pre-populate fields if available
     _fullNameController.text = widget.user['full_name'] ?? "";
     _displayNameController.text = widget.user['display_name'] ?? widget.user['username'] ?? "";
     _selectedAvatar = _avatars[0];
@@ -80,163 +80,343 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             );
           }
         },
-        child: SingleChildScrollView(
-          child: Container(
-            constraints: BoxConstraints(minHeight: size.height),
-            width: size.width,
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
-            decoration: const BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(0.8, -0.6),
-                radius: 1.2,
-                colors: [
-                  Color(0x1F3B82F6), // Blue glow
-                  AppColors.background,
-                ],
+        child: Stack(
+          children: [
+            // Background stadium image
+            Container(
+              height: size.height,
+              width: size.width,
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: NetworkImage(
+                    'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=800&auto=format&fit=crop',
+                  ),
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 40),
-                  Text(
-                    "Complete Profile",
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "Customize your CricHeroes profile to start scoring",
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-                  // Form Container
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: const Color(0xFF334155), width: 1.5),
-                    ),
+            // Black shade for dark UI contrast
+            Container(
+              height: size.height,
+              width: size.width,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.85),
+              ),
+            ),
+            // Ambient glows
+            Positioned(
+              bottom: -50,
+              right: -50,
+              child: Container(
+                width: 320,
+                height: 320,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.primary.withOpacity(0.12),
+                ),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+                  child: Container(color: Colors.transparent),
+                ),
+              ),
+            ),
+            // Scrollable fields
+            SafeArea(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Form(
+                    key: _formKey,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Avatar picker
-                        Text(
-                          "Choose an Avatar",
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.outfit(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: _avatars.map((avatar) {
-                            final isSelected = _selectedAvatar == avatar;
-                            return GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _selectedAvatar = avatar;
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: isSelected ? AppColors.primary.withOpacity(0.2) : Colors.transparent,
-                                  border: Border.all(
-                                    color: isSelected ? AppColors.primary : Colors.transparent,
-                                    width: 2,
+                        const SizedBox(height: 16),
+                        // Onboarding progress header
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  "SETUP PROFILE",
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppColors.primary,
+                                    letterSpacing: 1.5,
                                   ),
                                 ),
-                                child: Text(
-                                  avatar,
-                                  style: const TextStyle(fontSize: 26),
+                                Text(
+                                  "STEP 3 OF 3",
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white70,
+                                    letterSpacing: 1.5,
+                                  ),
                                 ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            // Progress bar indicator
+                            Container(
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(3),
                               ),
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 24),
-                        TextFormField(
-                          controller: _fullNameController,
-                          decoration: const InputDecoration(
-                            labelText: "Full Name",
-                            prefixIcon: Icon(Icons.person_outline, color: AppColors.textSecondary),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty || value.trim().length < 3) {
-                              return "Full name must be at least 3 characters";
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _displayNameController,
-                          decoration: const InputDecoration(
-                            labelText: "Display Name (Username/Nickname)",
-                            prefixIcon: Icon(Icons.badge_outlined, color: AppColors.textSecondary),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty || value.trim().length < 2) {
-                              return "Display name must be at least 2 characters";
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _countryController,
-                          decoration: const InputDecoration(
-                            labelText: "Country (Optional)",
-                            prefixIcon: Icon(Icons.public, color: AppColors.textSecondary),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _favoriteTeamController,
-                          decoration: const InputDecoration(
-                            labelText: "Favorite Cricket Team (Optional)",
-                            prefixIcon: Icon(Icons.sports_cricket, color: AppColors.textSecondary),
-                          ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        gradient: AppColors.buttonGradient,
+                                        borderRadius: BorderRadius.circular(3),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: AppColors.primary.withOpacity(0.4),
+                                            blurRadius: 4,
+                                          )
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const Expanded(flex: 0, child: SizedBox.shrink()),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 28),
-                        BlocBuilder<AuthBloc, AuthState>(
-                          builder: (context, state) {
-                            if (state is AuthLoading) {
-                              return const Center(
-                                child: CircularProgressIndicator(color: AppColors.primary),
-                              );
-                            }
-                            return ElevatedButton(
-                              onPressed: _submitProfile,
-                              child: const Text("Save and Continue"),
-                            );
-                          },
+                        Text(
+                          "Complete Profile",
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: -1,
+                          ),
                         ),
+                        const SizedBox(height: 6),
+                        Text(
+                          "Customize your CricUP scorer identity",
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        // Onboarding Card Container
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                            child: Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: AppColors.glassDecoration(
+                                borderRadius: BorderRadius.circular(24),
+                                borderColor: Colors.white.withOpacity(0.08),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  // Large avatar preview with glowing circle
+                                  Center(
+                                    child: Stack(
+                                      alignment: Alignment.bottomRight,
+                                      children: [
+                                        AnimatedContainer(
+                                          duration: const Duration(milliseconds: 250),
+                                          width: 90,
+                                          height: 90,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: AppColors.surface,
+                                            border: Border.all(color: AppColors.primary, width: 2),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: AppColors.primary.withOpacity(0.25),
+                                                blurRadius: 12,
+                                              )
+                                            ],
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              _selectedAvatar ?? "🏏",
+                                              style: const TextStyle(fontSize: 44),
+                                            ),
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: const BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: AppColors.primary,
+                                          ),
+                                          child: const Icon(
+                                            Icons.camera_alt_rounded,
+                                            size: 14,
+                                            color: Colors.black,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    "Choose an Avatar",
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  // Scrollable avatar row selector
+                                  Wrap(
+                                    alignment: WrapAlignment.center,
+                                    spacing: 12,
+                                    runSpacing: 12,
+                                    children: _avatars.map((avatar) {
+                                      final isSelected = _selectedAvatar == avatar;
+                                      return GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedAvatar = avatar;
+                                          });
+                                        },
+                                        child: AnimatedScale(
+                                          scale: isSelected ? 1.25 : 1.0,
+                                          duration: const Duration(milliseconds: 200),
+                                          curve: Curves.easeOutBack,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: isSelected ? AppColors.primary.withOpacity(0.12) : Colors.transparent,
+                                              border: Border.all(
+                                                color: isSelected ? AppColors.primary : Colors.transparent,
+                                                width: 1.5,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              avatar,
+                                              style: const TextStyle(fontSize: 24),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                  const SizedBox(height: 28),
+                                  // Full Name
+                                  TextFormField(
+                                    controller: _fullNameController,
+                                    style: GoogleFonts.outfit(color: Colors.white),
+                                    decoration: const InputDecoration(
+                                      labelText: "Full Name",
+                                      prefixIcon: Icon(Icons.person_outline, color: AppColors.textSecondary),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.trim().isEmpty || value.trim().length < 3) {
+                                        return "Full name must be at least 3 characters";
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // Display Name
+                                  TextFormField(
+                                    controller: _displayNameController,
+                                    style: GoogleFonts.outfit(color: Colors.white),
+                                    decoration: const InputDecoration(
+                                      labelText: "Display Name (Nickname)",
+                                      prefixIcon: Icon(Icons.badge_outlined, color: AppColors.textSecondary),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.trim().isEmpty || value.trim().length < 2) {
+                                        return "Display name must be at least 2 characters";
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // Country
+                                  TextFormField(
+                                    controller: _countryController,
+                                    style: GoogleFonts.outfit(color: Colors.white),
+                                    decoration: const InputDecoration(
+                                      labelText: "Country (Optional)",
+                                      prefixIcon: Icon(Icons.public, color: AppColors.textSecondary),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // Favorite Team
+                                  TextFormField(
+                                    controller: _favoriteTeamController,
+                                    style: GoogleFonts.outfit(color: Colors.white),
+                                    decoration: const InputDecoration(
+                                      labelText: "Favorite Cricket Team (Optional)",
+                                      prefixIcon: Icon(Icons.sports_cricket_outlined, color: AppColors.textSecondary),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 28),
+                                  // Save and Continue button
+                                  BlocBuilder<AuthBloc, AuthState>(
+                                    builder: (context, state) {
+                                      if (state is AuthLoading) {
+                                        return const Center(
+                                          child: CircularProgressIndicator(color: AppColors.primary),
+                                        );
+                                      }
+                                      return Container(
+                                        decoration: BoxDecoration(
+                                          gradient: AppColors.buttonGradient,
+                                          borderRadius: BorderRadius.circular(12),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: AppColors.primary.withOpacity(0.2),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 4),
+                                            )
+                                          ],
+                                        ),
+                                        child: ElevatedButton(
+                                          onPressed: _submitProfile,
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.transparent,
+                                            foregroundColor: Colors.black,
+                                            elevation: 0,
+                                            shadowColor: Colors.transparent,
+                                          ),
+                                          child: Text(
+                                            "Save and Continue",
+                                            style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 16),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 40),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 40),
-                ],
+                ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

@@ -129,6 +129,7 @@ def patch_database_schema(db_engine):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print("DATABASE_URL =", settings.DATABASE_URL)
     # Auto-create tables on startup (great for development)
     Base.metadata.create_all(bind=engine)
     # Patch schema to add columns to existing tables
@@ -142,6 +143,30 @@ app = FastAPI(
     redoc_url=f"{settings.API_V1_STR}/redoc",
     lifespan=lifespan,
 )
+
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi import Request
+from fastapi.encoders import jsonable_encoder
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    try:
+        body = await request.body()
+        body_str = body.decode("utf-8")
+    except Exception as e:
+        body_str = f"Could not decode body: {e}"
+        
+    errors_list = jsonable_encoder(exc.errors())
+    print(f"[ValidationError] Path: {request.url.path}")
+    print(f"[ValidationError] Request payload: {body_str}")
+    print(f"[ValidationError] Errors: {errors_list}")
+    
+    return JSONResponse(
+        status_code=422,
+        content={"detail": errors_list}
+    )
+
 
 # Set up CORS middleware
 app.add_middleware(

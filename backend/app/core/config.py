@@ -16,6 +16,16 @@ class Settings(BaseSettings):
         "sqlite:///./cricket.db"
     )
 
+    # Brevo SMTP Configuration
+    BREVO_SMTP_HOST: str = os.getenv("BREVO_SMTP_HOST", "smtp-relay.brevo.com")
+    BREVO_SMTP_PORT: int = int(os.getenv("BREVO_SMTP_PORT", "587"))
+    BREVO_SMTP_USER: str = os.getenv("BREVO_SMTP_USER", "")
+    BREVO_SMTP_PASSWORD: str = os.getenv("BREVO_SMTP_PASSWORD", "")
+    BREVO_FROM_EMAIL: str = os.getenv("BREVO_FROM_EMAIL", "info@cricup.com")
+
+    # Environment
+    APP_ENV: str = os.getenv("APP_ENV", "development")
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: str) -> str:
