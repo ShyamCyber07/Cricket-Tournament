@@ -133,6 +133,10 @@ async def lifespan(app: FastAPI):
     from app.core.backup import daily_sqlite_backup_loop
     
     print("DATABASE_URL =", settings.DATABASE_URL)
+    print("SMTP_HOST =", settings.BREVO_SMTP_HOST)
+    print("SMTP_PORT =", settings.BREVO_SMTP_PORT)
+    print("SMTP_USER =", settings.BREVO_SMTP_USER)
+    print("FROM_EMAIL =", settings.BREVO_FROM_EMAIL)
     
     # Production SQLite warning
     if settings.DATABASE_URL.startswith("sqlite") and settings.APP_ENV.lower() in ["production", "prod"]:

@@ -151,15 +151,25 @@ class ApiService {
   }
 
   Future<Response> signup(String email, String password, String username, String confirmPassword) async {
-    return await _dio.post(
-      '/auth/signup',
-      data: {
-        'username': username,
-        'email': email,
-        'password': password,
-        'confirm_password': confirmPassword,
-      },
-    );
+    print("SIGNUP REQUEST STARTING");
+    print("BASE URL: ${_dio.options.baseUrl}");
+    try {
+      final response = await _dio.post(
+        '/auth/signup',
+        data: {
+          'username': username,
+          'email': email,
+          'password': password,
+          'confirm_password': confirmPassword,
+        },
+      );
+      print("STATUS CODE: ${response.statusCode}");
+      return response;
+    } catch (e, stackTrace) {
+      print("SIGNUP ERROR: $e");
+      print(stackTrace);
+      rethrow;
+    }
   }
 
   Future<Response> verifyOtp(String email, String otpCode) async {

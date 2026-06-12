@@ -350,6 +350,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                         child: ElevatedButton(
                                           onPressed: () {
                                             if (_formKey.currentState!.validate()) {
+                                              print("SIGNUP BUTTON PRESSED");
                                               context.read<AuthBloc>().add(
                                                 SignupRequested(
                                                   username: _usernameController.text.trim(),

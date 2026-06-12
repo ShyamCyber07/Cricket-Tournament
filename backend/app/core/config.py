@@ -17,11 +17,11 @@ class Settings(BaseSettings):
     )
 
     # Brevo SMTP Configuration
-    BREVO_SMTP_HOST: str = os.getenv("BREVO_SMTP_HOST", "smtp-relay.brevo.com")
+    BREVO_SMTP_HOST: str = os.getenv("BREVO_SMTP_HOST", "")
     BREVO_SMTP_PORT: int = int(os.getenv("BREVO_SMTP_PORT", "587"))
     BREVO_SMTP_USER: str = os.getenv("BREVO_SMTP_USER", "")
     BREVO_SMTP_PASSWORD: str = os.getenv("BREVO_SMTP_PASSWORD", "")
-    BREVO_FROM_EMAIL: str = os.getenv("BREVO_FROM_EMAIL", "info@cricup.com")
+    BREVO_FROM_EMAIL: str = os.getenv("BREVO_FROM_EMAIL", "")
 
     # Environment
     APP_ENV: str = os.getenv("APP_ENV", "development")
