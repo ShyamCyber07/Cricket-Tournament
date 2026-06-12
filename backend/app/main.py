@@ -129,7 +129,23 @@ def patch_database_schema(db_engine):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
+    from app.core.backup import daily_sqlite_backup_loop
+    
     print("DATABASE_URL =", settings.DATABASE_URL)
+    
+    # Production SQLite warning
+    if settings.DATABASE_URL.startswith("sqlite") and settings.APP_ENV.lower() in ["production", "prod"]:
+        print("\n" + "="*80)
+        print("  WARNING: RUNNING WITH SQLITE IN PRODUCTION!")
+        print("  SQLite is not recommended for production environments due to potential data")
+        print("  loss, concurrency limits, and ephemeral filesystem on Railway.")
+        print("  Please migrate to PostgreSQL as soon as possible.")
+        print("="*80 + "\n")
+        
+    # Launch daily backup loop in background
+    asyncio.create_task(daily_sqlite_backup_loop())
+    
     # Auto-create tables on startup (great for development)
     Base.metadata.create_all(bind=engine)
     # Patch schema to add columns to existing tables
