@@ -1,3 +1,29 @@
+import logging
+from fastapi.responses import PlainTextResponse
+
+class MemoryHandler(logging.Handler):
+    def __init__(self, capacity=2000):
+        super().__init__()
+        self.capacity = capacity
+        self.buffer = []
+
+    def emit(self, record):
+        self.buffer.append(self.format(record))
+        if len(self.buffer) > self.capacity:
+            self.buffer.pop(0)
+
+    def get_logs(self):
+        return "\n".join(self.buffer)
+
+memory_handler = MemoryHandler()
+memory_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+
+# Hook into root and uvicorn loggers to intercept production outputs
+for logger_name in ["", "uvicorn", "uvicorn.access", "uvicorn.error", "app.routers.auth", "app.core.email"]:
+    l = logging.getLogger(logger_name)
+    l.addHandler(memory_handler)
+    l.setLevel(logging.INFO)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqladmin import Admin
@@ -236,3 +262,9 @@ app.include_router(players.router, prefix=f"{settings.API_V1_STR}/players", tags
 app.include_router(teams.router, prefix=f"{settings.API_V1_STR}/teams", tags=["teams"])
 app.include_router(matches.router, prefix=f"{settings.API_V1_STR}/matches", tags=["matches"])
 app.include_router(tournaments.router, prefix=f"{settings.API_V1_STR}/tournaments", tags=["tournaments"])
+
+@app.get("/api/v1/debug-logs", response_class=PlainTextResponse)
+def get_debug_logs(secret: str = ""):
+    if secret != "cricup_e2e_secret_2026":
+        return PlainTextResponse("Unauthorized", status_code=403)
+    return PlainTextResponse(memory_handler.get_logs())

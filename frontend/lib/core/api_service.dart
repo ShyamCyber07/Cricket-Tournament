@@ -12,8 +12,8 @@ class ApiService {
 
   ApiService() {
     _dio.options.baseUrl = AppConfig.baseUrl;
-    _dio.options.connectTimeout = const Duration(seconds: 10);
-    _dio.options.receiveTimeout = const Duration(seconds: 10);
+    _dio.options.connectTimeout = const Duration(seconds: 30);
+    _dio.options.receiveTimeout = const Duration(seconds: 30);
 
     // Inject logging interceptor
     _dio.interceptors.add(

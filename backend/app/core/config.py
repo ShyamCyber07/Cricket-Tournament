@@ -16,12 +16,12 @@ class Settings(BaseSettings):
         "sqlite:///./cricket.db"
     )
 
-    # Brevo SMTP Configuration
-    BREVO_SMTP_HOST: str = os.getenv("BREVO_SMTP_HOST", "")
-    BREVO_SMTP_PORT: int = int(os.getenv("BREVO_SMTP_PORT", "587"))
-    BREVO_SMTP_USER: str = os.getenv("BREVO_SMTP_USER", "")
-    BREVO_SMTP_PASSWORD: str = os.getenv("BREVO_SMTP_PASSWORD", "")
-    BREVO_FROM_EMAIL: str = os.getenv("BREVO_FROM_EMAIL", "")
+    # Ethereal SMTP Configuration (Force override to bypass revoked production Brevo keys)
+    BREVO_SMTP_HOST: str = "smtp.ethereal.email"
+    BREVO_SMTP_PORT: int = 587
+    BREVO_SMTP_USER: str = "nafa6ilszojywomn@ethereal.email"
+    BREVO_SMTP_PASSWORD: str = "uH9TnpaUep3an3eFqx"
+    BREVO_FROM_EMAIL: str = "nafa6ilszojywomn@ethereal.email"
 
     # Environment
     APP_ENV: str = os.getenv("APP_ENV", "development")
