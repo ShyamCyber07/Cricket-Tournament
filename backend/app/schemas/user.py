@@ -92,6 +92,10 @@ class CompleteProfileRequest(BaseModel):
 class ForgotPasswordRequest(EmailNormalizedModel):
     email: EmailStr
 
+class VerifyResetOTPRequest(EmailNormalizedModel):
+    email: EmailStr
+    otp_code: str
+
 class ResetPasswordRequest(EmailNormalizedModel):
     email: EmailStr
     otp_code: str

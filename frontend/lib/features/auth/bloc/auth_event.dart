@@ -109,4 +109,14 @@ class ResetPasswordRequested extends AuthEvent {
   List<Object?> get props => [email, otpCode, newPassword, confirmPassword];
 }
 
+class VerifyForgotPasswordOtpRequested extends AuthEvent {
+  final String email;
+  final String otpCode;
+
+  const VerifyForgotPasswordOtpRequested({required this.email, required this.otpCode});
+
+  @override
+  List<Object?> get props => [email, otpCode];
+}
+
 class LogoutRequested extends AuthEvent {}

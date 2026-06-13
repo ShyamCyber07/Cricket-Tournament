@@ -204,6 +204,16 @@ class ApiService {
     );
   }
 
+  Future<Response> verifyResetOtp(String email, String otpCode) async {
+    return await _dio.post(
+      '/auth/verify-reset-otp',
+      data: {
+        'email': email,
+        'otp_code': otpCode,
+      },
+    );
+  }
+
   Future<Response> resetPassword(String email, String otpCode, String newPassword, String confirmPassword) async {
     return await _dio.post(
       '/auth/reset-password',

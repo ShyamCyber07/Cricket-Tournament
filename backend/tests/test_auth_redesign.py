@@ -183,6 +183,14 @@ def test_brute_force_lockout(client, db):
     assert "access_token" in response.json()
 
 def test_password_recovery_and_reset(client, db):
+    # Test forgot password for non-existent email
+    response = client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "nonexistent@example.com"}
+    )
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
     # Seed user
     user = User(
         email="recover@example.com",
@@ -205,6 +213,22 @@ def test_password_recovery_and_reset(client, db):
     db.refresh(user)
     otp = user.otp_code
     assert otp is not None
+
+    # Verify reset OTP with invalid code
+    response = client.post(
+        "/api/v1/auth/verify-reset-otp",
+        json={"email": "recover@example.com", "otp_code": "000000"}
+    )
+    assert response.status_code == 400
+    assert "invalid" in response.json()["detail"].lower()
+
+    # Verify reset OTP successfully
+    response = client.post(
+        "/api/v1/auth/verify-reset-otp",
+        json={"email": "recover@example.com", "otp_code": otp}
+    )
+    assert response.status_code == 200
+    assert "verified" in response.json()["message"].lower()
 
     # Reset password with invalid confirm
     response = client.post(

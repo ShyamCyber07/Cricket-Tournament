@@ -18,6 +18,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<GoogleLoginRequested>(_onGoogleLoginRequested);
     on<CompleteProfileRequested>(_onCompleteProfileRequested);
     on<ForgotPasswordRequested>(_onForgotPasswordRequested);
+    on<VerifyForgotPasswordOtpRequested>(_onVerifyForgotPasswordOtpRequested);
     on<ResetPasswordRequested>(_onResetPasswordRequested);
     on<LogoutRequested>(_onLogoutRequested);
   }
@@ -181,6 +182,21 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
+  Future<void> _onVerifyForgotPasswordOtpRequested(VerifyForgotPasswordOtpRequested event, Emitter<AuthState> emit) async {
+    emit(AuthLoading());
+    try {
+      await _apiService.verifyResetOtp(event.email, event.otpCode);
+      emit(AuthForgotPasswordOtpVerified(email: event.email, otpCode: event.otpCode));
+    } on DioException catch (e) {
+      final msg = e.response?.data?['detail'] ?? "OTP verification failed.";
+      emit(AuthError(message: msg.toString()));
+      emit(AuthForgotPasswordOtpSent(email: event.email));
+    } catch (e) {
+      emit(AuthError(message: e.toString()));
+      emit(AuthForgotPasswordOtpSent(email: event.email));
+    }
+  }
+
   Future<void> _onResetPasswordRequested(ResetPasswordRequested event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
     try {
@@ -190,10 +206,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     } on DioException catch (e) {
       final msg = e.response?.data?['detail'] ?? "Failed to reset password.";
       emit(AuthError(message: msg.toString()));
-      emit(AuthForgotPasswordOtpSent(email: event.email));
+      emit(AuthForgotPasswordOtpVerified(email: event.email, otpCode: event.otpCode));
     } catch (e) {
       emit(AuthError(message: e.toString()));
-      emit(AuthForgotPasswordOtpSent(email: event.email));
+      emit(AuthForgotPasswordOtpVerified(email: event.email, otpCode: event.otpCode));
     }
   }
 
