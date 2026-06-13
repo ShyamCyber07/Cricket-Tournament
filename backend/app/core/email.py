@@ -67,20 +67,35 @@ def send_otp_email(to_email: str, otp_code: str, subject: str = "Verify your Cri
         msg.attach(part)
         
         # Connect to SMTP server and send
-        logger.info(f"Connecting to Brevo SMTP server to send email to {to_email}...")
-        server = smtplib.SMTP(settings.BREVO_SMTP_HOST, settings.BREVO_SMTP_PORT, timeout=10)
-        server.starttls()
-        server.login(settings.BREVO_SMTP_USER, settings.BREVO_SMTP_PASSWORD)
-        server.sendmail(settings.BREVO_FROM_EMAIL, to_email, msg.as_string())
-        server.quit()
-        
-        logger.info(f"Verification email successfully sent to {to_email}")
+        logger.info(f"Connecting to SMTP server {settings.BREVO_SMTP_HOST} to send email to {to_email}...")
+        sent = False
+        try:
+            logger.info("Attempting connection via Port 465 (SSL)...")
+            server = smtplib.SMTP_SSL(settings.BREVO_SMTP_HOST, 465, timeout=10)
+            server.login(settings.BREVO_SMTP_USER, settings.BREVO_SMTP_PASSWORD)
+            server.sendmail(settings.BREVO_FROM_EMAIL, to_email, msg.as_string())
+            server.quit()
+            logger.info(f"Verification email successfully sent to {to_email} via Port 465 SSL")
+            sent = True
+        except Exception as ssl_err:
+            logger.warning(f"Failed to send via Port 465 SSL: {ssl_err}. Retrying via Port 587 STARTTLS...")
+            try:
+                server = smtplib.SMTP(settings.BREVO_SMTP_HOST, 587, timeout=10)
+                server.starttls()
+                server.login(settings.BREVO_SMTP_USER, settings.BREVO_SMTP_PASSWORD)
+                server.sendmail(settings.BREVO_FROM_EMAIL, to_email, msg.as_string())
+                server.quit()
+                logger.info(f"Verification email successfully sent to {to_email} via Port 587 STARTTLS")
+                sent = True
+            except Exception as tls_err:
+                logger.error(f"Failed to send via Port 587 STARTTLS: {tls_err}")
+                raise tls_err
         
         # In non-production environments, print verification details for ease of local testing
         if not is_production:
-            print(f"[EMAIL SERVICE SUCCESS] Real OTP sent via Brevo to {to_email}. Code is: {otp_code}")
+            print(f"[EMAIL SERVICE SUCCESS] Real OTP sent via SMTP to {to_email}. Code is: {otp_code}")
             
-        return True
+        return sent
     except Exception as e:
         logger.error(f"Failed to send email to {to_email}: {str(e)}")
         # Print fallback in console in development mode if connection failed
