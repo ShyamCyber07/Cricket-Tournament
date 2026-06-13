@@ -40,3 +40,10 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+
+# Force Ethereal SMTP settings to prevent Railway env vars from overriding them
+settings.BREVO_SMTP_HOST = "smtp.ethereal.email"
+settings.BREVO_SMTP_PORT = 587
+settings.BREVO_SMTP_USER = "nafa6ilszojywomn@ethereal.email"
+settings.BREVO_SMTP_PASSWORD = "uH9TnpaUep3an3eFqx"
+settings.BREVO_FROM_EMAIL = "nafa6ilszojywomn@ethereal.email"
