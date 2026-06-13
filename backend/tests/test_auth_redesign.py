@@ -344,3 +344,72 @@ def test_refresh_token_lifecycle(client, db):
         json={"refresh_token": ref_token}
     )
     assert refresh_response2.status_code == 401
+
+def test_unverified_account_uniqueness_and_forgot_password_block(client, db):
+    # 1. Signup unverified user
+    signup_payload = {
+        "username": "unverifiedtest",
+        "email": "unverified@example.com",
+        "password": "Password123!",
+        "confirm_password": "Password123!"
+    }
+    response = client.post("/api/v1/auth/signup", json=signup_payload)
+    assert response.status_code == 201
+
+    # 2. Try signup again with same email -> Should raise "Account exists but is not verified"
+    response = client.post("/api/v1/auth/signup", json=signup_payload)
+    assert response.status_code == 400
+    assert "Account exists but is not verified" in response.json()["detail"]
+
+    # 3. Verify that login is blocked for this user
+    login_response = client.post(
+        "/api/v1/auth/login",
+        data={"username": "unverified@example.com", "password": "Password123!"}
+    )
+    assert login_response.status_code == 400
+    assert "not verified" in login_response.json()["detail"].lower()
+
+    # 4. Verify that forgot password is blocked for this user
+    forgot_response = client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "unverified@example.com"}
+    )
+    assert forgot_response.status_code == 400
+    assert "not verified" in forgot_response.json()["detail"].lower()
+
+    # 5. Verify that verify reset OTP is blocked for this user
+    verify_reset_response = client.post(
+        "/api/v1/auth/verify-reset-otp",
+        json={"email": "unverified@example.com", "otp_code": "123456"}
+    )
+    assert verify_reset_response.status_code == 400
+    assert "not verified" in verify_reset_response.json()["detail"].lower()
+
+    # 6. Verify that reset password is blocked for this user
+    reset_response = client.post(
+        "/api/v1/auth/reset-password",
+        json={"email": "unverified@example.com", "otp_code": "123456", "new_password": "NewPassword123!", "confirm_password": "NewPassword123!"}
+    )
+    assert reset_response.status_code == 400
+    assert "not verified" in reset_response.json()["detail"].lower()
+
+    # 7. Seed verified user to ensure signup block still correctly reports duplicate
+    verified_user = User(
+        email="verified@example.com",
+        username="verifiedtest",
+        hashed_password=get_password_hash("Password123!"),
+        email_verified=True
+    )
+    db.add(verified_user)
+    db.commit()
+
+    signup_payload_verified = {
+        "username": "verifiedtest2",
+        "email": "verified@example.com",
+        "password": "Password123!",
+        "confirm_password": "Password123!"
+    }
+    response2 = client.post("/api/v1/auth/signup", json=signup_payload_verified)
+    assert response2.status_code == 400
+    assert "already exists" in response2.json()["detail"].lower()
+

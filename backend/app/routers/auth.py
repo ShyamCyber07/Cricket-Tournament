@@ -77,6 +77,11 @@ def signup(user_in: UserSignup, db: Session = Depends(get_db)):
     # 1. Unique email check
     email_user = db.query(User).filter(func.lower(func.trim(User.email)) == func.lower(user_in.email.strip())).first()
     if email_user:
+        if not email_user.email_verified:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Account exists but is not verified"
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A user with this email already exists."
@@ -299,6 +304,12 @@ def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
             detail="User not found."
         )
         
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account is not verified. Please verify your email first."
+        )
+        
     # Rate limit check (60 seconds)
     if user.last_otp_sent_at and (get_utc_now() - user.last_otp_sent_at) < timedelta(seconds=60):
         remaining = 60 - int((get_utc_now() - user.last_otp_sent_at).total_seconds())
@@ -329,6 +340,12 @@ def verify_reset_otp(req: VerifyResetOTPRequest, db: Session = Depends(get_db)):
             detail="User not found."
         )
         
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account is not verified. Please verify your email first."
+        )
+        
     if not user.otp_code or user.otp_code != req.otp_code:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -350,6 +367,12 @@ def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found."
+        )
+        
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account is not verified. Please verify your email first."
         )
         
     if not user.otp_code or user.otp_code != req.otp_code:

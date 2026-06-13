@@ -63,6 +63,15 @@ class AuthOtpResentSuccess extends AuthState {}
 
 class AuthUnauthenticated extends AuthState {}
 
+class AuthSignupUnverified extends AuthState {
+  final String email;
+
+  const AuthSignupUnverified({required this.email});
+
+  @override
+  List<Object?> get props => [email];
+}
+
 class AuthError extends AuthState {
   final String message;
 

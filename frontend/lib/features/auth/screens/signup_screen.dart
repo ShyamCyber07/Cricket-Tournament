@@ -80,6 +80,9 @@ class _SignupScreenState extends State<SignupScreen> {
           if (state is AuthNeedsVerification) {
             Navigator.popUntil(context, (route) => route.isFirst);
           }
+          if (state is AuthSignupUnverified) {
+            _showUnverifiedAccountDialog(context, state.email);
+          }
           if (state is AuthError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -444,6 +447,45 @@ class _SignupScreenState extends State<SignupScreen> {
               color: isSatisfied ? Colors.white : AppColors.textSecondary,
             ),
             child: Text(ruleText),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUnverifiedAccountDialog(BuildContext context, String email) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xff111827),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Colors.white10)),
+        title: Text(
+          "Account Unverified",
+          style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          "An account with this email exists but has not been verified yet. Would you like to verify it now?",
+          style: GoogleFonts.outfit(color: const Color(0xff9ca3af)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text("Cancel", style: GoogleFonts.outfit(color: const Color(0xff9ca3af))),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.read<AuthBloc>().add(ResendOtpRequested(email: email));
+            },
+            child: Text("Resend OTP", style: GoogleFonts.outfit(color: AppColors.secondary, fontWeight: FontWeight.bold)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.read<AuthBloc>().add(AuthVerificationRedirectRequested(email: email));
+            },
+            child: Text("Verify Account", style: GoogleFonts.outfit(color: AppColors.primary, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

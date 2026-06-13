@@ -21,6 +21,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<VerifyForgotPasswordOtpRequested>(_onVerifyForgotPasswordOtpRequested);
     on<ResetPasswordRequested>(_onResetPasswordRequested);
     on<LogoutRequested>(_onLogoutRequested);
+    on<AuthVerificationRedirectRequested>((event, emit) {
+      emit(AuthNeedsVerification(email: event.email));
+    });
   }
 
   Future<void> _onAuthStarted(AuthStarted event, Emitter<AuthState> emit) async {
@@ -81,8 +84,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(AuthNeedsVerification(email: event.email));
     } on DioException catch (e) {
       final msg = e.response?.data?['detail'] ?? "Signup failed.";
-      emit(AuthError(message: msg.toString()));
-      emit(AuthUnauthenticated());
+      if (msg.toString().toLowerCase().contains("account exists but is not verified")) {
+        emit(AuthSignupUnverified(email: event.email));
+      } else {
+        emit(AuthError(message: msg.toString()));
+        emit(AuthUnauthenticated());
+      }
     } catch (e) {
       emit(AuthError(message: e.toString()));
       emit(AuthUnauthenticated());
