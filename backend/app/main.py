@@ -87,8 +87,12 @@ def patch_database_schema(db_engine):
             # Backwards compatibility migration for legacy users
             with db_engine.begin() as conn:
                 conn.execute(text("UPDATE users SET username = email WHERE username IS NULL"))
-                conn.execute(text("UPDATE users SET email_verified = 1 WHERE email_verified IS NULL OR email_verified = 0"))
-                conn.execute(text("UPDATE users SET profile_completed = 1 WHERE profile_completed IS NULL OR profile_completed = 0"))
+                if is_postgres:
+                    conn.execute(text("UPDATE users SET email_verified = TRUE WHERE email_verified IS NULL OR email_verified = FALSE"))
+                    conn.execute(text("UPDATE users SET profile_completed = TRUE WHERE profile_completed IS NULL OR profile_completed = FALSE"))
+                else:
+                    conn.execute(text("UPDATE users SET email_verified = 1 WHERE email_verified IS NULL OR email_verified = 0"))
+                    conn.execute(text("UPDATE users SET profile_completed = 1 WHERE profile_completed IS NULL OR profile_completed = 0"))
 
         # 1. Patch players table
         if 'players' in inspector.get_table_names():
