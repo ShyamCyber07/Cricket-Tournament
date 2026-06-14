@@ -288,6 +288,30 @@ def get_debug_logs(secret: str = ""):
 
 @app.get("/api/v1/debug-env")
 def debug_env():
+    # 1. Print prefixes to logs
+    logger.info(f"DIAGNOSTIC - BREVO_API_KEY_PREFIX={settings.BREVO_API_KEY[:10] if settings.BREVO_API_KEY else 'None'}")
+    logger.info(f"DIAGNOSTIC - RAW_BREVO_API_KEY_PREFIX={os.getenv('BREVO_API_KEY')[:10] if os.getenv('BREVO_API_KEY') else 'None'}")
+    
+    # 2. Test Brevo API account endpoint directly
+    import httpx
+    account_status = None
+    account_body = None
+    try:
+        headers = {
+            "api-key": settings.BREVO_API_KEY,
+            "accept": "application/json"
+        }
+        with httpx.Client(timeout=10.0) as client:
+            res = client.get("https://api.brevo.com/v3/account", headers=headers)
+            account_status = res.status_code
+            account_body = res.text
+            logger.info(f"DIAGNOSTIC - BREVO account status: {res.status_code}")
+            logger.info(f"DIAGNOSTIC - BREVO account response: {res.text}")
+    except Exception as e:
+        account_status = 500
+        account_body = f"Error: {str(e)}"
+        logger.error(f"DIAGNOSTIC - BREVO account error: {str(e)}")
+
     return {
         "APP_ENV": settings.APP_ENV,
         "BREVO_FROM_EMAIL": settings.BREVO_FROM_EMAIL,
@@ -301,4 +325,6 @@ def debug_env():
         "RAILWAY_DEPLOYMENT_ID": os.getenv("RAILWAY_DEPLOYMENT_ID"),
         "RAILWAY_ENVIRONMENT_NAME": os.getenv("RAILWAY_ENVIRONMENT_NAME"),
         "RAILWAY_PROJECT_NAME": os.getenv("RAILWAY_PROJECT_NAME"),
+        "BREVO_ACCOUNT_TEST_STATUS": account_status,
+        "BREVO_ACCOUNT_TEST_BODY": account_body,
     }
