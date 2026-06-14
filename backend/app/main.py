@@ -179,8 +179,16 @@ async def lifespan(app: FastAPI):
     import os
     env_keys = sorted(list(os.environ.keys()))
     logger.info(f"Loaded environment variables: {', '.join(env_keys)}")
-    prefix = settings.BREVO_API_KEY[:10] if settings.BREVO_API_KEY else "None"
-    logger.info(f"BREVO_API_KEY_PREFIX={prefix}")
+    
+    # settings prefix print
+    logger.info(f"BREVO_API_KEY_PREFIX={settings.BREVO_API_KEY[:10] if settings.BREVO_API_KEY else 'None'}")
+    logger.info(f"BREVO_SMTP_PASSWORD_PREFIX={settings.BREVO_SMTP_PASSWORD[:10] if settings.BREVO_SMTP_PASSWORD else 'None'}")
+    
+    # raw os prefix print
+    raw_api_key = os.getenv("BREVO_API_KEY")
+    raw_smtp_password = os.getenv("BREVO_SMTP_PASSWORD")
+    logger.info(f"RAW_BREVO_API_KEY_PREFIX={raw_api_key[:10] if raw_api_key else 'None'}")
+    logger.info(f"RAW_BREVO_SMTP_PASSWORD_PREFIX={raw_smtp_password[:10] if raw_smtp_password else 'None'}")
 
     # Launch daily backup loop in background
     asyncio.create_task(daily_sqlite_backup_loop())
