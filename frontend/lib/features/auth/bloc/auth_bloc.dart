@@ -1,5 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
@@ -236,11 +238,33 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   Future<void> _onLogoutRequested(LogoutRequested event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
+    print("[DIAGNOSTICS] Starting Logout flow...");
     try {
       await _apiService.logout();
-    } catch (_) {
+    } catch (e) {
+      print("[DIAGNOSTICS] Backend logout failed: $e, clearing local token manually.");
       await ApiService.clearToken();
     }
+    
+    try {
+      print("[DIAGNOSTICS] Signing out from Firebase Auth...");
+      await FirebaseAuth.instance.signOut();
+      print("[DIAGNOSTICS] Firebase Auth Sign-Out completed.");
+    } catch (e) {
+      print("[DIAGNOSTICS] Error signing out from Firebase Auth: $e");
+    }
+
+    try {
+      print("[DIAGNOSTICS] Signing out from Google Sign-In...");
+      final googleSignIn = GoogleSignIn(
+        serverClientId: "270888644885-il2mmaaeehom7amrhglgtckcs3gu1j8c.apps.googleusercontent.com",
+      );
+      await googleSignIn.signOut();
+      print("[DIAGNOSTICS] Google Sign-In Sign-Out completed.");
+    } catch (e) {
+      print("[DIAGNOSTICS] Error signing out from Google Sign-In: $e");
+    }
+    
     emit(AuthUnauthenticated());
   }
 }
