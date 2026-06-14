@@ -297,11 +297,6 @@ def get_debug_logs(secret: str = ""):
         return PlainTextResponse("Unauthorized", status_code=403)
     return PlainTextResponse(memory_handler.get_logs())
 
-@app.get("/api/v1/debug-db-url", response_class=PlainTextResponse)
-def get_debug_db_url(secret: str = ""):
-    if secret != "cricup_e2e_secret_2026":
-        return PlainTextResponse("Unauthorized", status_code=403)
-    return PlainTextResponse(settings.DATABASE_URL)
 
 @app.get("/api/v1/debug-env")
 def debug_env():
