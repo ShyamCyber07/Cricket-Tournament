@@ -7,6 +7,10 @@ from app.core.database import Base, get_db
 from app.main import app
 from app.models.user import User
 from app.core.security import get_password_hash
+from app.core.config import settings
+
+# Force a mock Google Client ID for test runs to prevent local .env leakage
+settings.GOOGLE_CLIENT_ID = "test_google_client_id"
 
 from sqlalchemy.pool import StaticPool
 
