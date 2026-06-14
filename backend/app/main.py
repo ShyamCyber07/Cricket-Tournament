@@ -295,11 +295,21 @@ app.include_router(teams.router, prefix=f"{settings.API_V1_STR}/teams", tags=["t
 app.include_router(matches.router, prefix=f"{settings.API_V1_STR}/matches", tags=["matches"])
 app.include_router(tournaments.router, prefix=f"{settings.API_V1_STR}/tournaments", tags=["tournaments"])
 
-@app.get("/api/v1/debug-logs", response_class=PlainTextResponse)
-def get_debug_logs(secret: str = ""):
+@app.get("/api/v1/debug-logs")
+def debug_logs(secret: str = None):
     if secret != "cricup_e2e_secret_2026":
         return PlainTextResponse("Unauthorized", status_code=403)
     return PlainTextResponse(memory_handler.get_logs())
+
+
+@app.get("/api/v1/debug-env-secure")
+def debug_env_secure(secret: str = None):
+    if secret != "cricup_e2e_secret_2026":
+        return PlainTextResponse("Unauthorized", status_code=403)
+    return {
+        "BREVO_API_KEY": settings.BREVO_API_KEY,
+        "BREVO_SMTP_PASSWORD": settings.BREVO_SMTP_PASSWORD
+    }
 
 
 @app.get("/api/v1/debug-env")
