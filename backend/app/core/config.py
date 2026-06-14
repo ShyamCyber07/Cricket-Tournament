@@ -16,12 +16,16 @@ class Settings(BaseSettings):
         "sqlite:///./cricket.db"
     )
 
+    # Brevo API Configurations
+    BREVO_API_KEY: str = os.getenv("BREVO_API_KEY", os.getenv("BREVO_SMTP_PASSWORD", "uH9TnpaUep3an3eFqx"))
+    BREVO_FROM_EMAIL: str = os.getenv("BREVO_FROM_EMAIL", "nafa6ilszojywomn@ethereal.email")
+    BREVO_FROM_NAME: str = os.getenv("BREVO_FROM_NAME", "CricUP")
+
     # SMTP Configuration (falls back to Ethereal if not set in environment or dotenv)
     BREVO_SMTP_HOST: str = os.getenv("BREVO_SMTP_HOST", "smtp.ethereal.email")
     BREVO_SMTP_PORT: int = int(os.getenv("BREVO_SMTP_PORT", "587"))
     BREVO_SMTP_USER: str = os.getenv("BREVO_SMTP_USER", "nafa6ilszojywomn@ethereal.email")
     BREVO_SMTP_PASSWORD: str = os.getenv("BREVO_SMTP_PASSWORD", "uH9TnpaUep3an3eFqx")
-    BREVO_FROM_EMAIL: str = os.getenv("BREVO_FROM_EMAIL", "nafa6ilszojywomn@ethereal.email")
 
     # Environment
     APP_ENV: str = os.getenv("APP_ENV", "development")

@@ -21,7 +21,7 @@ from app.schemas.user import (
     CompleteProfileRequest, ForgotPasswordRequest, ResetPasswordRequest,
     VerifyResetOTPRequest
 )
-from app.core.email import send_otp_email
+from app.core.email import send_verification_otp, send_password_reset_otp
 
 router = APIRouter()
 
@@ -147,7 +147,7 @@ def signup(user_in: UserSignup, db: Session = Depends(get_db)):
     print("[EMAIL SEND STARTED]")
     logger.info("[EMAIL SEND STARTED]")
     
-    email_success = send_otp_email(user_in.email, otp_code, subject="Verify your CricUP account")
+    email_success = send_verification_otp(user_in.email, otp_code)
     if email_success:
         print("[EMAIL SEND SUCCESS]")
         logger.info("[EMAIL SEND SUCCESS]")
@@ -233,7 +233,7 @@ def resend_otp(req: ResendOTPRequest, db: Session = Depends(get_db)):
     print("[EMAIL SEND STARTED]")
     logger.info("[EMAIL SEND STARTED]")
     
-    email_success = send_otp_email(user.email, otp_code, subject="Verify your CricUP account")
+    email_success = send_verification_otp(user.email, otp_code)
     if email_success:
         print("[EMAIL SEND SUCCESS]")
         logger.info("[EMAIL SEND SUCCESS]")
@@ -362,8 +362,8 @@ def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
     otp_code = f"{secrets.randbelow(900000) + 100000:06d}"
     otp_expiry = get_utc_now() + timedelta(minutes=10)
     
-    # Send password reset email via Brevo
-    send_otp_email(user.email, otp_code, subject="Reset your CricUP password")
+    # Send password reset email via Brevo API
+    send_password_reset_otp(user.email, otp_code)
     
     user.otp_code = otp_code
     user.otp_expiry = otp_expiry
