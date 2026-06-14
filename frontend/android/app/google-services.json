@@ -12,7 +12,20 @@
           "package_name": "com.cricup"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "270888644885-5967g17bggnosa190t5rboqmqr5u8374.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.cricup",
+            "certificate_hash": "4730b15981890d3acb61dd9db4e9b7fb6c4fc54d"
+          }
+        },
+        {
+          "client_id": "270888644885-il2mmaaeehom7amrhglgtckcs3gu1j8c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDiaKBZsl7zrrEUI1xuamfPA_4fSA4o7RA"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "270888644885-il2mmaaeehom7amrhglgtckcs3gu1j8c.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
