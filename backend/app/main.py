@@ -288,4 +288,6 @@ def debug_env():
         "BREVO_API_KEY_len": len(settings.BREVO_API_KEY) if settings.BREVO_API_KEY else 0,
         "BREVO_SMTP_PASSWORD_len": len(settings.BREVO_SMTP_PASSWORD) if settings.BREVO_SMTP_PASSWORD else 0,
         "BREVO_SMTP_USER": settings.BREVO_SMTP_USER,
+        "RAILWAY_SERVICE_NAME": os.getenv("RAILWAY_SERVICE_NAME"),
+        "RAILWAY_DEPLOYMENT_ID": os.getenv("RAILWAY_DEPLOYMENT_ID"),
     }
