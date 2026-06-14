@@ -275,7 +275,8 @@ def debug_env():
         "APP_ENV": settings.APP_ENV,
         "BREVO_FROM_EMAIL": settings.BREVO_FROM_EMAIL,
         "BREVO_FROM_NAME": settings.BREVO_FROM_NAME,
-        "BREVO_API_KEY_prefix": settings.BREVO_API_KEY[:10] if settings.BREVO_API_KEY else None,
+        "BREVO_API_KEY_prefix": settings.BREVO_API_KEY[:12] if settings.BREVO_API_KEY else None,
+        "BREVO_API_KEY_suffix": settings.BREVO_API_KEY[-6:] if settings.BREVO_API_KEY else None,
         "BREVO_API_KEY_len": len(settings.BREVO_API_KEY) if settings.BREVO_API_KEY else 0,
         "BREVO_SMTP_USER": settings.BREVO_SMTP_USER,
     }
