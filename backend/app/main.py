@@ -268,3 +268,14 @@ def get_debug_logs(secret: str = ""):
     if secret != "cricup_e2e_secret_2026":
         return PlainTextResponse("Unauthorized", status_code=403)
     return PlainTextResponse(memory_handler.get_logs())
+
+@app.get("/api/v1/debug-env")
+def debug_env():
+    return {
+        "APP_ENV": settings.APP_ENV,
+        "BREVO_FROM_EMAIL": settings.BREVO_FROM_EMAIL,
+        "BREVO_FROM_NAME": settings.BREVO_FROM_NAME,
+        "BREVO_API_KEY_prefix": settings.BREVO_API_KEY[:10] if settings.BREVO_API_KEY else None,
+        "BREVO_API_KEY_len": len(settings.BREVO_API_KEY) if settings.BREVO_API_KEY else 0,
+        "BREVO_SMTP_USER": settings.BREVO_SMTP_USER,
+    }
