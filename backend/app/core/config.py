@@ -16,12 +16,12 @@ class Settings(BaseSettings):
         "sqlite:///./cricket.db"
     )
 
-    # Ethereal SMTP Configuration (Force override to bypass revoked production Brevo keys)
-    BREVO_SMTP_HOST: str = "smtp.ethereal.email"
-    BREVO_SMTP_PORT: int = 587
-    BREVO_SMTP_USER: str = "nafa6ilszojywomn@ethereal.email"
-    BREVO_SMTP_PASSWORD: str = "uH9TnpaUep3an3eFqx"
-    BREVO_FROM_EMAIL: str = "nafa6ilszojywomn@ethereal.email"
+    # SMTP Configuration (falls back to Ethereal if not set in environment or dotenv)
+    BREVO_SMTP_HOST: str = os.getenv("BREVO_SMTP_HOST", "smtp.ethereal.email")
+    BREVO_SMTP_PORT: int = int(os.getenv("BREVO_SMTP_PORT", "587"))
+    BREVO_SMTP_USER: str = os.getenv("BREVO_SMTP_USER", "nafa6ilszojywomn@ethereal.email")
+    BREVO_SMTP_PASSWORD: str = os.getenv("BREVO_SMTP_PASSWORD", "uH9TnpaUep3an3eFqx")
+    BREVO_FROM_EMAIL: str = os.getenv("BREVO_FROM_EMAIL", "nafa6ilszojywomn@ethereal.email")
 
     # Environment
     APP_ENV: str = os.getenv("APP_ENV", "development")
@@ -41,9 +41,3 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Force Ethereal SMTP settings to prevent Railway env vars from overriding them
-settings.BREVO_SMTP_HOST = "smtp.ethereal.email"
-settings.BREVO_SMTP_PORT = 587
-settings.BREVO_SMTP_USER = "nafa6ilszojywomn@ethereal.email"
-settings.BREVO_SMTP_PASSWORD = "uH9TnpaUep3an3eFqx"
-settings.BREVO_FROM_EMAIL = "nafa6ilszojywomn@ethereal.email"

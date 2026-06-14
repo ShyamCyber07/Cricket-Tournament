@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta, timezone
 import secrets
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+
+logger = logging.getLogger(__name__)
 from jose import JWTError, jwt
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -74,6 +77,9 @@ def create_refresh_token(db: Session, user_id: UUID) -> str:
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def signup(user_in: UserSignup, db: Session = Depends(get_db)):
+    print("[SIGNUP REQUEST RECEIVED]")
+    logger.info("[SIGNUP REQUEST RECEIVED]")
+    
     # 1. Unique email check
     email_user = db.query(User).filter(func.lower(func.trim(User.email)) == func.lower(user_in.email.strip())).first()
     if email_user:
@@ -97,10 +103,10 @@ def signup(user_in: UserSignup, db: Session = Depends(get_db)):
         
     # Generate 6-digit OTP code
     otp_code = f"{secrets.randbelow(900000) + 100000:06d}"
-    otp_expiry = get_utc_now() + timedelta(minutes=10)
+    print("[OTP GENERATED]")
+    logger.info("[OTP GENERATED]")
     
-    # Send verification email via Brevo
-    send_otp_email(user_in.email, otp_code, subject="Verify your CricUP account")
+    otp_expiry = get_utc_now() + timedelta(minutes=10)
     
     hashed_pwd = get_password_hash(user_in.password)
     db_user = User(
@@ -118,8 +124,13 @@ def signup(user_in: UserSignup, db: Session = Depends(get_db)):
         created_at=get_utc_now()
     )
     db.add(db_user)
+    print("[USER CREATED]")
+    logger.info("[USER CREATED]")
+    
     db.commit()
     db.refresh(db_user)
+    print("[OTP SAVED TO DATABASE]")
+    logger.info("[OTP SAVED TO DATABASE]")
     
     # Auto-create corresponding player profile
     db_player = Player(
@@ -132,6 +143,17 @@ def signup(user_in: UserSignup, db: Session = Depends(get_db)):
     )
     db.add(db_player)
     db.commit()
+    
+    print("[EMAIL SEND STARTED]")
+    logger.info("[EMAIL SEND STARTED]")
+    
+    email_success = send_otp_email(user_in.email, otp_code, subject="Verify your CricUP account")
+    if email_success:
+        print("[EMAIL SEND SUCCESS]")
+        logger.info("[EMAIL SEND SUCCESS]")
+    else:
+        print("[EMAIL SEND FAILED]")
+        logger.info("[EMAIL SEND FAILED]")
     
     return db_user
 
@@ -174,12 +196,18 @@ def verify_otp(req: VerifyOTPRequest, db: Session = Depends(get_db)):
 
 @router.post("/resend-otp")
 def resend_otp(req: ResendOTPRequest, db: Session = Depends(get_db)):
+    print("[RESEND REQUEST RECEIVED]")
+    logger.info("[RESEND REQUEST RECEIVED]")
+    
     user = db.query(User).filter(func.lower(func.trim(User.email)) == func.lower(req.email.strip())).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found."
         )
+        
+    print("[USER FOUND]")
+    logger.info("[USER FOUND]")
         
     # Rate limit check (60 seconds)
     if user.last_otp_sent_at and (get_utc_now() - user.last_otp_sent_at) < timedelta(seconds=60):
@@ -190,15 +218,28 @@ def resend_otp(req: ResendOTPRequest, db: Session = Depends(get_db)):
         )
         
     otp_code = f"{secrets.randbelow(900000) + 100000:06d}"
-    otp_expiry = get_utc_now() + timedelta(minutes=10)
+    print("[NEW OTP GENERATED]")
+    logger.info("[NEW OTP GENERATED]")
     
-    # Send verification email via Brevo
-    send_otp_email(user.email, otp_code, subject="Verify your CricUP account")
+    otp_expiry = get_utc_now() + timedelta(minutes=10)
     
     user.otp_code = otp_code
     user.otp_expiry = otp_expiry
     user.last_otp_sent_at = get_utc_now()
     db.commit()
+    print("[OTP SAVED]")
+    logger.info("[OTP SAVED]")
+    
+    print("[EMAIL SEND STARTED]")
+    logger.info("[EMAIL SEND STARTED]")
+    
+    email_success = send_otp_email(user.email, otp_code, subject="Verify your CricUP account")
+    if email_success:
+        print("[EMAIL SEND SUCCESS]")
+        logger.info("[EMAIL SEND SUCCESS]")
+    else:
+        print("[EMAIL SEND FAILED]")
+        logger.info("[EMAIL SEND FAILED]")
     
     return {"message": "Verification code resent successfully."}
 
