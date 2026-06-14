@@ -24,6 +24,8 @@ for logger_name in ["", "uvicorn", "uvicorn.access", "uvicorn.error", "app.route
     l.addHandler(memory_handler)
     l.setLevel(logging.INFO)
 
+logger = logging.getLogger(__name__)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqladmin import Admin
@@ -173,6 +175,12 @@ async def lifespan(app: FastAPI):
         print("  Please migrate to PostgreSQL as soon as possible.")
         print("="*80 + "\n")
         
+    import os
+    env_keys = sorted(list(os.environ.keys()))
+    logger.info(f"Loaded environment variables: {', '.join(env_keys)}")
+    prefix = settings.BREVO_API_KEY[:10] if settings.BREVO_API_KEY else "None"
+    logger.info(f"BREVO_API_KEY_PREFIX={prefix}")
+
     # Launch daily backup loop in background
     asyncio.create_task(daily_sqlite_backup_loop())
     
