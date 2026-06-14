@@ -17,9 +17,9 @@ class Settings(BaseSettings):
     )
 
     # Brevo API Configurations
-    BREVO_API_KEY: str = os.getenv("BREVO_API_KEY", os.getenv("BREVO_SMTP_PASSWORD", "uH9TnpaUep3an3eFqx"))
-    BREVO_FROM_EMAIL: str = os.getenv("BREVO_FROM_EMAIL", "nafa6ilszojywomn@ethereal.email")
-    BREVO_FROM_NAME: str = os.getenv("BREVO_FROM_NAME", "CricUP")
+    BREVO_API_KEY: str = os.getenv("BREVO_API_KEY", os.getenv("BREVO_SMTP_PASSWORD", "uH9TnpaUep3an3eFqx")).strip().strip("\"'")
+    BREVO_FROM_EMAIL: str = os.getenv("BREVO_FROM_EMAIL", "nafa6ilszojywomn@ethereal.email").strip().strip("\"'")
+    BREVO_FROM_NAME: str = os.getenv("BREVO_FROM_NAME", "CricUP").strip().strip("\"'")
 
     # SMTP Configuration (falls back to Ethereal if not set in environment or dotenv)
     BREVO_SMTP_HOST: str = os.getenv("BREVO_SMTP_HOST", "smtp.ethereal.email")
