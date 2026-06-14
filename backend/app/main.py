@@ -299,4 +299,6 @@ def debug_env():
         "BREVO_SMTP_USER": settings.BREVO_SMTP_USER,
         "RAILWAY_SERVICE_NAME": os.getenv("RAILWAY_SERVICE_NAME"),
         "RAILWAY_DEPLOYMENT_ID": os.getenv("RAILWAY_DEPLOYMENT_ID"),
+        "RAILWAY_ENVIRONMENT_NAME": os.getenv("RAILWAY_ENVIRONMENT_NAME"),
+        "RAILWAY_PROJECT_NAME": os.getenv("RAILWAY_PROJECT_NAME"),
     }
