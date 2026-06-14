@@ -4,7 +4,10 @@ import 'package:flutter/foundation.dart';
 class AppConfig {
   /// The current execution environment.
   /// Possible values: 'dev_emulator' (default), 'physical_device', 'production'
-  static const String env = String.fromEnvironment('APP_ENV', defaultValue: 'dev_emulator');
+  static const String env = String.fromEnvironment(
+    'APP_ENV',
+    defaultValue: kReleaseMode ? 'production' : 'dev_emulator',
+  );
 
   /// The LAN IP address of your development machine when testing on a physical device.
   /// Define this using: --dart-define=LAN_IP=192.168.X.X
