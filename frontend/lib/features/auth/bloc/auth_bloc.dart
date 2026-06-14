@@ -135,8 +135,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   Future<void> _onGoogleLoginRequested(GoogleLoginRequested event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
+    print("[DIAGNOSTICS] Google Login requested to backend...");
     try {
-      await _apiService.loginWithGoogle(event.googleToken);
+      final response = await _apiService.loginWithGoogle(event.googleToken);
+      print("[DIAGNOSTICS] Backend response status: ${response.statusCode}");
+      print("[DIAGNOSTICS] Backend response body: ${response.data}");
+      
       final meResponse = await _apiService.getMe();
       final user = meResponse.data;
       if (user['profile_completed'] == false) {
@@ -144,11 +148,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       } else {
         emit(AuthAuthenticated(user: user));
       }
-    } on DioException catch (e) {
+    } on DioException catch (e, stack) {
+      print("[DIAGNOSTICS] Google Login Backend DioException encountered: $e");
+      print("[DIAGNOSTICS]   Response status: ${e.response?.statusCode}");
+      print("[DIAGNOSTICS]   Response body: ${e.response?.data}");
+      print("[DIAGNOSTICS]   Message: ${e.message}");
+      print("[DIAGNOSTICS] StackTrace:\n$stack");
+      
       final msg = e.response?.data?['detail'] ?? "Google login failed.";
       emit(AuthError(message: msg.toString()));
       emit(AuthUnauthenticated());
-    } catch (e) {
+    } catch (e, stack) {
+      print("[DIAGNOSTICS] Google Login Backend unexpected error: $e");
+      print("[DIAGNOSTICS] StackTrace:\n$stack");
       emit(AuthError(message: e.toString()));
       emit(AuthUnauthenticated());
     }

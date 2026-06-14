@@ -160,8 +160,19 @@ def patch_database_schema(db_engine):
 async def lifespan(app: FastAPI):
     import asyncio
     from app.core.backup import daily_sqlite_backup_loop
+    from sqlalchemy.engine import make_url
     
-    print("DATABASE_URL =", settings.DATABASE_URL)
+    try:
+        db_url = make_url(settings.DATABASE_URL)
+        print("Database Dialect:", db_url.drivername)
+        print("DATABASE_DIALECT =", db_url.drivername)
+        print("DATABASE_HOST =", db_url.host)
+        print("DATABASE_NAME =", db_url.database)
+        if settings.DATABASE_URL.startswith("sqlite"):
+            print("DATABASE_URL =", settings.DATABASE_URL)
+    except Exception as e:
+        print("Error parsing database URL diagnostics:", e)
+        
     print("SMTP_HOST =", settings.BREVO_SMTP_HOST)
     print("SMTP_PORT =", settings.BREVO_SMTP_PORT)
     print("SMTP_USER =", settings.BREVO_SMTP_USER)
@@ -285,6 +296,12 @@ def get_debug_logs(secret: str = ""):
     if secret != "cricup_e2e_secret_2026":
         return PlainTextResponse("Unauthorized", status_code=403)
     return PlainTextResponse(memory_handler.get_logs())
+
+@app.get("/api/v1/debug-db-url", response_class=PlainTextResponse)
+def get_debug_db_url(secret: str = ""):
+    if secret != "cricup_e2e_secret_2026":
+        return PlainTextResponse("Unauthorized", status_code=403)
+    return PlainTextResponse(settings.DATABASE_URL)
 
 @app.get("/api/v1/debug-env")
 def debug_env():

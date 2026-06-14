@@ -151,23 +151,34 @@ class ApiService {
   }
 
   Future<Response> signup(String email, String password, String username, String confirmPassword) async {
-    print("SIGNUP REQUEST STARTING");
-    print("BASE URL: ${_dio.options.baseUrl}");
+    final fullUrl = "${_dio.options.baseUrl}/auth/signup";
+    final requestBody = {
+      'username': username,
+      'email': email,
+      'password': password,
+      'confirm_password': confirmPassword,
+    };
+    print("[DIAGNOSTICS] Signup Request Starting");
+    print("[DIAGNOSTICS] Full URL: $fullUrl");
+    print("[DIAGNOSTICS] Request Body: $requestBody");
     try {
       final response = await _dio.post(
         '/auth/signup',
-        data: {
-          'username': username,
-          'email': email,
-          'password': password,
-          'confirm_password': confirmPassword,
-        },
+        data: requestBody,
       );
-      print("STATUS CODE: ${response.statusCode}");
+      print("[DIAGNOSTICS] Signup Response Status Code: ${response.statusCode}");
+      print("[DIAGNOSTICS] Signup Response Body: ${response.data}");
       return response;
     } catch (e, stackTrace) {
-      print("SIGNUP ERROR: $e");
-      print(stackTrace);
+      print("[DIAGNOSTICS] Signup Error Encountered: $e");
+      if (e is DioException) {
+        print("[DIAGNOSTICS] Signup DioException Details:");
+        print("[DIAGNOSTICS]   Response Status Code: ${e.response?.statusCode}");
+        print("[DIAGNOSTICS]   Response Body: ${e.response?.data}");
+        print("[DIAGNOSTICS]   Error Type: ${e.type}");
+        print("[DIAGNOSTICS]   Message: ${e.message}");
+      }
+      print("[DIAGNOSTICS] Signup Error StackTrace:\n$stackTrace");
       rethrow;
     }
   }

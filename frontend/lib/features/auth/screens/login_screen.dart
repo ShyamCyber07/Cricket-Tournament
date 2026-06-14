@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -397,14 +398,19 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleGoogleSignIn() async {
+    print("[DIAGNOSTICS] Starting Google Sign-In flow via GoogleSignIn()");
     try {
       final googleSignIn = GoogleSignIn();
       final googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
+        print("[DIAGNOSTICS] Google Sign-In returned null (user cancelled the dialog).");
         return;
       }
+      print("[DIAGNOSTICS] Google account selected: Email = ${googleUser.email}, Display Name = ${googleUser.displayName}");
+      
       final googleAuth = await googleUser.authentication;
       final idToken = googleAuth.idToken;
+      print("[DIAGNOSTICS] Google ID token received? ${idToken != null ? 'Yes (Length: ${idToken.length})' : 'No'}");
       
       if (idToken == null) {
         throw Exception("Failed to retrieve Google ID token.");
@@ -415,17 +421,38 @@ class _LoginScreenState extends State<LoginScreen> {
           accessToken: googleAuth.accessToken,
           idToken: idToken,
         );
-        await FirebaseAuth.instance.signInWithCredential(credential);
-      } catch (fbErr) {
-        debugPrint("[Firebase Auth Warning] $fbErr");
+        print("[DIAGNOSTICS] Attempting Firebase Sign-In with credential");
+        final userCred = await FirebaseAuth.instance.signInWithCredential(credential);
+        print("[DIAGNOSTICS] Firebase Auth Sign-In Succeeded for: ${userCred.user?.email}");
+      } on FirebaseAuthException catch (fbErr, fbStack) {
+        print("[DIAGNOSTICS] FirebaseAuthException encountered: Code: ${fbErr.code}, Message: ${fbErr.message}");
+        print("[DIAGNOSTICS] FirebaseAuthException StackTrace:\n$fbStack");
+      } catch (fbErr, fbStack) {
+        print("[DIAGNOSTICS] Unknown exception during Firebase Sign-In: $fbErr");
+        print("[DIAGNOSTICS] StackTrace:\n$fbStack");
       }
 
       if (mounted) {
+        print("[DIAGNOSTICS] Dispatching GoogleLoginRequested to AuthBloc");
         context.read<AuthBloc>().add(
           GoogleLoginRequested(googleToken: idToken),
         );
       }
-    } catch (e) {
+    } on PlatformException catch (platErr, platStack) {
+      print("[DIAGNOSTICS] PlatformException encountered: Code: ${platErr.code}, Message: ${platErr.message}, Details: ${platErr.details}");
+      print("[DIAGNOSTICS] PlatformException StackTrace:\n$platStack");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Google authentication failed (PlatformException: ${platErr.code}): ${platErr.message}"),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e, stack) {
+      print("[DIAGNOSTICS] Error during Google Sign-In flow: $e");
+      print("[DIAGNOSTICS] Error StackTrace:\n$stack");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
