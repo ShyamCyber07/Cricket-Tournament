@@ -13,9 +13,15 @@ import 'package:cricket_scorer/features/dashboard/screens/dashboard_screen.dart'
 import 'package:cricket_scorer/core/app_config.dart';
 
 import 'package:cricket_scorer/features/auth/screens/splash_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint("[Firebase Initialization Warning] $e");
+  }
 
   // Runtime Diagnostics
   debugPrint("==================================================");

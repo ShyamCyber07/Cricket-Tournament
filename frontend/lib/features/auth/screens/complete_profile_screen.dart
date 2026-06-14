@@ -17,12 +17,14 @@ class CompleteProfileScreen extends StatefulWidget {
 
 class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _usernameController = TextEditingController();
   final _fullNameController = TextEditingController();
   final _displayNameController = TextEditingController();
   final _countryController = TextEditingController();
   final _favoriteTeamController = TextEditingController();
 
   String? _selectedAvatar;
+  String _selectedRole = "all_rounder";
 
   // Modern profile avatars they can pick from
   final List<String> _avatars = [
@@ -32,13 +34,21 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _usernameController.text = widget.user['username'] ?? "";
     _fullNameController.text = widget.user['full_name'] ?? "";
     _displayNameController.text = widget.user['display_name'] ?? widget.user['username'] ?? "";
-    _selectedAvatar = _avatars[0];
+    
+    final photoUrl = widget.user['profile_photo_url'] ?? widget.user['profile_picture'];
+    if (photoUrl != null && photoUrl.isNotEmpty) {
+      _selectedAvatar = photoUrl;
+    } else {
+      _selectedAvatar = _avatars[0];
+    }
   }
 
   @override
   void dispose() {
+    _usernameController.dispose();
     _fullNameController.dispose();
     _displayNameController.dispose();
     _countryController.dispose();
@@ -52,6 +62,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         CompleteProfileRequested(
           fullName: _fullNameController.text.trim(),
           displayName: _displayNameController.text.trim(),
+          username: _usernameController.text.trim(),
+          role: _selectedRole,
           profilePicture: _selectedAvatar,
           country: _countryController.text.trim().isEmpty ? null : _countryController.text.trim(),
           favoriteTeam: _favoriteTeamController.text.trim().isEmpty ? null : _favoriteTeamController.text.trim(),
@@ -247,10 +259,24 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                                             ],
                                           ),
                                           child: Center(
-                                            child: Text(
-                                              _selectedAvatar ?? "🏏",
-                                              style: const TextStyle(fontSize: 44),
-                                            ),
+                                            child: (_selectedAvatar != null && (_selectedAvatar!.startsWith("http") || _selectedAvatar!.length > 4))
+                                                ? ClipOval(
+                                                    child: Image.network(
+                                                      _selectedAvatar!,
+                                                      width: 86,
+                                                      height: 86,
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder: (context, error, stackTrace) => const Icon(
+                                                        Icons.sports_cricket_rounded,
+                                                        size: 40,
+                                                        color: AppColors.primary,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : Text(
+                                                    _selectedAvatar ?? "🏏",
+                                                    style: const TextStyle(fontSize: 44),
+                                                  ),
                                           ),
                                         ),
                                         Container(
@@ -317,6 +343,23 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                                   ),
                                   const SizedBox(height: 28),
                                   // Full Name
+                                  // Username
+                                  TextFormField(
+                                    controller: _usernameController,
+                                    style: GoogleFonts.outfit(color: Colors.white),
+                                    decoration: const InputDecoration(
+                                      labelText: "Username",
+                                      prefixIcon: Icon(Icons.alternate_email_rounded, color: AppColors.textSecondary),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.trim().isEmpty || value.trim().length < 3) {
+                                        return "Username must be at least 3 characters";
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // Full Name
                                   TextFormField(
                                     controller: _fullNameController,
                                     style: GoogleFonts.outfit(color: Colors.white),
@@ -345,6 +388,30 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                                         return "Display name must be at least 2 characters";
                                       }
                                       return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // Player Role Dropdown
+                                  DropdownButtonFormField<String>(
+                                    value: _selectedRole,
+                                    dropdownColor: Colors.black.withOpacity(0.95),
+                                    style: GoogleFonts.outfit(color: Colors.white),
+                                    decoration: const InputDecoration(
+                                      labelText: "Player Role",
+                                      prefixIcon: Icon(Icons.sports_rounded, color: AppColors.textSecondary),
+                                    ),
+                                    items: const [
+                                      DropdownMenuItem(value: "all_rounder", child: Text("All-Rounder")),
+                                      DropdownMenuItem(value: "batsman", child: Text("Batsman")),
+                                      DropdownMenuItem(value: "bowler", child: Text("Bowler")),
+                                      DropdownMenuItem(value: "wicket_keeper", child: Text("Wicket-Keeper")),
+                                    ],
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        setState(() {
+                                          _selectedRole = value;
+                                        });
+                                      }
                                     },
                                   ),
                                   const SizedBox(height: 16),

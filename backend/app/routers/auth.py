@@ -441,6 +441,16 @@ def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
 
 @router.post("/complete-profile", response_model=UserResponse)
 def complete_profile(req: CompleteProfileRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if req.username:
+        # Verify unique username
+        existing = db.query(User).filter(User.username == req.username, User.id != current_user.id).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username is already taken."
+            )
+        current_user.username = req.username
+
     current_user.full_name = req.full_name
     current_user.display_name = req.display_name
     if req.profile_picture:
@@ -453,8 +463,20 @@ def complete_profile(req: CompleteProfileRequest, current_user: User = Depends(g
     
     # Update linked Player profile
     player = db.query(Player).filter(Player.user_id == current_user.id).first()
+    
+    role_to_set = "all_rounder"
+    if req.role:
+        valid_roles = ["batsman", "bowler", "all_rounder", "wicket_keeper"]
+        if req.role not in valid_roles:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid player role."
+            )
+        role_to_set = req.role
+        
     if player:
         player.name = req.full_name
+        player.role = role_to_set
         if req.profile_picture:
             player.profile_photo_url = req.profile_picture
         db.commit()
@@ -463,7 +485,7 @@ def complete_profile(req: CompleteProfileRequest, current_user: User = Depends(g
             user_id=current_user.id,
             created_by=current_user.id,
             name=req.full_name,
-            role="all_rounder",
+            role=role_to_set,
             batting_style="right_hand",
             bowling_style="right_arm_spin",
             profile_photo_url=req.profile_picture
@@ -473,26 +495,132 @@ def complete_profile(req: CompleteProfileRequest, current_user: User = Depends(g
         
     return current_user
 
+def verify_google_id_token(token: str, client_id: str | None) -> dict:
+    import httpx
+    from jose import jwt, JWTError
+
+    print(f"[GOOGLE TOKEN RECEIVED] Token length: {len(token)} | Prefix: {token[:15]}... Suffix: {token[-15:]}")
+
+    if not client_id:
+        if settings.APP_ENV == "production":
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="GOOGLE_CLIENT_ID is not configured."
+            )
+        client_id = "test_google_client_id"
+
+    # 1. Fetch Google's public certificates
+    try:
+        response = httpx.get("https://www.googleapis.com/oauth2/v3/certs", timeout=5.0)
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve Google public certificates."
+            )
+        jwks = response.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Network error fetching Google certificates: {str(e)}"
+        )
+
+    # 2. Extract key ID (kid) from token header
+    try:
+        unverified_header = jwt.get_unverified_header(token)
+        kid = unverified_header.get("kid")
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid token format: {str(e)}"
+        )
+
+    if not kid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token header is missing 'kid'."
+        )
+
+    # 3. Locate matching key in JWKS
+    key = None
+    for k in jwks.get("keys", []):
+        if k.get("kid") == kid:
+            key = k
+            break
+
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google public certificate not found for specified 'kid'."
+        )
+
+    # 4. Decode and verify signature, issuer, audience, and expiry
+    allowed_issuers = ["accounts.google.com", "https://accounts.google.com"]
+    payload = None
+    last_err = None
+
+    for iss in allowed_issuers:
+        try:
+            payload = jwt.decode(
+                token,
+                key,
+                algorithms=["RS256"],
+                audience=client_id,
+                issuer=iss
+            )
+            print(f"[AUDIENCE VALIDATION] Target Client ID: {client_id} | Token Aud: {payload.get('aud')} | Status: SUCCESS")
+            print(f"[ISSUER VALIDATION] Allowed Issuers: {allowed_issuers} | Token Iss: {payload.get('iss')} | Status: SUCCESS")
+            break
+        except JWTError as e:
+            last_err = e
+
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Google ID token verification failed: {str(last_err)}"
+        )
+
+    return payload
+
 @router.post("/google", response_model=Token)
 def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
-    # Support token as email directly or build email from nickname
-    raw_token = login_req.token
-    if "@" in raw_token:
-        email = raw_token.lower().strip()
-        name = email.split("@")[0].capitalize()
-    else:
-        email = f"{raw_token.lower().replace(' ', '')}@gmail.com"
-        name = raw_token
-        
-    user = db.query(User).filter(func.lower(func.trim(User.email)) == func.lower(email.strip())).first()
+    # Verify the real Google ID token
+    payload = verify_google_id_token(login_req.token, settings.GOOGLE_CLIENT_ID)
+    
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google ID token payload does not contain an email."
+        )
+    email = email.lower().strip()
+    name = payload.get("name", "")
+    picture = payload.get("picture", "")
+    google_sub = payload.get("sub")
+    
+    if not google_sub:
+         raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google ID token payload does not contain a subject (sub) identifier."
+        )
+
+    masked_sub = f"{google_sub[:4]}***{google_sub[-4:]}" if len(google_sub) > 8 else "***"
+    print(f"[GOOGLE SUBJECT ID] {masked_sub}")
+    print(f"[GOOGLE EMAIL] {email}")
+
+    # Ensure user is found by Google subject ID or email
+    user = db.query(User).filter(
+        (User.google_id == google_sub) | 
+        (func.lower(func.trim(User.email)) == func.lower(email.strip()))
+    ).first()
     
     if user:
-        # Link Google account if not linked
-        if not user.google_id:
-            user.google_id = f"google_{email}"
-        # Google account is verified pre-verification
+        # Link Google ID if not linked, update verification state
+        user.google_id = google_sub
         user.email_verified = True
         user.provider = "google"
+        if picture and not user.profile_photo_url:
+            user.profile_photo_url = picture
+            user.profile_picture = picture
         db.commit()
         db.refresh(user)
     else:
@@ -505,9 +633,11 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
         user = User(
             email=email,
             username=username,
-            full_name="", # to be set in profile completion
+            full_name=name,
             display_name=name,
-            google_id=f"google_{email}",
+            profile_photo_url=picture,
+            profile_picture=picture,
+            google_id=google_sub,
             provider="google",
             email_verified=True,
             profile_completed=False,
@@ -521,10 +651,11 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
         db_player = Player(
             user_id=user.id,
             created_by=user.id,
-            name=user.username,
+            name=name if name else user.username,
             role="all_rounder",
             batting_style="right_hand",
-            bowling_style="right_arm_spin"
+            bowling_style="right_arm_spin",
+            profile_photo_url=picture
         )
         db.add(db_player)
         db.commit()

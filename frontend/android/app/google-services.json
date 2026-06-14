@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "270888644885",
+    "project_id": "cricup-3418a",
+    "storage_bucket": "cricup-3418a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:270888644885:android:8d983a025386a482aeb91c",
+        "android_client_info": {
+          "package_name": "com.cricup"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDiaKBZsl7zrrEUI1xuamfPA_4fSA4o7RA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

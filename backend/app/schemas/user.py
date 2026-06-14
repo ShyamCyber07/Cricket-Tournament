@@ -85,6 +85,8 @@ class ResendOTPRequest(EmailNormalizedModel):
 class CompleteProfileRequest(BaseModel):
     full_name: str
     display_name: str
+    username: Optional[str] = None
+    role: Optional[str] = None
     profile_picture: Optional[str] = None
     country: Optional[str] = None
     favorite_team: Optional[str] = None

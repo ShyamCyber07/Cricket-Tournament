@@ -67,6 +67,8 @@ class GoogleLoginRequested extends AuthEvent {
 class CompleteProfileRequested extends AuthEvent {
   final String fullName;
   final String displayName;
+  final String? username;
+  final String? role;
   final String? profilePicture;
   final String? country;
   final String? favoriteTeam;
@@ -74,13 +76,15 @@ class CompleteProfileRequested extends AuthEvent {
   const CompleteProfileRequested({
     required this.fullName,
     required this.displayName,
+    this.username,
+    this.role,
     this.profilePicture,
     this.country,
     this.favoriteTeam,
   });
 
   @override
-  List<Object?> get props => [fullName, displayName, profilePicture, country, favoriteTeam];
+  List<Object?> get props => [fullName, displayName, username, role, profilePicture, country, favoriteTeam];
 }
 
 class ForgotPasswordRequested extends AuthEvent {

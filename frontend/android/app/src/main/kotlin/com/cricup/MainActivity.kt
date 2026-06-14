@@ -1,4 +1,4 @@
-package com.example.cricket_scorer
+package com.cricup
 
 import io.flutter.embedding.android.FlutterActivity
 

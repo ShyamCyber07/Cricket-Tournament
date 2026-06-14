@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     BREVO_SMTP_USER: str = os.getenv("BREVO_SMTP_USER", "nafa6ilszojywomn@ethereal.email")
     BREVO_SMTP_PASSWORD: str = os.getenv("BREVO_SMTP_PASSWORD", "uH9TnpaUep3an3eFqx")
 
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str | None = os.getenv("GOOGLE_CLIENT_ID", None)
+
     # Environment
     APP_ENV: str = os.getenv("APP_ENV", "development")
 

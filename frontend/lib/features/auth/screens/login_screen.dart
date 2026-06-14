@@ -1,5 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
@@ -335,12 +337,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                         const SizedBox(height: 20),
-                        // Continue with Google Button
                         OutlinedButton.icon(
                           onPressed: () {
-                            context.read<AuthBloc>().add(
-                              const GoogleLoginRequested(googleToken: "Google Play User"),
-                            );
+                            _handleGoogleSignIn();
                           },
                           icon: Image.network(
                             'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/480px-Google_%22G%22_logo.svg.png',
@@ -395,5 +394,47 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    try {
+      final googleSignIn = GoogleSignIn();
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        return;
+      }
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      
+      if (idToken == null) {
+        throw Exception("Failed to retrieve Google ID token.");
+      }
+      
+      try {
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: idToken,
+        );
+        await FirebaseAuth.instance.signInWithCredential(credential);
+      } catch (fbErr) {
+        debugPrint("[Firebase Auth Warning] $fbErr");
+      }
+
+      if (mounted) {
+        context.read<AuthBloc>().add(
+          GoogleLoginRequested(googleToken: idToken),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Google authentication failed: $e"),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 }

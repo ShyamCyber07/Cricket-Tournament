@@ -160,6 +160,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await _apiService.completeProfile(
         event.fullName,
         event.displayName,
+        username: event.username,
+        role: event.role,
         profilePicture: event.profilePicture,
         country: event.country,
         favoriteTeam: event.favoriteTeam,

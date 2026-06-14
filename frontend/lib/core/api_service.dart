@@ -229,6 +229,8 @@ class ApiService {
   Future<Response> completeProfile(
     String fullName,
     String displayName, {
+    String? username,
+    String? role,
     String? profilePicture,
     String? country,
     String? favoriteTeam,
@@ -238,6 +240,8 @@ class ApiService {
       data: {
         'full_name': fullName,
         'display_name': displayName,
+        if (username != null) 'username': username,
+        if (role != null) 'role': role,
         if (profilePicture != null) 'profile_picture': profilePicture,
         if (country != null) 'country': country,
         if (favoriteTeam != null) 'favorite_team': favoriteTeam,

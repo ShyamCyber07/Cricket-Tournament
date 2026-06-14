@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 class AppConfig {
   /// The current execution environment.
@@ -23,7 +24,7 @@ class AppConfig {
       case 'dev_emulator':
       default:
         // Development Emulator / Localhost fallback
-        if (Platform.isAndroid) {
+        if (!kIsWeb && Platform.isAndroid) {
           return "http://10.0.2.2:8000/api/v1";
         }
         return "http://localhost:8000/api/v1";
