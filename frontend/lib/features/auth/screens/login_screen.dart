@@ -400,15 +400,22 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleGoogleSignIn() async {
     print("[DIAGNOSTICS] Starting Google Sign-In flow via GoogleSignIn()");
     try {
-      final googleSignIn = GoogleSignIn();
+      final googleSignIn = GoogleSignIn(
+        serverClientId: "270888644885-il2mmaaeehom7amrhglgtckcs3gu1j8c.apps.googleusercontent.com",
+      );
       final googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
         print("[DIAGNOSTICS] Google Sign-In returned null (user cancelled the dialog).");
         return;
       }
       print("[DIAGNOSTICS] Google account selected: Email = ${googleUser.email}, Display Name = ${googleUser.displayName}");
+      print("[DIAGNOSTICS] LOG: googleUser.email = ${googleUser.email}");
       
+      print("[DIAGNOSTICS] Retrieving googleUser.authentication...");
       final googleAuth = await googleUser.authentication;
+      print("[DIAGNOSTICS] LOG: googleAuth.accessToken = ${googleAuth.accessToken}");
+      print("[DIAGNOSTICS] LOG: googleAuth.idToken = ${googleAuth.idToken}");
+      
       final idToken = googleAuth.idToken;
       print("[DIAGNOSTICS] Google ID token received? ${idToken != null ? 'Yes (Length: ${idToken.length})' : 'No'}");
       
