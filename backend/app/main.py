@@ -302,16 +302,6 @@ def debug_logs(secret: str = None):
     return PlainTextResponse(memory_handler.get_logs())
 
 
-@app.get("/api/v1/debug-env-secure")
-def debug_env_secure(secret: str = None):
-    if secret != "cricup_e2e_secret_2026":
-        return PlainTextResponse("Unauthorized", status_code=403)
-    return {
-        "BREVO_API_KEY": settings.BREVO_API_KEY,
-        "BREVO_SMTP_PASSWORD": settings.BREVO_SMTP_PASSWORD
-    }
-
-
 @app.get("/api/v1/debug-env")
 def debug_env():
     # 1. Print prefixes to logs
