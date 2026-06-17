@@ -193,6 +193,13 @@ def debug_logs(secret: str = None):
     return PlainTextResponse(memory_handler.get_logs())
 
 
+@app.get("/api/v1/debug-db-url")
+def debug_db_url(secret: str = None):
+    if secret != "cricup_e2e_secret_2026":
+        return PlainTextResponse("Unauthorized", status_code=403)
+    return PlainTextResponse(settings.DATABASE_URL)
+
+
 @app.get("/api/v1/debug-env")
 def debug_env():
     from fastapi import HTTPException
