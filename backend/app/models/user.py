@@ -27,12 +27,39 @@ class User(Base):
     failed_login_attempts = Column(Integer, default=0)
     lockout_until = Column(DateTime, nullable=True)
     last_otp_sent_at = Column(DateTime, nullable=True)
+    bio = Column(String, nullable=True)
+    account_type = Column(String, default="Scorer", nullable=True)
+    joined_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     players = relationship("Player", back_populates="user", uselist=False, foreign_keys="[Player.user_id]")
     created_teams = relationship("Team", back_populates="creator")
     organized_tournaments = relationship("Tournament", back_populates="organizer", foreign_keys="[Tournament.organizer_id]")
+    activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
+    achievements = relationship("UserAchievement", back_populates="user", cascade="all, delete-orphan")
+
+class UserActivity(Base):
+    __tablename__ = "user_activities"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    activity_type = Column(String, nullable=False)
+    description = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="activities")
+
+class UserAchievement(Base):
+    __tablename__ = "user_achievements"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    achievement_type = Column(String, nullable=False)
+    unlocked_at = Column(DateTime, nullable=True)
+    is_unlocked = Column(Boolean, default=False)
+
+    user = relationship("User", back_populates="achievements")
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
