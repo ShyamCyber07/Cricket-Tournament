@@ -407,26 +407,31 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleGoogleSignIn() async {
+    const String targetClientId = "270888644885-il2mmaaeehom7amrhglgtckcs3gu1j8c.apps.googleusercontent.com";
     print("[DIAGNOSTICS] Starting Google Sign-In flow via GoogleSignIn()");
+    print("[DIAGNOSTICS] Configured serverClientId: '$targetClientId'");
     try {
       final googleSignIn = GoogleSignIn(
-        serverClientId: "270888644885-il2mmaaeehom7amrhglgtckcs3gu1j8c.apps.googleusercontent.com",
+        serverClientId: targetClientId,
       );
       final googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
         print("[DIAGNOSTICS] Google Sign-In returned null (user cancelled the dialog).");
         return;
       }
-      print("[DIAGNOSTICS] Google account selected: Email = ${googleUser.email}, Display Name = ${googleUser.displayName}");
+      print("[DIAGNOSTICS] Google account selected: Email = ${googleUser.email}, Display Name = ${googleUser.displayName}, ID = ${googleUser.id}");
       print("[DIAGNOSTICS] LOG: googleUser.email = ${googleUser.email}");
       
       print("[DIAGNOSTICS] Retrieving googleUser.authentication...");
       final googleAuth = await googleUser.authentication;
-      print("[DIAGNOSTICS] LOG: googleAuth.accessToken = ${googleAuth.accessToken}");
-      print("[DIAGNOSTICS] LOG: googleAuth.idToken = ${googleAuth.idToken}");
+      print("[DIAGNOSTICS] LOG: googleAuth.accessToken = ${googleAuth.accessToken != null ? '${googleAuth.accessToken} (Length: ${googleAuth.accessToken!.length})' : 'null'}");
+      print("[DIAGNOSTICS] LOG: googleAuth.idToken = ${googleAuth.idToken != null ? '${googleAuth.idToken} (Length: ${googleAuth.idToken!.length})' : 'null'}");
       
       final idToken = googleAuth.idToken;
-      print("[DIAGNOSTICS] Google ID token received? ${idToken != null ? 'Yes (Length: ${idToken.length})' : 'No'}");
+      print("googleUser.email: ${googleUser.email}");
+      print("googleAuth.idToken: ${idToken}");
+      print("idToken length: ${idToken?.length}");
+      print("exact token sent to backend: $idToken");
       
       if (idToken == null) {
         throw Exception("Failed to retrieve Google ID token.");

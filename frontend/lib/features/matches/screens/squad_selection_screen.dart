@@ -60,16 +60,23 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
           _selectedTeam1.add(p['id'].toString());
         }
         for (var p in _team2Players) {
-          _selectedTeam2.add(p['id'].toString());
+          final pId = p['id'].toString();
+          if (!_selectedTeam1.contains(pId)) {
+            _selectedTeam2.add(pId);
+          }
         }
 
         if (_team1Players.isNotEmpty) {
           _team1CaptainId = _team1Players[0]['id'];
           _team1KeeperId = _team1Players[0]['id'];
         }
-        if (_team2Players.isNotEmpty) {
-          _team2CaptainId = _team2Players[0]['id'];
-          _team2KeeperId = _team2Players[0]['id'];
+        
+        final availableTeam2Players = _team2Players
+            .where((p) => !_selectedTeam1.contains(p['id'].toString()))
+            .toList();
+        if (availableTeam2Players.isNotEmpty) {
+          _team2CaptainId = availableTeam2Players[0]['id'];
+          _team2KeeperId = availableTeam2Players[0]['id'];
         }
 
         _isLoading = false;
@@ -417,6 +424,10 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
                           _selectedTeam1.remove(pId);
                         } else {
                           _selectedTeam1.add(pId);
+                          // Sync: deselect from Team 2 if they are selected here
+                          _selectedTeam2.remove(pId);
+                          if (_team2CaptainId == pId) _team2CaptainId = null;
+                          if (_team2KeeperId == pId) _team2KeeperId = null;
                         }
                       });
                     },
@@ -439,7 +450,7 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
                   ),
                   const Divider(color: Colors.white24, height: 20),
                   _buildRosterList(
-                    _team2Players,
+                    _team2Players.where((p) => !_selectedTeam1.contains(p['id'].toString())).toList(),
                     _selectedTeam2,
                     _team2CaptainId,
                     _team2KeeperId,

@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Boolean, Float, Date
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -141,6 +142,15 @@ class Match(Base):
     winner = relationship("Team", foreign_keys=[winner_id])
     squads = relationship("MatchSquad", back_populates="match", cascade="all, delete-orphan")
     innings = relationship("Innings", back_populates="match", cascade="all, delete-orphan")
+
+    @property
+    def team1_name(self) -> Optional[str]:
+        return self.team1.name if self.team1 else None
+
+    @property
+    def team2_name(self) -> Optional[str]:
+        return self.team2.name if self.team2 else None
+
 
 class MatchSquad(Base):
     __tablename__ = "match_squads"

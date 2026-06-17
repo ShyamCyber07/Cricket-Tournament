@@ -20,7 +20,7 @@ memory_handler = MemoryHandler()
 memory_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 
 # Hook into root and uvicorn loggers to intercept production outputs
-for logger_name in ["", "uvicorn", "uvicorn.access", "uvicorn.error", "app.routers.auth", "app.core.email"]:
+for logger_name in ["", "uvicorn", "uvicorn.access", "uvicorn.error", "app.routers.auth", "app.core.email", "app.main"]:
     l = logging.getLogger(logger_name)
     l.addHandler(memory_handler)
     l.setLevel(logging.INFO)
@@ -100,7 +100,7 @@ app = FastAPI(
 
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fastapi import Request
+from fastapi import Request, HTTPException
 from fastapi.encoders import jsonable_encoder
 
 @app.exception_handler(RequestValidationError)
@@ -112,13 +112,28 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         body_str = f"Could not decode body: {e}"
         
     errors_list = jsonable_encoder(exc.errors())
-    print(f"[ValidationError] Path: {request.url.path}")
-    print(f"[ValidationError] Request payload: {body_str}")
-    print(f"[ValidationError] Errors: {errors_list}")
+    logger.error(f"[ValidationError] Path: {request.url.path} | Request payload: {body_str} | Errors: {errors_list}")
     
     return JSONResponse(
         status_code=422,
         content={"detail": errors_list}
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    logger.error(f"[HTTPException] Path: {request.url.path} | Status: {exc.status_code} | Detail: {exc.detail}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        headers=exc.headers,
+        content={"detail": exc.detail}
+    )
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    logger.error(f"[GenericException] Path: {request.url.path} | Error: {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal Server Error: {str(exc)}"}
     )
 
 

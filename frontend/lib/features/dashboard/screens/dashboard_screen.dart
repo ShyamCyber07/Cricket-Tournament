@@ -371,7 +371,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               children: [
                 Expanded(
                   child: Text(
-                    match['team1_name'] ?? 'Team A',
+                    match['team1_name'] ?? 'Unknown Team',
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -391,7 +391,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 ),
                 Expanded(
                   child: Text(
-                    match['team2_name'] ?? 'Team B',
+                    match['team2_name'] ?? 'Unknown Team',
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -460,7 +460,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "${match['team1_name']} vs ${match['team2_name']}",
+                    "${match['team1_name'] ?? 'Unknown Team'} vs ${match['team2_name'] ?? 'Unknown Team'}",
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),

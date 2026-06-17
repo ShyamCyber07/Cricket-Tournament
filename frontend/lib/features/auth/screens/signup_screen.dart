@@ -81,6 +81,13 @@ class _SignupScreenState extends State<SignupScreen> {
             Navigator.popUntil(context, (route) => route.isFirst);
           }
           if (state is AuthSignupUnverified) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Account exists but is not verified. Please verify your account."),
+                backgroundColor: AppColors.error,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
             _showUnverifiedAccountDialog(context, state.email);
           }
           if (state is AuthError) {
@@ -470,7 +477,7 @@ class _SignupScreenState extends State<SignupScreen> {
           style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         content: Text(
-          "An account with this email exists but has not been verified yet. Would you like to verify it now?",
+          "Account exists but is not verified. Please verify your account.",
           style: GoogleFonts.outfit(color: const Color(0xff9ca3af)),
         ),
         actions: [

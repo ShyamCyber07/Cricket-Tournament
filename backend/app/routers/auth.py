@@ -77,85 +77,99 @@ def create_refresh_token(db: Session, user_id: UUID) -> str:
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def signup(user_in: UserSignup, db: Session = Depends(get_db)):
+    logger.info(f"[SIGNUP REQUEST RECEIVED] Email: {user_in.email} | Username: {user_in.username}")
     print("[SIGNUP REQUEST RECEIVED]")
-    logger.info("[SIGNUP REQUEST RECEIVED]")
     
-    # 1. Unique email check
-    email_user = db.query(User).filter(func.lower(func.trim(User.email)) == func.lower(user_in.email.strip())).first()
-    if email_user:
-        if not email_user.email_verified:
+    try:
+        # 1. Unique email check
+        email_user = db.query(User).filter(func.lower(func.trim(User.email)) == func.lower(user_in.email.strip())).first()
+        if email_user:
+            if not email_user.email_verified:
+                print("[SIGNUP 400 REASON] existing unverified user")
+                logger.info("[SIGNUP 400 REASON] existing unverified user")
+                logger.warning(f"[SIGNUP DUPLICATE EMAIL] Email exists but not verified: '{user_in.email}'")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Account exists but is not verified"
+                )
+            print("[SIGNUP 400 REASON] duplicate email")
+            logger.info("[SIGNUP 400 REASON] duplicate email")
+            logger.warning(f"[SIGNUP DUPLICATE EMAIL] Verified email already exists: '{user_in.email}'")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Account exists but is not verified"
+                detail="A user with this email already exists."
             )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A user with this email already exists."
-        )
-    
-    # 2. Unique username check
-    username_user = db.query(User).filter(User.username == user_in.username).first()
-    if username_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A user with this username already exists."
-        )
         
-    # Generate 6-digit OTP code
-    otp_code = f"{secrets.randbelow(900000) + 100000:06d}"
-    print("[OTP GENERATED]")
-    logger.info("[OTP GENERATED]")
-    
-    otp_expiry = get_utc_now() + timedelta(minutes=10)
-    
-    hashed_pwd = get_password_hash(user_in.password)
-    db_user = User(
-        email=user_in.email,
-        username=user_in.username,
-        hashed_password=hashed_pwd,
-        full_name="", # empty string to avoid SQLite null issues, completed in profile completion
-        display_name=user_in.username, # default to username
-        email_verified=False,
-        profile_completed=False,
-        provider="local",
-        otp_code=otp_code,
-        otp_expiry=otp_expiry,
-        last_otp_sent_at=get_utc_now(),
-        created_at=get_utc_now()
-    )
-    db.add(db_user)
-    print("[USER CREATED]")
-    logger.info("[USER CREATED]")
-    
-    db.commit()
-    db.refresh(db_user)
-    print("[OTP SAVED TO DATABASE]")
-    logger.info("[OTP SAVED TO DATABASE]")
-    
-    # Auto-create corresponding player profile
-    db_player = Player(
-        user_id=db_user.id,
-        created_by=db_user.id,
-        name=db_user.username,
-        role="all_rounder",
-        batting_style="right_hand",
-        bowling_style="right_arm_spin"
-    )
-    db.add(db_player)
-    db.commit()
-    
-    print("[EMAIL SEND STARTED]")
-    logger.info("[EMAIL SEND STARTED]")
-    
-    email_success = send_verification_otp(user_in.email, otp_code)
-    if email_success:
-        print("[EMAIL SEND SUCCESS]")
-        logger.info("[EMAIL SEND SUCCESS]")
-    else:
-        print("[EMAIL SEND FAILED]")
-        logger.info("[EMAIL SEND FAILED]")
-    
-    return db_user
+        # 2. Unique username check
+        username_user = db.query(User).filter(User.username == user_in.username).first()
+        if username_user:
+            print("[SIGNUP 400 REASON] duplicate username")
+            logger.info("[SIGNUP 400 REASON] duplicate username")
+            logger.warning(f"[SIGNUP DUPLICATE USERNAME] Username already exists: '{user_in.username}'")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A user with this username already exists."
+            )
+            
+        # Generate 6-digit OTP code
+        otp_code = f"{secrets.randbelow(900000) + 100000:06d}"
+        logger.info(f"[SIGNUP OTP GENERATED] OTP generated successfully for '{user_in.email}'")
+        
+        otp_expiry = get_utc_now() + timedelta(minutes=10)
+        
+        hashed_pwd = get_password_hash(user_in.password)
+        db_user = User(
+            email=user_in.email,
+            username=user_in.username,
+            hashed_password=hashed_pwd,
+            full_name="", # empty string to avoid SQLite null issues, completed in profile completion
+            display_name=user_in.username, # default to username
+            email_verified=False,
+            profile_completed=False,
+            provider="local",
+            otp_code=otp_code,
+            otp_expiry=otp_expiry,
+            last_otp_sent_at=get_utc_now(),
+            created_at=get_utc_now()
+        )
+        db.add(db_user)
+        logger.info(f"[SIGNUP USER CREATED] User record added for '{user_in.email}'")
+        
+        db.commit()
+        db.refresh(db_user)
+        logger.info(f"[SIGNUP USER SAVED] User committed in database. ID: {db_user.id}")
+        
+        # Auto-create corresponding player profile
+        db_player = Player(
+            user_id=db_user.id,
+            created_by=db_user.id,
+            name=db_user.username,
+            role="all_rounder",
+            batting_style="right_hand",
+            bowling_style="right_arm_spin"
+        )
+        db.add(db_player)
+        db.commit()
+        logger.info(f"[SIGNUP PLAYER PROFILE CREATED] Player profile associated with User ID: {db_user.id}")
+        
+        logger.info(f"[SIGNUP EMAIL SEND STARTING] Directing OTP to '{user_in.email}'")
+        email_success = send_verification_otp(user_in.email, otp_code)
+        if email_success:
+            logger.info(f"[SIGNUP EMAIL SEND SUCCESS] OTP email successfully sent to '{user_in.email}'")
+        else:
+            logger.error(f"[SIGNUP EMAIL SEND FAILED] Brevo SMTP rejected sending OTP email to '{user_in.email}'")
+        
+        return db_user
+        
+    except HTTPException as e:
+        logger.error(f"[SIGNUP HTTP EXCEPTION] status_code={e.status_code} | detail={e.detail}", exc_info=True)
+        raise e
+    except Exception as e:
+        logger.error(f"[SIGNUP UNEXPECTED EXCEPTION] {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Signup unexpected error: {str(e)}"
+        )
 
 @router.post("/verify-otp", response_model=Token)
 def verify_otp(req: VerifyOTPRequest, db: Session = Depends(get_db)):
@@ -499,19 +513,27 @@ def verify_google_id_token(token: str, client_id: str | None) -> dict:
     import httpx
     from jose import jwt, JWTError
 
+    print(f"first 50 chars of received token: {token[:50]}")
+    print(f"token length: {len(token)}")
+    logger.info(f"first 50 chars of received token: {token[:50]}")
+    logger.info(f"token length: {len(token)}")
+    logger.info(f"[verify_google_id_token] Starting verification. Token length: {len(token)} | Value: '{token}'")
     print(f"[GOOGLE TOKEN RECEIVED] Token length: {len(token)} | Prefix: {token[:15]}... Suffix: {token[-15:]}")
 
     if not client_id:
         if settings.APP_ENV == "production":
+            logger.error("[verify_google_id_token] GOOGLE_CLIENT_ID is not configured in production!")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="GOOGLE_CLIENT_ID is not configured."
             )
+        logger.warning("[verify_google_id_token] GOOGLE_CLIENT_ID not configured, falling back to 'test_google_client_id'")
         client_id = "test_google_client_id"
 
     # 1. Fetch Google's public certificates
     try:
         response = httpx.get("https://www.googleapis.com/oauth2/v3/certs", timeout=5.0)
+        logger.info(f"[verify_google_id_token] Google certificates fetch status: {response.status_code}")
         if response.status_code != 200:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -519,6 +541,7 @@ def verify_google_id_token(token: str, client_id: str | None) -> dict:
             )
         jwks = response.json()
     except Exception as e:
+        logger.error(f"[verify_google_id_token] Exception fetching Google certificates: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Network error fetching Google certificates: {str(e)}"
@@ -528,13 +551,16 @@ def verify_google_id_token(token: str, client_id: str | None) -> dict:
     try:
         unverified_header = jwt.get_unverified_header(token)
         kid = unverified_header.get("kid")
+        logger.info(f"[verify_google_id_token] Unverified header parsed successfully. kid: '{kid}'")
     except Exception as e:
+        logger.error(f"[verify_google_id_token] Failed to parse unverified header from token: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid token format: {str(e)}"
         )
 
     if not kid:
+        logger.error("[verify_google_id_token] Token header missing 'kid'")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Token header is missing 'kid'."
@@ -560,6 +586,7 @@ def verify_google_id_token(token: str, client_id: str | None) -> dict:
 
     for iss in allowed_issuers:
         try:
+            logger.info(f"[verify_google_id_token] Attempting decode for issuer: '{iss}' with client_id (audience): '{client_id}'")
             payload = jwt.decode(
                 token,
                 key,
@@ -569,11 +596,14 @@ def verify_google_id_token(token: str, client_id: str | None) -> dict:
             )
             print(f"[AUDIENCE VALIDATION] Target Client ID: {client_id} | Token Aud: {payload.get('aud')} | Status: SUCCESS")
             print(f"[ISSUER VALIDATION] Allowed Issuers: {allowed_issuers} | Token Iss: {payload.get('iss')} | Status: SUCCESS")
+            logger.info(f"[verify_google_id_token] Decode success for issuer '{iss}'")
             break
         except JWTError as e:
+            logger.warning(f"[verify_google_id_token] Decode failed for issuer '{iss}': {str(e)}")
             last_err = e
 
     if not payload:
+        logger.error(f"[verify_google_id_token] Decode failed for all issuers. Last error: {str(last_err)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Google ID token verification failed: {str(last_err)}"
@@ -583,8 +613,20 @@ def verify_google_id_token(token: str, client_id: str | None) -> dict:
 
 @router.post("/google", response_model=Token)
 def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
+    logger.info(f"[GOOGLE LOGIN ENDPOINT] Request received. Token length: {len(login_req.token)} | Token value: '{login_req.token}'")
+    
     # Verify the real Google ID token
-    payload = verify_google_id_token(login_req.token, settings.GOOGLE_CLIENT_ID)
+    try:
+        payload = verify_google_id_token(login_req.token, settings.GOOGLE_CLIENT_ID)
+    except HTTPException as e:
+        logger.error(f"[GOOGLE LOGIN ENDPOINT] verify_google_id_token raised HTTPException. status_code={e.status_code} detail={e.detail}", exc_info=True)
+        raise e
+    except Exception as e:
+        logger.error(f"[GOOGLE LOGIN ENDPOINT] verify_google_id_token raised unexpected error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Google verification unexpected error: {str(e)}"
+        )
     
     email = payload.get("email")
     if not email:

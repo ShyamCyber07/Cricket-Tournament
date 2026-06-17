@@ -19,6 +19,13 @@ class AppConfig {
 
   /// Returns the base URL based on the environment configuration
   static String get baseUrl {
+    if (kReleaseMode) {
+      final url = "https://$prodDomain/api/v1";
+      if (url.contains("localhost") || url.contains("127.0.0.1") || url.contains("10.0.2.2")) {
+        throw StateError("Emulator/Localhost base URLs are not allowed in release mode!");
+      }
+      return url;
+    }
     switch (env) {
       case 'production':
         return "https://$prodDomain/api/v1";

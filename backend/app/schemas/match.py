@@ -19,6 +19,8 @@ class MatchResponse(MatchBase):
     id: UUID
     team1_id: UUID
     team2_id: UUID
+    team1_name: Optional[str] = None
+    team2_name: Optional[str] = None
     tournament_id: Optional[UUID] = None
     status: str
     toss_winner_id: Optional[UUID] = None

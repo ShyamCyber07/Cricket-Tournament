@@ -19,22 +19,22 @@ class ApiService {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
-          debugPrint("[Dio Request] => Method: ${options.method} | URL: ${options.baseUrl}${options.path}");
-          debugPrint("[Dio Request Headers] => ${options.headers}");
+          print("[Dio Request] => Method: ${options.method} | URL: ${options.baseUrl}${options.path}");
+          print("[Dio Request Headers] => ${options.headers}");
           if (options.data != null) {
-            debugPrint("[Dio Request Data] => ${options.data}");
+            print("[Dio Request Data] => ${options.data}");
           }
           return handler.next(options);
         },
         onResponse: (response, handler) {
-          debugPrint("[Dio Response] <= Status: ${response.statusCode} | URL: ${response.requestOptions.baseUrl}${response.requestOptions.path}");
-          debugPrint("[Dio Response Data] <= ${response.data}");
+          print("[Dio Response] <= Status: ${response.statusCode} | URL: ${response.requestOptions.baseUrl}${response.requestOptions.path}");
+          print("[Dio Response Data] <= ${response.data}");
           return handler.next(response);
         },
         onError: (DioException e, handler) {
-          debugPrint("[Dio Error] <= Status: ${e.response?.statusCode} | Error: ${e.error} | Message: ${e.message} | URL: ${e.requestOptions.baseUrl}${e.requestOptions.path}");
+          print("[Dio Error] <= Status: ${e.response?.statusCode} | Error: ${e.error} | Message: ${e.message} | URL: ${e.requestOptions.baseUrl}${e.requestOptions.path}");
           if (e.response?.data != null) {
-            debugPrint("[Dio Error Data] <= ${e.response?.data}");
+            print("[Dio Error Data] <= ${e.response?.data}");
           }
           return handler.next(e);
         },
@@ -55,7 +55,7 @@ class ApiService {
           if (e.response?.statusCode == 401) {
             if (_refreshToken != null) {
               try {
-                debugPrint("[Dio Interceptor] Access token expired, attempting refresh...");
+                print("[Dio Interceptor] Access token expired, attempting refresh...");
                 final refreshDio = Dio();
                 refreshDio.options.baseUrl = AppConfig.baseUrl;
                 refreshDio.options.connectTimeout = const Duration(seconds: 5);
@@ -67,7 +67,7 @@ class ApiService {
                 if (refreshRes.statusCode == 200) {
                   final newAccessToken = refreshRes.data['access_token'];
                   final newRefreshToken = refreshRes.data['refresh_token'];
-                  debugPrint("[Dio Interceptor] Token refresh successful. Retrying original request...");
+                  print("[Dio Interceptor] Token refresh successful. Retrying original request...");
                   await persistToken(newAccessToken, newRefreshToken);
                   
                   // Retry the original request
@@ -78,7 +78,7 @@ class ApiService {
                   return handler.resolve(cloneResponse);
                 }
               } catch (refreshErr) {
-                debugPrint("[Dio Interceptor] Token refresh failed: $refreshErr. Clearing credentials.");
+                print("[Dio Interceptor] Token refresh failed: $refreshErr. Clearing credentials.");
                 await clearToken();
               }
             } else {
@@ -527,7 +527,7 @@ class ApiService {
   Future<Response> testConnection() async {
     final uri = Uri.parse(AppConfig.baseUrl);
     final hostUrl = "${uri.scheme}://${uri.host}:${uri.port}/";
-    debugPrint("[Connection Test] Probing host URL: $hostUrl");
+    print("[Connection Test] Probing host URL: $hostUrl");
     final dio = Dio();
     dio.options.connectTimeout = const Duration(seconds: 5);
     dio.options.receiveTimeout = const Duration(seconds: 5);

@@ -28,6 +28,42 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     });
   }
 
+  String _getErrorMessage(DioException e, String defaultMessage) {
+    if (e.response?.data != null) {
+      final data = e.response!.data;
+      if (data is Map) {
+        final detail = data['detail'];
+        if (detail != null) {
+          if (detail is List) {
+            try {
+              return detail.map((err) {
+                if (err is Map) {
+                  final loc = err['loc'] as List?;
+                  final field = loc != null && loc.length > 1 ? loc.last : '';
+                  final msg = err['msg'] ?? '';
+                  if (field.isNotEmpty) {
+                    return "$field: $msg";
+                  }
+                  return msg;
+                }
+                return err.toString();
+              }).join(", ");
+            } catch (_) {}
+          }
+          return detail.toString();
+        }
+      }
+    }
+    if (e.type == DioExceptionType.connectionTimeout) {
+      return "Connection timeout. Please check your internet connection.";
+    } else if (e.type == DioExceptionType.receiveTimeout) {
+      return "Server timeout. Please try again later.";
+    } else if (e.type == DioExceptionType.connectionError) {
+      return "Cannot connect to server. Please check your internet connection or server status.";
+    }
+    return e.message ?? defaultMessage;
+  }
+
   Future<void> _onAuthStarted(AuthStarted event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
     await ApiService.loadPersistedToken();
@@ -65,12 +101,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(AuthAuthenticated(user: user));
       }
     } on DioException catch (e) {
-      final detail = e.response?.data?['detail'];
-      final msg = detail ?? "Login failed. Check credentials.";
-      if (detail != null && detail.toString().toLowerCase().contains("email not verified")) {
+      final msg = _getErrorMessage(e, "Login failed. Check credentials.");
+      if (msg.toLowerCase().contains("email not verified")) {
         emit(AuthNeedsVerification(email: event.email));
       } else {
-        emit(AuthError(message: msg.toString()));
+        emit(AuthError(message: msg));
         emit(AuthUnauthenticated());
       }
     } catch (e) {
@@ -85,11 +120,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await _apiService.signup(event.email, event.password, event.username, event.confirmPassword);
       emit(AuthNeedsVerification(email: event.email));
     } on DioException catch (e) {
-      final msg = e.response?.data?['detail'] ?? "Signup failed.";
-      if (msg.toString().toLowerCase().contains("account exists but is not verified")) {
+      final msg = _getErrorMessage(e, "Signup failed.");
+      if (msg.toLowerCase().contains("account exists but is not verified")) {
         emit(AuthSignupUnverified(email: event.email));
       } else {
-        emit(AuthError(message: msg.toString()));
+        emit(AuthError(message: msg));
         emit(AuthUnauthenticated());
       }
     } catch (e) {
@@ -110,8 +145,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(AuthAuthenticated(user: user));
       }
     } on DioException catch (e) {
-      final msg = e.response?.data?['detail'] ?? "OTP verification failed.";
-      emit(AuthError(message: msg.toString()));
+      final msg = _getErrorMessage(e, "OTP verification failed.");
+      emit(AuthError(message: msg));
       emit(AuthNeedsVerification(email: event.email));
     } catch (e) {
       emit(AuthError(message: e.toString()));
@@ -126,8 +161,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // Re-emit verification state to ensure screen stays active
       emit(AuthNeedsVerification(email: event.email));
     } on DioException catch (e) {
-      final msg = e.response?.data?['detail'] ?? "Failed to resend OTP.";
-      emit(AuthError(message: msg.toString()));
+      final msg = _getErrorMessage(e, "Failed to resend OTP.");
+      emit(AuthError(message: msg));
       emit(AuthNeedsVerification(email: event.email));
     } catch (e) {
       emit(AuthError(message: e.toString()));
@@ -157,8 +192,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       print("[DIAGNOSTICS]   Message: ${e.message}");
       print("[DIAGNOSTICS] StackTrace:\n$stack");
       
-      final msg = e.response?.data?['detail'] ?? "Google login failed.";
-      emit(AuthError(message: msg.toString()));
+      final msg = _getErrorMessage(e, "Google login failed.");
+      emit(AuthError(message: msg));
       emit(AuthUnauthenticated());
     } catch (e, stack) {
       print("[DIAGNOSTICS] Google Login Backend unexpected error: $e");
@@ -183,8 +218,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final meResponse = await _apiService.getMe();
       emit(AuthAuthenticated(user: meResponse.data));
     } on DioException catch (e) {
-      final msg = e.response?.data?['detail'] ?? "Failed to complete profile.";
-      emit(AuthError(message: msg.toString()));
+      final msg = _getErrorMessage(e, "Failed to complete profile.");
+      emit(AuthError(message: msg));
     } catch (e) {
       emit(AuthError(message: e.toString()));
     }
@@ -196,8 +231,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await _apiService.forgotPassword(event.email);
       emit(AuthForgotPasswordOtpSent(email: event.email));
     } on DioException catch (e) {
-      final msg = e.response?.data?['detail'] ?? "Failed to request password reset.";
-      emit(AuthError(message: msg.toString()));
+      final msg = _getErrorMessage(e, "Failed to request password reset.");
+      emit(AuthError(message: msg));
       emit(AuthUnauthenticated());
     } catch (e) {
       emit(AuthError(message: e.toString()));
@@ -211,8 +246,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await _apiService.verifyResetOtp(event.email, event.otpCode);
       emit(AuthForgotPasswordOtpVerified(email: event.email, otpCode: event.otpCode));
     } on DioException catch (e) {
-      final msg = e.response?.data?['detail'] ?? "OTP verification failed.";
-      emit(AuthError(message: msg.toString()));
+      final msg = _getErrorMessage(e, "OTP verification failed.");
+      emit(AuthError(message: msg));
       emit(AuthForgotPasswordOtpSent(email: event.email));
     } catch (e) {
       emit(AuthError(message: e.toString()));
@@ -227,8 +262,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(AuthPasswordResetSuccess());
       emit(AuthUnauthenticated());
     } on DioException catch (e) {
-      final msg = e.response?.data?['detail'] ?? "Failed to reset password.";
-      emit(AuthError(message: msg.toString()));
+      final msg = _getErrorMessage(e, "Failed to reset password.");
+      emit(AuthError(message: msg));
       emit(AuthForgotPasswordOtpVerified(email: event.email, otpCode: event.otpCode));
     } catch (e) {
       emit(AuthError(message: e.toString()));

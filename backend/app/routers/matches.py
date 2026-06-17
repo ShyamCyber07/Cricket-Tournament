@@ -139,6 +139,29 @@ def submit_squads(
     if squad.team_id not in [match.team1_id, match.team2_id]:
         raise HTTPException(status_code=400, detail="Team is not playing in this match")
 
+    # Prevent duplicate player IDs within the submitted squad itself
+    submitted_player_ids = [p.player_id for p in squad.players]
+    if len(submitted_player_ids) != len(set(submitted_player_ids)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Duplicate players found within the submitted squad"
+        )
+
+    # Prevent overlap with the opposing team's squad in this match
+    other_team_id = match.team2_id if squad.team_id == match.team1_id else match.team1_id
+    overlapping_players = db.query(MatchSquad).filter(
+        MatchSquad.match_id == id,
+        MatchSquad.team_id == other_team_id,
+        MatchSquad.player_id.in_(submitted_player_ids)
+    ).all()
+    
+    if overlapping_players:
+        overlapping_names = [op.player.name for op in overlapping_players]
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Some players are already assigned to the opposing team: {', '.join(overlapping_names)}"
+        )
+
     # Remove existing squad entries for this team
     db.query(MatchSquad).filter(
         MatchSquad.match_id == id,

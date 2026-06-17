@@ -935,14 +935,14 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
               children: [
                 Expanded(
                   child: Text(
-                    match['team1_name'] ?? '',
+                    match['team1_name'] ?? 'Unknown Team',
                     style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ),
                 Text("vs", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
                 Expanded(
                   child: Text(
-                    match['team2_name'] ?? '',
+                    match['team2_name'] ?? 'Unknown Team',
                     textAlign: TextAlign.end,
                     style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
