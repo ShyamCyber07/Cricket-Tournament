@@ -208,6 +208,9 @@ app.include_router(tournaments.router, prefix=f"{settings.API_V1_STR}/tournament
 
 @app.get("/api/v1/debug-logs")
 def debug_logs(secret: str = None):
+    from fastapi import HTTPException
+    if settings.APP_ENV.lower() in ["production", "prod"]:
+        raise HTTPException(status_code=404, detail="Not Found")
     if secret != "cricup_e2e_secret_2026":
         return PlainTextResponse("Unauthorized", status_code=403)
     return PlainTextResponse(memory_handler.get_logs())
