@@ -1957,6 +1957,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
           ],
         ],
       ),
+    );
   }
 
   Widget _buildViewerBody() {
