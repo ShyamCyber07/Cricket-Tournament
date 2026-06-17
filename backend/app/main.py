@@ -47,6 +47,27 @@ async def lifespan(app: FastAPI):
     from app.core.backup import daily_sqlite_backup_loop
     from sqlalchemy.engine import make_url
     
+    # Run Alembic migrations programmatically on startup
+    import alembic.config
+    import alembic.command
+    from alembic.config import Config
+    
+    try:
+        ini_path = "alembic.ini"
+        if not os.path.exists(ini_path):
+            ini_path = os.path.join(os.path.dirname(__file__), "..", "alembic.ini")
+            
+        if os.path.exists(ini_path):
+            logger.info(f"Running database migrations from config: {ini_path}")
+            cfg = Config(ini_path)
+            cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+            alembic.command.upgrade(cfg, "head")
+            logger.info("Database migrations upgraded to head successfully.")
+        else:
+            logger.warning(f"alembic.ini not found at {ini_path}, skipping startup migrations.")
+    except Exception as e:
+        logger.error(f"Error running database migrations: {e}", exc_info=True)
+
     try:
         db_url = make_url(settings.DATABASE_URL)
         print("Database Dialect:", db_url.drivername)
