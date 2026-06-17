@@ -12,7 +12,8 @@ from app.models.cricket import Match, Team, Player, MatchSquad, Innings, Ball
 from app.schemas.match import (
     MatchCreate, MatchResponse, TossSubmit, SquadSubmit, 
     BallCreate, LiveMatchState, StrikerState, BowlerState, 
-    InningsSummarySchema, RecentBallSchema
+    InningsSummarySchema, RecentBallSchema,
+    OverSummarySchema, ActivePartnershipSchema, BatterBowlerStatsSchema
 )
 from fastapi.encoders import jsonable_encoder
 
@@ -751,6 +752,99 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
     if active_num == 2 and prev_innings:
         target = prev_innings.total_runs + 1
 
+    # Metadata fields calculation
+    tournament_name = match.tournament.name if match.tournament else None
+    toss_winner_name = match.toss_winner.name if match.toss_winner else None
+    toss_decision = match.toss_decision
+    team1_logo_url = match.team1.logo_url if match.team1 else None
+    team2_logo_url = match.team2.logo_url if match.team2 else None
+
+    # recent_overs calculation
+    recent_overs = []
+    if current_innings:
+        all_balls = db.query(Ball).filter(Ball.innings_id == current_innings.id).order_by(Ball.ball_number.asc()).all()
+        overs_map = {}
+        for b in all_balls:
+            overs_map.setdefault(b.over_number, {"runs": 0, "wickets": 0, "balls": 0})
+            overs_map[b.over_number]["runs"] += (b.runs_batsman + b.runs_extras)
+            if b.is_wicket:
+                overs_map[b.over_number]["wickets"] += 1
+            if b.extra_type not in ["wide", "no_ball"]:
+                overs_map[b.over_number]["balls"] += 1
+        
+        for over_no in sorted(overs_map.keys()):
+            recent_overs.append(
+                OverSummarySchema(
+                    over_number=over_no,
+                    runs=overs_map[over_no]["runs"],
+                    wickets=overs_map[over_no]["wickets"],
+                    is_completed=overs_map[over_no]["balls"] >= 6
+                )
+            )
+
+    # active_partnership calculation
+    active_partnership = None
+    if current_innings and match.current_striker_id and match.current_non_striker_id:
+        rev_balls = db.query(Ball).filter(Ball.innings_id == current_innings.id).order_by(Ball.ball_number.desc()).all()
+        active_pair = {match.current_striker_id, match.current_non_striker_id}
+        
+        p_runs = 0
+        p_balls = 0
+        p1_runs = 0
+        p1_balls = 0
+        p2_runs = 0
+        p2_balls = 0
+        
+        for b in rev_balls:
+            ball_pair = {b.batsman_id, b.non_striker_id}
+            if not ball_pair.issubset(active_pair):
+                break
+            
+            p_runs += (b.runs_batsman + b.runs_extras)
+            if b.extra_type != "wide":
+                p_balls += 1
+                
+            if b.batsman_id == match.current_striker_id:
+                p1_runs += b.runs_batsman
+                if b.extra_type != "wide":
+                    p1_balls += 1
+            elif b.batsman_id == match.current_non_striker_id:
+                p2_runs += b.runs_batsman
+                if b.extra_type != "wide":
+                    p2_balls += 1
+        
+        striker_name = db.query(Player.name).filter(Player.id == match.current_striker_id).scalar() or "Striker"
+        non_striker_name = db.query(Player.name).filter(Player.id == match.current_non_striker_id).scalar() or "Non-Striker"
+        
+        active_partnership = ActivePartnershipSchema(
+            runs=p_runs,
+            balls=p_balls,
+            player1_id=match.current_striker_id,
+            player1_name=striker_name,
+            player1_runs=p1_runs,
+            player1_balls=p1_balls,
+            player2_id=match.current_non_striker_id,
+            player2_name=non_striker_name,
+            player2_runs=p2_runs,
+            player2_balls=p2_balls
+        )
+
+    # striker_vs_bowler calculation
+    striker_vs_bowler = None
+    if current_innings and match.current_striker_id and match.current_bowler_id:
+        vs_balls = db.query(Ball).filter(
+            Ball.innings_id == current_innings.id,
+            Ball.batsman_id == match.current_striker_id,
+            Ball.bowler_id == match.current_bowler_id
+        ).all()
+        vs_runs = sum(b.runs_batsman for b in vs_balls)
+        vs_legit_balls = sum(1 for b in vs_balls if b.extra_type != "wide")
+        
+        striker_vs_bowler = BatterBowlerStatsSchema(
+            runs=vs_runs,
+            balls=vs_legit_balls
+        )
+
     return LiveMatchState(
         match_id=match.id,
         status=match.status,
@@ -766,6 +860,13 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
         created_by=match.created_by,
         assigned_scorer_id=match.assigned_scorer_id,
         tournament_organizer_id=match.tournament.organizer_id if match.tournament else None,
+        
+        tournament_name=tournament_name,
+        toss_winner_name=toss_winner_name,
+        toss_decision=toss_decision,
+        team1_logo_url=team1_logo_url,
+        team2_logo_url=team2_logo_url,
+        
         striker=striker_state,
         non_striker=non_striker_state,
         bowler=bowler_state,
@@ -801,6 +902,11 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
             dismissed_player_ids=prev_dismissed_ids,
             last_bowler_id=prev_last_bowler_id
         ) if prev_innings else None,
+        recent_balls=recent_balls,
+        
+        recent_overs=recent_overs,
+        active_partnership=active_partnership,
+        striker_vs_bowler=striker_vs_bowler,
     )
 
 async def broadcast_match_update_task(match_id: UUID):

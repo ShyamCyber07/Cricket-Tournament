@@ -2,6 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cricket_scorer/core/app_config.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:io';
+import 'dart:async';
 
 class ApiService {
   final Dio _dio = Dio();
@@ -32,10 +34,42 @@ class ApiService {
           return handler.next(response);
         },
         onError: (DioException e, handler) {
-          print("[Dio Error] <= Status: ${e.response?.statusCode} | Error: ${e.error} | Message: ${e.message} | URL: ${e.requestOptions.baseUrl}${e.requestOptions.path}");
-          if (e.response?.data != null) {
-            print("[Dio Error Data] <= ${e.response?.data}");
+          final req = e.requestOptions;
+          final resp = e.response;
+          
+          print("================== [CRITICAL CONNECTION DIAGNOSTICS] ==================");
+          print("Request URL: ${req.baseUrl}${req.path}");
+          print("Method: ${req.method}");
+          print("Status Code: ${resp?.statusCode}");
+          print("Response Body: ${resp?.data}");
+          print("DioException Type: ${e.type}");
+          print("Inner Exception: ${e.error}");
+          print("Inner Exception Type: ${e.error?.runtimeType}");
+          print("Message: ${e.message}");
+          print("Stacktrace: ${e.stackTrace}");
+          
+          String category = "Unknown/Other Error";
+          if (e.error is SocketException) {
+            category = "SocketException (No connection / Network Down / DNS failure / Connection refused)";
+          } else if (e.error is TimeoutException) {
+            category = "TimeoutException";
+          } else if (e.type == DioExceptionType.connectionTimeout) {
+            category = "DioException.connectionTimeout";
+          } else if (e.type == DioExceptionType.receiveTimeout) {
+            category = "DioException.receiveTimeout";
+          } else if (e.type == DioExceptionType.badResponse) {
+            category = "DioException.badResponse (HTTP ${resp?.statusCode})";
+            if (resp?.statusCode == 401) category = "HTTP 401 Unauthorized";
+            if (resp?.statusCode == 403) category = "HTTP 403 Forbidden";
+            if (resp?.statusCode == 404) category = "HTTP 404 Not Found";
+            if (resp?.statusCode == 500) category = "HTTP 500 Internal Server Error";
+          } else if (e.type == DioExceptionType.connectionError) {
+            category = "DioException.connectionError (Connection refused or network issue)";
           }
+          
+          print("CLASSIFIED ERROR: $category");
+          print("=======================================================================");
+          
           return handler.next(e);
         },
       ),
@@ -291,6 +325,7 @@ class ApiService {
     required String username,
     String? bio,
     String? profilePicture,
+    String? profilePhotoUrl,
   }) async {
     return await _dio.put(
       '/profile/',
@@ -299,8 +334,20 @@ class ApiService {
         'username': username,
         if (bio != null) 'bio': bio,
         if (profilePicture != null) 'profile_picture': profilePicture,
+        if (profilePhotoUrl != null) 'profile_photo_url': profilePhotoUrl,
       },
     );
+  }
+
+  Future<Response> uploadProfilePhoto(String filePath) async {
+    final fileName = filePath.split('/').last;
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(
+        filePath,
+        filename: fileName,
+      ),
+    });
+    return await _dio.post('/profile/upload-photo', data: formData);
   }
 
   Future<Response> getProfileStats() async {

@@ -34,7 +34,7 @@ class AppConfig {
       case 'dev_emulator':
       default:
         // Development Emulator / Localhost fallback
-        if (!kIsWeb && Platform.isAndroid) {
+        if (Platform.isAndroid) {
           return "http://10.0.2.2:8000/api/v1";
         }
         return "http://localhost:8000/api/v1";

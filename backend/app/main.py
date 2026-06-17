@@ -1,6 +1,7 @@
 import os
 import logging
 from fastapi.responses import PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 
 class MemoryHandler(logging.Handler):
     def __init__(self, capacity=2000):
@@ -166,6 +167,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Ensure static directories exist and mount static files
+os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Set up SQLAdmin
 admin = Admin(app, engine, title="CricHeroes Admin Panel")

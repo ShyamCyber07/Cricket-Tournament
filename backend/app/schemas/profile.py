@@ -10,6 +10,7 @@ class ProfileResponse(BaseModel):
     username: Optional[str] = None
     display_name: Optional[str] = None
     profile_picture: Optional[str] = None
+    profile_photo_url: Optional[str] = None
     bio: Optional[str] = None
     account_type: Optional[str] = None
     joined_at: Optional[datetime] = None
@@ -21,6 +22,7 @@ class ProfileUpdate(BaseModel):
     username: Optional[str] = None
     bio: Optional[str] = None
     profile_picture: Optional[str] = None
+    profile_photo_url: Optional[str] = None
 
 class BattingStats(BaseModel):
     matches_played: int = 0

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
+import 'package:cricket_scorer/core/app_config.dart';
 import 'package:intl/intl.dart';
 import 'edit_profile_screen.dart';
 
@@ -16,6 +17,14 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
   final ApiService _apiService = ApiService();
   late TabController _tabController;
+
+  String _resolvePhotoUrl(String? path) {
+    if (path == null || path.isEmpty) return "";
+    if (path.startsWith("http")) return path;
+    final uri = Uri.parse(AppConfig.baseUrl);
+    final host = "${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}";
+    return "$host$path";
+  }
 
   Map<String, dynamic>? _profile;
   Map<String, dynamic>? _stats;
@@ -547,19 +556,43 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                   CircleAvatar(
                                     backgroundColor: Colors.white.withOpacity(0.04),
                                     radius: 44,
-                                    child: Text(
-                                      _profile!['profile_picture'] ?? "🏏",
-                                      style: const TextStyle(fontSize: 48),
-                                    ),
+                                    child: _profile!['profile_photo_url'] != null && _profile!['profile_photo_url'].toString().isNotEmpty
+                                        ? ClipOval(
+                                            child: Image.network(
+                                              _resolvePhotoUrl(_profile!['profile_photo_url']),
+                                              width: 88,
+                                              height: 88,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error, stackTrace) => Text(
+                                                _profile!['profile_picture'] ?? "🏏",
+                                                style: const TextStyle(fontSize: 48),
+                                              ),
+                                            ),
+                                          )
+                                        : Text(
+                                            _profile!['profile_picture'] ?? "🏏",
+                                            style: const TextStyle(fontSize: 48),
+                                          ),
                                   ),
                                   const SizedBox(height: 16),
-                                  Text(
-                                    _profile!['full_name'] ?? "CricUP Scorer",
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w800,
-                                      color: Colors.white,
-                                    ),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        _profile!['full_name'] ?? "CricUP Scorer",
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      const Icon(
+                                        Icons.verified_rounded,
+                                        color: AppColors.primary,
+                                        size: 20,
+                                      ),
+                                    ],
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
@@ -618,24 +651,26 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                             ),
                           ),
 
-                          // Sliding Tab Bar
+                          // Tab Bar
                           Container(
                             margin: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.03),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withOpacity(0.04)),
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.white.withOpacity(0.06),
+                                  width: 1.5,
+                                ),
+                              ),
                             ),
                             child: TabBar(
                               controller: _tabController,
-                              indicator: BoxDecoration(
-                                color: AppColors.primary,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              labelColor: Colors.black,
+                              indicatorColor: AppColors.primary,
+                              indicatorWeight: 3.0,
+                              indicatorSize: TabBarIndicatorSize.tab,
+                              labelColor: AppColors.primary,
                               unselectedLabelColor: Colors.white70,
-                              labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 13),
-                              unselectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13),
+                              labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 0.5),
+                              unselectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13, letterSpacing: 0.5),
                               tabs: const [
                                 Tab(text: "STATS"),
                                 Tab(text: "ACHIEVED"),

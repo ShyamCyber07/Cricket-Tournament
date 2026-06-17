@@ -13,6 +13,7 @@ import 'package:cricket_scorer/features/matches/screens/scoring_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
 import 'package:cricket_scorer/features/tournaments/screens/tournament_list_screen.dart';
 import 'package:cricket_scorer/features/profile/screens/profile_screen.dart';
+import 'package:cricket_scorer/core/app_config.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -28,15 +29,46 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   List<dynamic> _matches = [];
   bool _isLoading = true;
   late AnimationController _pulseController;
+  late Map<String, dynamic> _currentUser;
 
   @override
   void initState() {
     super.initState();
+    _currentUser = widget.user;
     _fetchMatches();
+    _fetchUserProfile();
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+  }
+
+  String _resolvePhotoUrl(String? path) {
+    if (path == null || path.isEmpty) return "";
+    if (path.startsWith("http")) return path;
+    final uri = Uri.parse(AppConfig.baseUrl);
+    final host = "${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}";
+    return "$host$path";
+  }
+
+  Future<void> _fetchUserProfile() async {
+    try {
+      final res = await _apiService.getProfile();
+      if (mounted) {
+        setState(() {
+          _currentUser = res.data;
+        });
+      }
+    } catch (e) {
+      // Ignore profile fetch failure
+    }
+  }
+
+  Future<void> _refreshData() async {
+    await Future.wait([
+      _fetchMatches(),
+      _fetchUserProfile(),
+    ]);
   }
 
   @override
@@ -72,7 +104,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     final upcomingMatches = _matches.where((m) => m['status'] == 'scheduled').toList();
     final completedMatches = _matches.where((m) => m['status'] == 'completed').toList();
 
-    final userAvatar = widget.user['profile_picture'] ?? "🏏";
+    final String userAvatar = _currentUser['profile_picture'] ?? "🏏";
+    final String? photoUrl = _currentUser['profile_photo_url'];
 
     return Scaffold(
       appBar: AppBar(
@@ -80,11 +113,12 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           children: [
             // User Avatar Indicator with Green Glow
             GestureDetector(
-              onTap: () {
-                Navigator.push(
+              onTap: () async {
+                await Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const ProfileScreen()),
                 );
+                _fetchUserProfile();
               },
               child: Container(
                 decoration: BoxDecoration(
@@ -100,10 +134,15 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 child: CircleAvatar(
                   backgroundColor: AppColors.surface,
                   radius: 18,
-                  child: Text(
-                    userAvatar,
-                    style: const TextStyle(fontSize: 16),
-                  ),
+                  backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                      ? NetworkImage(_resolvePhotoUrl(photoUrl))
+                      : null,
+                  child: photoUrl != null && photoUrl.isNotEmpty
+                      ? null
+                      : Text(
+                          userAvatar,
+                          style: const TextStyle(fontSize: 16),
+                        ),
                 ),
               ),
             ),
@@ -112,7 +151,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Hey, ${widget.user['display_name'] ?? widget.user['full_name'].split(' ')[0]}",
+                  "Hey, ${_currentUser['display_name'] ?? _currentUser['full_name']?.split(' ')[0] ?? 'Player'}",
                   style: GoogleFonts.outfit(fontSize: 14, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
                 ),
                 Text(
@@ -126,7 +165,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
-            onPressed: _fetchMatches,
+            onPressed: _refreshData,
           ),
           IconButton(
             tooltip: 'Logout',
@@ -138,7 +177,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchMatches,
+        onRefresh: _refreshData,
         color: AppColors.primary,
         backgroundColor: AppColors.surface,
         child: SingleChildScrollView(

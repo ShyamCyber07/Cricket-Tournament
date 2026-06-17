@@ -104,6 +104,28 @@ class RecentBallSchema(BaseModel):
     extra_type: str
     is_wicket: bool
 
+class OverSummarySchema(BaseModel):
+    over_number: int
+    runs: int
+    wickets: int
+    is_completed: bool
+
+class ActivePartnershipSchema(BaseModel):
+    runs: int
+    balls: int
+    player1_id: UUID
+    player1_name: str
+    player1_runs: int
+    player1_balls: int
+    player2_id: UUID
+    player2_name: str
+    player2_runs: int
+    player2_balls: int
+
+class BatterBowlerStatsSchema(BaseModel):
+    runs: int
+    balls: int
+
 class LiveMatchState(BaseModel):
     match_id: UUID
     status: str
@@ -120,6 +142,13 @@ class LiveMatchState(BaseModel):
     assigned_scorer_id: Optional[UUID] = None
     tournament_organizer_id: Optional[UUID] = None
     
+    # Metadata fields
+    tournament_name: Optional[str] = None
+    toss_winner_name: Optional[str] = None
+    toss_decision: Optional[str] = None
+    team1_logo_url: Optional[str] = None
+    team2_logo_url: Optional[str] = None
+    
     striker: Optional[StrikerState] = None
     non_striker: Optional[StrikerState] = None
     bowler: Optional[BowlerState] = None
@@ -127,6 +156,11 @@ class LiveMatchState(BaseModel):
     current_innings: Optional[InningsSummarySchema] = None
     previous_innings: Optional[InningsSummarySchema] = None
     recent_balls: List[RecentBallSchema] = []
+    
+    # Live stats fields
+    recent_overs: List[OverSummarySchema] = []
+    active_partnership: Optional[ActivePartnershipSchema] = None
+    striker_vs_bowler: Optional[BatterBowlerStatsSchema] = None
 
 # Scorecard response schemas
 class BatsmanScorecardEntry(BaseModel):

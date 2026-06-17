@@ -63,3 +63,25 @@ def test_get_profile_activity_and_achievements(client, auth_headers, db):
     # All locked initially as no matches are played
     for ach in achievements:
         assert ach["is_unlocked"] is False
+
+def test_upload_profile_photo(client, auth_headers, db):
+    # Create a dummy image file payload
+    from io import BytesIO
+    dummy_image = BytesIO(b"fake image data")
+    
+    response = client.post(
+        "/api/v1/profile/upload-photo",
+        headers=auth_headers,
+        files={"file": ("test_avatar.png", dummy_image, "image/png")}
+    )
+    assert response.status_code == 200
+    res_data = response.json()
+    assert "url" in res_data
+    assert "profile_photo_url" in res_data
+    assert res_data["url"].startswith("/static/uploads/")
+    
+    # Confirm it got updated on profile
+    response = client.get("/api/v1/profile/", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["profile_photo_url"] == res_data["url"]
+

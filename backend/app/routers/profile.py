@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+import os
+import shutil
+import uuid
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from uuid import UUID
@@ -149,7 +152,20 @@ def update_profile(
     if profile_in.profile_picture is not None:
         current_user.profile_picture = profile_in.profile_picture
 
+    if profile_in.profile_photo_url is not None:
+        current_user.profile_photo_url = profile_in.profile_photo_url
+
     db.add(current_user)
+    
+    # Sync to Player model if linked
+    player = db.query(Player).filter(Player.user_id == current_user.id).first()
+    if player:
+        if profile_in.full_name is not None:
+            player.name = profile_in.full_name
+        if profile_in.profile_photo_url is not None:
+            player.profile_photo_url = profile_in.profile_photo_url
+        db.add(player)
+
     db.commit()
     db.refresh(current_user)
 
@@ -379,3 +395,37 @@ def get_profile_achievements(
                 unlocked_at=None
             ))
     return results
+
+
+@router.post("/upload-photo")
+def upload_profile_photo(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    ext = file.filename.split(".")[-1].lower()
+    if ext not in ["jpg", "jpeg", "png", "gif", "webp"]:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only image files are allowed.")
+    
+    filename = f"{current_user.id}_{uuid.uuid4().hex}.{ext}"
+    os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
+    filepath = os.path.join("static", "uploads", filename)
+    
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    url = f"/static/uploads/{filename}"
+    current_user.profile_photo_url = url
+    db.add(current_user)
+    
+    # Sync to Player model if linked
+    player = db.query(Player).filter(Player.user_id == current_user.id).first()
+    if player:
+        player.profile_photo_url = url
+        db.add(player)
+
+    db.commit()
+    db.refresh(current_user)
+    
+    log_user_activity(db, current_user.id, "profile_update", "Uploaded new profile photo.")
+    return {"url": url, "profile_photo_url": url}

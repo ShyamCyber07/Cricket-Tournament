@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
+import 'package:cricket_scorer/core/app_config.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -24,6 +26,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   String _selectedAvatar = "🏏";
   bool _isSaving = false;
+  
+  final ImagePicker _picker = ImagePicker();
+  bool _isUploadingPhoto = false;
+  String? _uploadedPhotoUrl;
 
   final List<String> _avatars = [
     "🏏", "👤", "⚡", "🔥", "🏆", "⭐", "👑", "🎯", "🤖", "🦊", "🦁", "🐉", "🚀", "🎸", "🌟"
@@ -36,6 +42,100 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _usernameController = TextEditingController(text: widget.user['username']);
     _bioController = TextEditingController(text: widget.user['bio'] ?? "");
     _selectedAvatar = widget.user['profile_picture'] ?? "🏏";
+    _uploadedPhotoUrl = widget.user['profile_photo_url'];
+  }
+
+  String _resolvePhotoUrl(String? path) {
+    if (path == null || path.isEmpty) return "";
+    if (path.startsWith("http")) return path;
+    final uri = Uri.parse(AppConfig.baseUrl);
+    final host = "${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}";
+    return "$host$path";
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: source,
+        maxWidth: 500,
+        maxHeight: 500,
+        imageQuality: 85,
+      );
+      if (pickedFile == null) return;
+
+      setState(() {
+        _isUploadingPhoto = true;
+      });
+
+      final response = await _apiService.uploadProfilePhoto(pickedFile.path);
+      
+      setState(() {
+        _uploadedPhotoUrl = response.data['profile_photo_url'];
+        _isUploadingPhoto = false;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Profile photo uploaded successfully!"),
+          backgroundColor: AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        _isUploadingPhoto = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Failed to upload photo: $e"),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _showImagePickerOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xff090c15),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded, color: AppColors.primary),
+              title: Text("Choose from Gallery", style: GoogleFonts.outfit(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
+              title: Text("Take a Photo", style: GoogleFonts.outfit(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            if (_uploadedPhotoUrl != null)
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+                title: Text("Remove Photo", style: GoogleFonts.outfit(color: AppColors.error)),
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    _uploadedPhotoUrl = null;
+                  });
+                },
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -57,6 +157,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         username: _usernameController.text.trim(),
         bio: _bioController.text.trim(),
         profilePicture: _selectedAvatar,
+        profilePhotoUrl: _uploadedPhotoUrl ?? "",
       );
 
       setState(() => _isSaving = false);
@@ -169,12 +270,65 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          CircleAvatar(
-                            backgroundColor: Colors.white.withOpacity(0.04),
-                            radius: 48,
-                            child: Text(
-                              _selectedAvatar,
-                              style: const TextStyle(fontSize: 52),
+                          GestureDetector(
+                            onTap: _showImagePickerOptions,
+                            child: Stack(
+                              alignment: Alignment.bottomRight,
+                              children: [
+                                Container(
+                                  width: 96,
+                                  height: 96,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white.withOpacity(0.04),
+                                    border: Border.all(
+                                      color: AppColors.primary.withOpacity(0.4),
+                                      width: 2.0,
+                                    ),
+                                  ),
+                                  child: _isUploadingPhoto
+                                      ? const Padding(
+                                          padding: EdgeInsets.all(28.0),
+                                          child: CircularProgressIndicator(
+                                            color: AppColors.primary,
+                                            strokeWidth: 2.5,
+                                          ),
+                                        )
+                                      : _uploadedPhotoUrl != null && _uploadedPhotoUrl!.isNotEmpty
+                                          ? ClipOval(
+                                              child: Image.network(
+                                                _resolvePhotoUrl(_uploadedPhotoUrl),
+                                                width: 92,
+                                                height: 92,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (context, error, stackTrace) => Center(
+                                                  child: Text(
+                                                    _selectedAvatar,
+                                                    style: const TextStyle(fontSize: 52),
+                                                  ),
+                                                ),
+                                              ),
+                                            )
+                                          : Center(
+                                              child: Text(
+                                                _selectedAvatar,
+                                                style: const TextStyle(fontSize: 52),
+                                              ),
+                                            ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: AppColors.primary,
+                                  ),
+                                  child: const Icon(
+                                    Icons.camera_alt_rounded,
+                                    color: Colors.black,
+                                    size: 14,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           const SizedBox(height: 20),
@@ -186,11 +340,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               itemCount: _avatars.length,
                               itemBuilder: (context, index) {
                                 final av = _avatars[index];
-                                final isSelected = av == _selectedAvatar;
+                                final isSelected = av == _selectedAvatar && (_uploadedPhotoUrl == null || _uploadedPhotoUrl!.isEmpty);
                                 return GestureDetector(
                                   onTap: () {
                                     setState(() {
                                       _selectedAvatar = av;
+                                      _uploadedPhotoUrl = null;
                                     });
                                   },
                                   child: Container(
