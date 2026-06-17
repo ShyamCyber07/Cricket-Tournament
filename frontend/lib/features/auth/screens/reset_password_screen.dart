@@ -368,13 +368,18 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                                           onPressed: _submitResetPassword,
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.transparent,
-                                            foregroundColor: Colors.black,
+                                            foregroundColor: Colors.white,
                                             elevation: 0,
                                             shadowColor: Colors.transparent,
+                                            surfaceTintColor: Colors.transparent,
                                           ),
                                           child: Text(
                                             "Update Password",
-                                            style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 16),
+                                            style: GoogleFonts.outfit(
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 16,
+                                              color: Colors.white,
+                                            ),
                                           ),
                                         ),
                                       );

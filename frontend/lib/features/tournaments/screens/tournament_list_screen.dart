@@ -239,6 +239,7 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
                   ),
                 ),
       floatingActionButton: FloatingActionButton(
+        tooltip: "Add Tournament FAB",
         onPressed: () async {
           final created = await Navigator.push(
             context,

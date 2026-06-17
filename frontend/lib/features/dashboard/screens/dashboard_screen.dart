@@ -120,6 +120,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             onPressed: _fetchMatches,
           ),
           IconButton(
+            tooltip: 'Logout',
             icon: const Icon(Icons.logout_rounded, color: Colors.white70),
             onPressed: () {
               context.read<AuthBloc>().add(LogoutRequested());

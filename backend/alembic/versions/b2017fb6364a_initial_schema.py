@@ -144,6 +144,8 @@ def upgrade() -> None:
     sa.Column('current_non_striker_id', sa.UUID(), nullable=True),
     sa.Column('current_bowler_id', sa.UUID(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('assigned_scorer_id', sa.UUID(), nullable=True),
+    sa.ForeignKeyConstraint(['assigned_scorer_id'], ['users.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['current_bowler_id'], ['players.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['current_non_striker_id'], ['players.id'], ondelete='SET NULL'),

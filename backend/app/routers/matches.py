@@ -45,6 +45,13 @@ manager = ConnectionManager()
 
 router = APIRouter()
 
+def check_match_scoring_permission(match, current_user_id):
+    authorized_users = {match.created_by, match.assigned_scorer_id}
+    if match.tournament:
+        authorized_users.add(match.tournament.organizer_id)
+    if current_user_id not in authorized_users:
+        raise HTTPException(status_code=403, detail="Not authorized to manage/score this match")
+
 
 @router.get("/", response_model=List[MatchResponse])
 def list_matches(
@@ -54,6 +61,7 @@ def list_matches(
     return db.query(Match).filter(
         or_(
             Match.created_by == current_user.id,
+            Match.assigned_scorer_id == current_user.id,
             Match.tournament_id.isnot(None),
             Match.status.in_(["toss", "team_selection", "innings1", "innings2"])
         )
@@ -80,7 +88,8 @@ def create_match(
         match_type=match_in.match_type,
         over_limit=match_in.over_limit,
         status="scheduled",
-        created_by=current_user.id
+        created_by=current_user.id,
+        assigned_scorer_id=match_in.assigned_scorer_id
     )
     db.add(db_match)
     db.commit()
@@ -99,8 +108,7 @@ def submit_toss(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    if match.created_by != current_user.id and (not match.tournament or match.tournament.organizer_id != current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized to manage/score this match")
+    check_match_scoring_permission(match, current_user.id)
 
     if toss.toss_winner_id not in [match.team1_id, match.team2_id]:
         raise HTTPException(status_code=400, detail="Toss winner must be one of the playing teams")
@@ -126,8 +134,7 @@ def submit_squads(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    if match.created_by != current_user.id and (not match.tournament or match.tournament.organizer_id != current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized to manage/score this match")
+    check_match_scoring_permission(match, current_user.id)
 
     if squad.team_id not in [match.team1_id, match.team2_id]:
         raise HTTPException(status_code=400, detail="Team is not playing in this match")
@@ -245,8 +252,7 @@ def submit_ball(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    if match.created_by != current_user.id and (not match.tournament or match.tournament.organizer_id != current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized to manage/score this match")
+    check_match_scoring_permission(match, current_user.id)
 
     if match.status not in ["innings1", "innings2"]:
         raise HTTPException(status_code=400, detail="Match is not in live scoring state")
@@ -482,8 +488,7 @@ def undo_last_ball(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    if match.created_by != current_user.id and (not match.tournament or match.tournament.organizer_id != current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized to manage/score this match")
+    check_match_scoring_permission(match, current_user.id)
 
     if match.status not in ["innings1", "innings2", "completed"]:
         raise HTTPException(status_code=400, detail="No logs to undo")
@@ -736,6 +741,8 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
         current_innings_number=active_num,
         target=target,
         created_by=match.created_by,
+        assigned_scorer_id=match.assigned_scorer_id,
+        tournament_organizer_id=match.tournament.organizer_id if match.tournament else None,
         striker=striker_state,
         non_striker=non_striker_state,
         bowler=bowler_state,

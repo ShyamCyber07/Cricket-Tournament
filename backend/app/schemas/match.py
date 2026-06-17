@@ -13,6 +13,7 @@ class MatchCreate(MatchBase):
     team1_id: UUID
     team2_id: UUID
     tournament_id: Optional[UUID] = None
+    assigned_scorer_id: Optional[UUID] = None
 
 class MatchResponse(MatchBase):
     id: UUID
@@ -29,6 +30,7 @@ class MatchResponse(MatchBase):
     current_non_striker_id: Optional[UUID] = None
     current_bowler_id: Optional[UUID] = None
     created_by: Optional[UUID] = None
+    assigned_scorer_id: Optional[UUID] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -113,6 +115,8 @@ class LiveMatchState(BaseModel):
     current_innings_number: int
     target: Optional[int] = None
     created_by: Optional[UUID] = None
+    assigned_scorer_id: Optional[UUID] = None
+    tournament_organizer_id: Optional[UUID] = None
     
     striker: Optional[StrikerState] = None
     non_striker: Optional[StrikerState] = None

@@ -147,9 +147,10 @@ class _TournamentCreateScreenState extends State<TournamentCreateScreen> {
           style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -380,6 +381,7 @@ class _TournamentCreateScreenState extends State<TournamentCreateScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

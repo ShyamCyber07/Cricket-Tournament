@@ -305,13 +305,18 @@ class _LoginScreenState extends State<LoginScreen> {
                                           },
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.transparent,
-                                            foregroundColor: Colors.black,
+                                            foregroundColor: Colors.white,
                                             elevation: 0,
                                             shadowColor: Colors.transparent,
+                                            surfaceTintColor: Colors.transparent,
                                           ),
                                           child: Text(
                                             "Sign In",
-                                            style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 16),
+                                            style: GoogleFonts.outfit(
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 16,
+                                              color: Colors.white,
+                                            ),
                                           ),
                                         ),
                                       );
@@ -349,7 +354,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           label: Text(
                             "Continue with Google",
-                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                              color: AppColors.textPrimary,
+                            ),
                           ),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.textPrimary,

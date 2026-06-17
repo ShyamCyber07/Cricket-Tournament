@@ -459,13 +459,18 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                                           onPressed: _submitProfile,
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.transparent,
-                                            foregroundColor: Colors.black,
+                                            foregroundColor: Colors.white,
                                             elevation: 0,
                                             shadowColor: Colors.transparent,
+                                            surfaceTintColor: Colors.transparent,
                                           ),
                                           child: Text(
                                             "Save and Continue",
-                                            style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 16),
+                                            style: GoogleFonts.outfit(
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 16,
+                                              color: Colors.white,
+                                            ),
                                           ),
                                         ),
                                       );

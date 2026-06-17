@@ -147,8 +147,11 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
                 Navigator.pop(context);
                 _deletePlayer(player['id'].toString());
               },
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-              child: const Text("Delete"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+              ),
+              child: Text("Delete", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -181,166 +184,177 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
           builder: (context, setSheetState) {
             return Padding(
               padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                top: 20,
-                left: 20,
-                right: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom,
               ),
-              child: Form(
-                key: _formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.white24,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        "Create New Player",
-                        style: GoogleFonts.outfit(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      TextFormField(
-                        controller: _nameController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(
-                          labelText: "Player Full Name",
-                          prefixIcon: Icon(Icons.person_outline, color: AppColors.primary),
-                        ),
-                        validator: (val) =>
-                            val == null || val.trim().isEmpty ? "Please enter a name" : null,
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _jerseyController,
-                        style: const TextStyle(color: Colors.white),
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: "Jersey Number (Optional)",
-                          hintText: "e.g. 18",
-                          prefixIcon: Icon(Icons.pin_outlined, color: AppColors.primary),
-                        ),
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) return null;
-                          final num = int.tryParse(val.trim());
-                          if (num == null) return "Must be a numeric value";
-                          if (num < 0 || num > 999) return "Jersey number must be between 0 and 999";
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        "Playing Role",
-                        style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13),
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: _selectedRole,
-                        dropdownColor: AppColors.surface,
-                        items: const [
-                          DropdownMenuItem(value: "batsman", child: Text("Batsman")),
-                          DropdownMenuItem(value: "bowler", child: Text("Bowler")),
-                          DropdownMenuItem(value: "all_rounder", child: Text("All Rounder")),
-                          DropdownMenuItem(value: "wicket_keeper", child: Text("Wicket Keeper")),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) {
-                            setSheetState(() => _selectedRole = val);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
+              child: SafeArea(
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.85,
+                  ),
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Batting Style",
-                                  style: GoogleFonts.outfit(
-                                      color: AppColors.textSecondary, fontSize: 13),
-                                ),
-                                const SizedBox(height: 8),
-                                DropdownButtonFormField<String>(
-                                  value: _selectedBatting,
-                                  dropdownColor: AppColors.surface,
-                                  items: const [
-                                    DropdownMenuItem(value: "right_hand", child: Text("Right Hand")),
-                                    DropdownMenuItem(value: "left_hand", child: Text("Left Hand")),
-                                  ],
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      setSheetState(() => _selectedBatting = val);
-                                    }
-                                  },
-                                ),
-                              ],
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.white24,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Bowling Style",
-                                  style: GoogleFonts.outfit(
-                                      color: AppColors.textSecondary, fontSize: 13),
-                                ),
-                                const SizedBox(height: 8),
-                                DropdownButtonFormField<String>(
-                                  value: _selectedBowling,
-                                  dropdownColor: AppColors.surface,
-                                  items: const [
-                                    DropdownMenuItem(value: "none", child: Text("None")),
-                                    DropdownMenuItem(
-                                        value: "right_arm_fast", child: Text("R-Arm Fast")),
-                                    DropdownMenuItem(
-                                        value: "left_arm_fast", child: Text("L-Arm Fast")),
-                                    DropdownMenuItem(
-                                        value: "right_arm_spin", child: Text("R-Arm Spin")),
-                                    DropdownMenuItem(
-                                        value: "left_arm_spin", child: Text("L-Arm Spin")),
-                                  ],
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      setSheetState(() => _selectedBowling = val);
-                                    }
-                                  },
-                                ),
-                              ],
+                          const SizedBox(height: 20),
+                          Text(
+                            "Create New Player",
+                            style: GoogleFonts.outfit(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
                             ),
+                          ),
+                          const SizedBox(height: 20),
+                          TextFormField(
+                            controller: _nameController,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: const InputDecoration(
+                              labelText: "Player Full Name",
+                              prefixIcon: Icon(Icons.person_outline, color: AppColors.primary),
+                            ),
+                            validator: (val) =>
+                                val == null || val.trim().isEmpty ? "Please enter a name" : null,
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _jerseyController,
+                            style: const TextStyle(color: Colors.white),
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: "Jersey Number (Optional)",
+                              hintText: "e.g. 18",
+                              prefixIcon: Icon(Icons.pin_outlined, color: AppColors.primary),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) return null;
+                              final num = int.tryParse(val.trim());
+                              if (num == null) return "Must be a numeric value";
+                              if (num < 0 || num > 999) return "Jersey number must be between 0 and 999";
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            "Playing Role",
+                            style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13),
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            value: _selectedRole,
+                            dropdownColor: AppColors.surface,
+                            items: const [
+                              DropdownMenuItem(value: "batsman", child: Text("Batsman")),
+                              DropdownMenuItem(value: "bowler", child: Text("Bowler")),
+                              DropdownMenuItem(value: "all_rounder", child: Text("All Rounder")),
+                              DropdownMenuItem(value: "wicket_keeper", child: Text("Wicket Keeper")),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setSheetState(() => _selectedRole = val);
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Batting Style",
+                                      style: GoogleFonts.outfit(
+                                          color: AppColors.textSecondary, fontSize: 13),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    DropdownButtonFormField<String>(
+                                      value: _selectedBatting,
+                                      dropdownColor: AppColors.surface,
+                                      items: const [
+                                        DropdownMenuItem(value: "right_hand", child: Text("Right Hand")),
+                                        DropdownMenuItem(value: "left_hand", child: Text("Left Hand")),
+                                      ],
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setSheetState(() => _selectedBatting = val);
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Bowling Style",
+                                      style: GoogleFonts.outfit(
+                                          color: AppColors.textSecondary, fontSize: 13),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    DropdownButtonFormField<String>(
+                                      value: _selectedBowling,
+                                      dropdownColor: AppColors.surface,
+                                      items: const [
+                                        DropdownMenuItem(value: "none", child: Text("None")),
+                                        DropdownMenuItem(
+                                            value: "right_arm_fast", child: Text("R-Arm Fast")),
+                                        DropdownMenuItem(
+                                            value: "left_arm_fast", child: Text("L-Arm Fast")),
+                                        DropdownMenuItem(
+                                            value: "right_arm_spin", child: Text("R-Arm Spin")),
+                                        DropdownMenuItem(
+                                            value: "left_arm_spin", child: Text("L-Arm Spin")),
+                                      ],
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setSheetState(() => _selectedBowling = val);
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 28),
+                          ElevatedButton(
+                            onPressed: _createPlayer,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.black,
+                            ),
+                            child: const Text("Register Player"),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 28),
-                      ElevatedButton(
-                        onPressed: _createPlayer,
-                        child: const Text("Register Player"),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            );
-          },
-        );
-      },
-    );
+            ),
+          );
+        },
+      );
+    },
+  );
   }
 
   void _openEditPlayerSheet(dynamic player) {
@@ -362,166 +376,177 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
           builder: (context, setSheetState) {
             return Padding(
               padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                top: 20,
-                left: 20,
-                right: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom,
               ),
-              child: Form(
-                key: _formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.white24,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        "Edit Player Details",
-                        style: GoogleFonts.outfit(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      TextFormField(
-                        controller: _nameController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(
-                          labelText: "Player Full Name",
-                          prefixIcon: Icon(Icons.person_outline, color: AppColors.primary),
-                        ),
-                        validator: (val) =>
-                            val == null || val.trim().isEmpty ? "Please enter a name" : null,
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _jerseyController,
-                        style: const TextStyle(color: Colors.white),
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: "Jersey Number (Optional)",
-                          hintText: "e.g. 18",
-                          prefixIcon: Icon(Icons.pin_outlined, color: AppColors.primary),
-                        ),
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) return null;
-                          final num = int.tryParse(val.trim());
-                          if (num == null) return "Must be a numeric value";
-                          if (num < 0 || num > 999) return "Jersey number must be between 0 and 999";
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        "Playing Role",
-                        style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13),
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: _selectedRole,
-                        dropdownColor: AppColors.surface,
-                        items: const [
-                          DropdownMenuItem(value: "batsman", child: Text("Batsman")),
-                          DropdownMenuItem(value: "bowler", child: Text("Bowler")),
-                          DropdownMenuItem(value: "all_rounder", child: Text("All Rounder")),
-                          DropdownMenuItem(value: "wicket_keeper", child: Text("Wicket Keeper")),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) {
-                            setSheetState(() => _selectedRole = val);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
+              child: SafeArea(
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.85,
+                  ),
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Batting Style",
-                                  style: GoogleFonts.outfit(
-                                      color: AppColors.textSecondary, fontSize: 13),
-                                ),
-                                const SizedBox(height: 8),
-                                DropdownButtonFormField<String>(
-                                  value: _selectedBatting,
-                                  dropdownColor: AppColors.surface,
-                                  items: const [
-                                    DropdownMenuItem(value: "right_hand", child: Text("Right Hand")),
-                                    DropdownMenuItem(value: "left_hand", child: Text("Left Hand")),
-                                  ],
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      setSheetState(() => _selectedBatting = val);
-                                    }
-                                  },
-                                ),
-                              ],
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.white24,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Bowling Style",
-                                  style: GoogleFonts.outfit(
-                                      color: AppColors.textSecondary, fontSize: 13),
-                                ),
-                                const SizedBox(height: 8),
-                                DropdownButtonFormField<String>(
-                                  value: _selectedBowling,
-                                  dropdownColor: AppColors.surface,
-                                  items: const [
-                                    DropdownMenuItem(value: "none", child: Text("None")),
-                                    DropdownMenuItem(
-                                        value: "right_arm_fast", child: Text("R-Arm Fast")),
-                                    DropdownMenuItem(
-                                        value: "left_arm_fast", child: Text("L-Arm Fast")),
-                                    DropdownMenuItem(
-                                        value: "right_arm_spin", child: Text("R-Arm Spin")),
-                                    DropdownMenuItem(
-                                        value: "left_arm_spin", child: Text("L-Arm Spin")),
-                                  ],
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      setSheetState(() => _selectedBowling = val);
-                                    }
-                                  },
-                                ),
-                              ],
+                          const SizedBox(height: 20),
+                          Text(
+                            "Edit Player Details",
+                            style: GoogleFonts.outfit(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
                             ),
+                          ),
+                          const SizedBox(height: 20),
+                          TextFormField(
+                            controller: _nameController,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: const InputDecoration(
+                              labelText: "Player Full Name",
+                              prefixIcon: Icon(Icons.person_outline, color: AppColors.primary),
+                            ),
+                            validator: (val) =>
+                                val == null || val.trim().isEmpty ? "Please enter a name" : null,
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _jerseyController,
+                            style: const TextStyle(color: Colors.white),
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: "Jersey Number (Optional)",
+                              hintText: "e.g. 18",
+                              prefixIcon: Icon(Icons.pin_outlined, color: AppColors.primary),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) return null;
+                              final num = int.tryParse(val.trim());
+                              if (num == null) return "Must be a numeric value";
+                              if (num < 0 || num > 999) return "Jersey number must be between 0 and 999";
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            "Playing Role",
+                            style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13),
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            value: _selectedRole,
+                            dropdownColor: AppColors.surface,
+                            items: const [
+                              DropdownMenuItem(value: "batsman", child: Text("Batsman")),
+                              DropdownMenuItem(value: "bowler", child: Text("Bowler")),
+                              DropdownMenuItem(value: "all_rounder", child: Text("All Rounder")),
+                              DropdownMenuItem(value: "wicket_keeper", child: Text("Wicket Keeper")),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setSheetState(() => _selectedRole = val);
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Batting Style",
+                                      style: GoogleFonts.outfit(
+                                          color: AppColors.textSecondary, fontSize: 13),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    DropdownButtonFormField<String>(
+                                      value: _selectedBatting,
+                                      dropdownColor: AppColors.surface,
+                                      items: const [
+                                        DropdownMenuItem(value: "right_hand", child: Text("Right Hand")),
+                                        DropdownMenuItem(value: "left_hand", child: Text("Left Hand")),
+                                      ],
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setSheetState(() => _selectedBatting = val);
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Bowling Style",
+                                      style: GoogleFonts.outfit(
+                                          color: AppColors.textSecondary, fontSize: 13),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    DropdownButtonFormField<String>(
+                                      value: _selectedBowling,
+                                      dropdownColor: AppColors.surface,
+                                      items: const [
+                                        DropdownMenuItem(value: "none", child: Text("None")),
+                                        DropdownMenuItem(
+                                            value: "right_arm_fast", child: Text("R-Arm Fast")),
+                                        DropdownMenuItem(
+                                            value: "left_arm_fast", child: Text("L-Arm Fast")),
+                                        DropdownMenuItem(
+                                            value: "right_arm_spin", child: Text("R-Arm Spin")),
+                                        DropdownMenuItem(
+                                            value: "left_arm_spin", child: Text("L-Arm Spin")),
+                                      ],
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setSheetState(() => _selectedBowling = val);
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 28),
+                          ElevatedButton(
+                            onPressed: () => _editPlayer(player['id'].toString()),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.black,
+                            ),
+                            child: const Text("Save Changes"),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 28),
-                      ElevatedButton(
-                        onPressed: () => _editPlayer(player['id'].toString()),
-                        child: const Text("Save Changes"),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            );
-          },
-        );
-      },
-    );
+            ),
+          );
+        },
+      );
+    },
+  );
   }
 
   @override
@@ -537,6 +562,7 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        tooltip: "Add Player FAB",
         onPressed: _openCreatePlayerSheet,
         backgroundColor: AppColors.primary,
         child: const Icon(Icons.add, color: Colors.white),

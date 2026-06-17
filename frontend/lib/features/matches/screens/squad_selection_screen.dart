@@ -171,6 +171,7 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+              scrollable: true,
               backgroundColor: AppColors.surface,
               title: Text(
                 "Select Openers",
@@ -374,7 +375,8 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
       appBar: AppBar(
         title: const Text("Squad Selection"),
       ),
-      body: _isLoading
+      body: SafeArea(
+        child: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20.0),
@@ -462,6 +464,7 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
                 ],
               ),
             ),
+      ),
     );
   }
 }

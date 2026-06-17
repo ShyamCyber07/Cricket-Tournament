@@ -42,6 +42,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
   List<dynamic> _battingSquad = [];
   List<dynamic> _bowlingSquad = [];
   bool _isPrompting = false;
+  bool _isDialogActive = false;
 
   // Celebration overlay fields
   String? _celebrationText;
@@ -73,7 +74,11 @@ class _ScoringScreenState extends State<ScoringScreen> {
   bool get _isViewerMode {
     if (_liveState == null) return true; // Default to true (read-only) before loading
     final matchOwnerId = _liveState!['created_by']?.toString();
-    return _currentUserId != matchOwnerId;
+    final tournamentOrganizerId = _liveState!['tournament_organizer_id']?.toString();
+    final assignedScorerId = _liveState!['assigned_scorer_id']?.toString();
+    return _currentUserId != matchOwnerId &&
+           _currentUserId != tournamentOrganizerId &&
+           _currentUserId != assignedScorerId;
   }
 
   @override
@@ -226,7 +231,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
       final data = res.data;
       
       final status = data['status'];
-      final isViewer = _currentUserId != data['created_by']?.toString();
+      final matchOwnerId = data['created_by']?.toString();
+      final tournamentOrganizerId = data['tournament_organizer_id']?.toString();
+      final assignedScorerId = data['assigned_scorer_id']?.toString();
+      final isViewer = _currentUserId != matchOwnerId &&
+          _currentUserId != tournamentOrganizerId &&
+          _currentUserId != assignedScorerId;
       
       if (status == 'scheduled') {
         setState(() {
@@ -303,6 +313,8 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
   Future<void> _promptTossSelection() async {
     if (_liveState == null) return;
+    if (_isDialogActive) return;
+    _isDialogActive = true;
     
     final team1Id = _liveState!['team1_id'].toString();
     final team2Id = _liveState!['team2_id'].toString();
@@ -312,110 +324,119 @@ class _ScoringScreenState extends State<ScoringScreen> {
     String selectedTossWinner = team1Id;
     String selectedTossDecision = "bat";
 
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: AppColors.surface,
-              title: Text(
-                "Toss Selection",
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Who won the toss?", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-                  const SizedBox(height: 8),
-                  DropdownButton<String>(
-                    value: selectedTossWinner,
-                    dropdownColor: AppColors.surface,
-                    isExpanded: true,
-                    items: [
-                      DropdownMenuItem(value: team1Id, child: Text(team1Name)),
-                      DropdownMenuItem(value: team2Id, child: Text(team2Name)),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() {
-                          selectedTossWinner = val;
-                        });
+    bool isSubmitting = false;
+
+    try {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                scrollable: true,
+                backgroundColor: AppColors.surface,
+                title: Text(
+                  "Toss Selection",
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Who won the toss?", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                    const SizedBox(height: 8),
+                    DropdownButton<String>(
+                      value: selectedTossWinner,
+                      dropdownColor: AppColors.surface,
+                      isExpanded: true,
+                      items: [
+                        DropdownMenuItem(value: team1Id, child: Text(team1Name)),
+                        DropdownMenuItem(value: team2Id, child: Text(team2Name)),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() {
+                            selectedTossWinner = val;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Text("Toss winner elected to:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text("BAT FIRST"),
+                            selected: selectedTossDecision == "bat",
+                            onSelected: (selected) {
+                              if (selected) {
+                                setDialogState(() {
+                                  selectedTossDecision = "bat";
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text("BOWL FIRST"),
+                            selected: selectedTossDecision == "bowl",
+                            onSelected: (selected) {
+                              if (selected) {
+                                setDialogState(() {
+                                  selectedTossDecision = "bowl";
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                actions: [
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (isSubmitting) return;
+                      isSubmitting = true;
+                      Navigator.pop(context);
+                      setState(() => _isLoading = true);
+                      try {
+                        await _apiService.submitToss(widget.matchId, selectedTossWinner, selectedTossDecision);
+                        if (mounted) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SquadSelectionScreen(
+                                matchId: widget.matchId,
+                                team1Id: team1Id,
+                                team2Id: team2Id,
+                                team1Name: team1Name,
+                                team2Name: team2Name,
+                              ),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setState(() => _isLoading = false);
+                        _showSnackBar("Error submitting toss: $e", AppColors.error);
                       }
                     },
-                  ),
-                  const SizedBox(height: 16),
-                  Text("Toss winner elected to:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text("BAT FIRST"),
-                          selected: selectedTossDecision == "bat",
-                          onSelected: (selected) {
-                            if (selected) {
-                              setDialogState(() {
-                                selectedTossDecision = "bat";
-                              });
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text("BOWL FIRST"),
-                          selected: selectedTossDecision == "bowl",
-                          onSelected: (selected) {
-                            if (selected) {
-                              setDialogState(() {
-                                selectedTossDecision = "bowl";
-                              });
-                            }
-                          },
-                        ),
-                      ),
-                    ],
+                    child: const Text("Submit & Proceed"),
                   ),
                 ],
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    setState(() => _isLoading = true);
-                    try {
-                      await _apiService.submitToss(widget.matchId, selectedTossWinner, selectedTossDecision);
-                      if (mounted) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => SquadSelectionScreen(
-                              matchId: widget.matchId,
-                              team1Id: team1Id,
-                              team2Id: team2Id,
-                              team1Name: team1Name,
-                              team2Name: team2Name,
-                            ),
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      setState(() => _isLoading = false);
-                      _showSnackBar("Error submitting toss: $e", AppColors.error);
-                    }
-                  },
-                  child: const Text("Submit & Proceed"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      _isDialogActive = false;
+    }
   }
 
   Future<void> _checkAndPromptSelections() async {
@@ -423,105 +444,111 @@ class _ScoringScreenState extends State<ScoringScreen> {
       debugPrint("[ScoringScreen] Viewer mode active. Skipping player selection prompts.");
       return;
     }
-    print("checkAndPromptSelections called");
-    print("Current striker: $_activeStrikerId");
-    print("Current non striker: $_activeNonStrikerId");
-    print("Current bowler: $_activeBowlerId");
-    debugPrint("[ScoringScreen] _checkAndPromptSelections entered. _isPrompting: $_isPrompting");
-    
-    if (_liveState == null) {
-      debugPrint("[ScoringScreen] _checkAndPromptSelections aborted: live state is null");
-      return;
-    }
-    
-    debugPrint("[ScoringScreen] Current active IDs: Striker='$_activeStrikerId', Non-Striker='$_activeNonStrikerId', Bowler='$_activeBowlerId'");
-    debugPrint("[ScoringScreen] Backend live state: striker='${_liveState!['striker']}', non_striker='${_liveState!['non_striker']}', bowler='${_liveState!['bowler']}'");
 
-    if (_isPrompting) {
-      debugPrint("[ScoringScreen] _checkAndPromptSelections aborted: another dialog is already prompting");
+    if (_isPrompting || _isDialogActive) {
+      debugPrint("[ScoringScreen] _checkAndPromptSelections aborted: another dialog or prompting is already active");
       return;
     }
 
-    final status = _liveState!['status'];
-    if (status == 'completed') return;
+    _isPrompting = true;
 
-    final currentInnings = _liveState!['current_innings'];
-    if (currentInnings == null) return;
-
-    final battingTeamId = currentInnings['batting_team_id'].toString();
-    final team1Id = _liveState!['team1_id'].toString();
-
-    // Load/Refresh squads on innings change
     try {
-      final squadsRes = await _apiService.getMatchSquads(widget.matchId);
-      final squadsData = squadsRes.data;
-      final isTeam1Batting = (battingTeamId == team1Id);
-
-      setState(() {
-        _battingSquad = isTeam1Batting ? squadsData['team1_squad'] : squadsData['team2_squad'];
-        _bowlingSquad = isTeam1Batting ? squadsData['team2_squad'] : squadsData['team1_squad'];
-      });
-    } catch (e) {
-      _showSnackBar("Error loading match squads: $e", AppColors.error);
-      return;
-    }
-
-    final dismissedPlayerIds = currentInnings['dismissed_player_ids'] != null
-        ? List<String>.from(currentInnings['dismissed_player_ids'].map((id) => id.toString()))
-        : <String>[];
-
-    // Check striker
-    if (_liveState!['striker'] == null && _activeStrikerId.isEmpty) {
-      final hasAvailable = _battingSquad.any((player) {
-        final pId = player['id'].toString();
-        return pId != _activeNonStrikerId && !dismissedPlayerIds.contains(pId);
-      });
-      if (hasAvailable) {
-        debugPrint("[ScoringScreen] Striker is missing. Initiating striker prompt...");
-        _isPrompting = true;
-        await _promptNextBatsman(isStriker: true);
-        _isPrompting = false;
-        debugPrint("[ScoringScreen] Striker prompt finished. Scheduling next check in 200ms...");
-        await Future.delayed(const Duration(milliseconds: 200));
-        _checkAndPromptSelections();
+      print("checkAndPromptSelections called");
+      print("Current striker: $_activeStrikerId");
+      print("Current non striker: $_activeNonStrikerId");
+      print("Current bowler: $_activeBowlerId");
+      
+      if (_liveState == null) {
+        debugPrint("[ScoringScreen] _checkAndPromptSelections aborted: live state is null");
         return;
       }
-    }
+      
+      final status = _liveState!['status'];
+      if (status == 'completed') return;
 
-    // Check non-striker
-    if (_liveState!['non_striker'] == null && _activeNonStrikerId.isEmpty) {
-      final hasAvailable = _battingSquad.any((player) {
-        final pId = player['id'].toString();
-        return pId != _activeStrikerId && !dismissedPlayerIds.contains(pId);
-      });
-      if (hasAvailable) {
-        debugPrint("[ScoringScreen] Non-striker is missing. Initiating non-striker prompt...");
-        _isPrompting = true;
-        await _promptNextBatsman(isStriker: false);
-        _isPrompting = false;
-        debugPrint("[ScoringScreen] Non-striker prompt finished. Scheduling next check in 200ms...");
-        await Future.delayed(const Duration(milliseconds: 200));
-        _checkAndPromptSelections();
+      final currentInnings = _liveState!['current_innings'];
+      if (currentInnings == null) return;
+
+      final battingTeamId = currentInnings['batting_team_id'].toString();
+      final team1Id = _liveState!['team1_id'].toString();
+
+      // Load/Refresh squads on innings change
+      try {
+        final squadsRes = await _apiService.getMatchSquads(widget.matchId);
+        final squadsData = squadsRes.data;
+        final isTeam1Batting = (battingTeamId == team1Id);
+
+        setState(() {
+          _battingSquad = isTeam1Batting ? squadsData['team1_squad'] : squadsData['team2_squad'];
+          _bowlingSquad = isTeam1Batting ? squadsData['team2_squad'] : squadsData['team1_squad'];
+        });
+      } catch (e) {
+        _showSnackBar("Error loading match squads: $e", AppColors.error);
         return;
       }
-    }
 
-    // Check bowler
-    if (_liveState!['bowler'] == null && _activeBowlerId.isEmpty) {
-      debugPrint("[ScoringScreen] Bowler is missing. Initiating bowler prompt...");
-      _isPrompting = true;
-      await _promptNextBowler();
+      final dismissedPlayerIds = currentInnings['dismissed_player_ids'] != null
+          ? List<String>.from(currentInnings['dismissed_player_ids'].map((id) => id.toString()))
+          : <String>[];
+
+      // Check striker
+      if (_liveState!['striker'] == null && _activeStrikerId.isEmpty) {
+        final hasAvailable = _battingSquad.any((player) {
+          final pId = player['id'].toString();
+          return pId != _activeNonStrikerId && !dismissedPlayerIds.contains(pId);
+        });
+        if (hasAvailable) {
+          debugPrint("[ScoringScreen] Striker is missing. Initiating striker prompt...");
+          await _promptNextBatsman(isStriker: true);
+          debugPrint("[ScoringScreen] Striker prompt finished. Scheduling next check in 200ms...");
+          Future.delayed(const Duration(milliseconds: 200), () {
+            if (!_isDisposed) _checkAndPromptSelections();
+          });
+          return;
+        }
+      }
+
+      // Check non-striker
+      if (_liveState!['non_striker'] == null && _activeNonStrikerId.isEmpty) {
+        final hasAvailable = _battingSquad.any((player) {
+          final pId = player['id'].toString();
+          return pId != _activeStrikerId && !dismissedPlayerIds.contains(pId);
+        });
+        if (hasAvailable) {
+          debugPrint("[ScoringScreen] Non-striker is missing. Initiating non-striker prompt...");
+          await _promptNextBatsman(isStriker: false);
+          debugPrint("[ScoringScreen] Non-striker prompt finished. Scheduling next check in 200ms...");
+          Future.delayed(const Duration(milliseconds: 200), () {
+            if (!_isDisposed) _checkAndPromptSelections();
+          });
+          return;
+        }
+      }
+
+      // Check bowler
+      if (_liveState!['bowler'] == null && _activeBowlerId.isEmpty) {
+        debugPrint("[ScoringScreen] Bowler is missing. Initiating bowler prompt...");
+        await _promptNextBowler();
+        debugPrint("[ScoringScreen] Bowler prompt finished. Scheduling next check in 200ms...");
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (!_isDisposed) _checkAndPromptSelections();
+        });
+        return;
+      }
+      
+      debugPrint("[ScoringScreen] All player prompts checked and resolved.");
+    } finally {
       _isPrompting = false;
-      debugPrint("[ScoringScreen] Bowler prompt finished. Scheduling next check in 200ms...");
-      await Future.delayed(const Duration(milliseconds: 200));
-      _checkAndPromptSelections();
-      return;
     }
-    
-    debugPrint("[ScoringScreen] All player prompts checked and resolved.");
   }
 
   Future<void> _promptNextBatsman({required bool isStriker}) async {
+    if (_isDialogActive) {
+      debugPrint("[ScoringScreen] _promptNextBatsman aborted: another dialog is active");
+      return;
+    }
+    _isDialogActive = true;
+
     final currentInnings = _liveState!['current_innings'];
     final dismissedPlayerIds = currentInnings != null && currentInnings['dismissed_player_ids'] != null
         ? List<String>.from(currentInnings['dismissed_player_ids'].map((id) => id.toString()))
@@ -549,42 +576,50 @@ class _ScoringScreenState extends State<ScoringScreen> {
       debugPrint("[ScoringScreen] Filtered striker list: $availableBatsmen");
     }
 
-    if (availableBatsmen.isEmpty) return;
+    if (availableBatsmen.isEmpty) {
+      _isDialogActive = false;
+      return;
+    }
 
     String? selectedPlayerId;
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          title: Text(
-            isStriker ? "Select Next Striker" : "Select Next Non-Striker",
-            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: availableBatsmen.length,
-              itemBuilder: (context, index) {
-                final player = availableBatsmen[index];
-                final pId = player['id'].toString();
-
-                return ListTile(
-                  leading: const Icon(Icons.person_outline, color: AppColors.primary),
-                  title: Text(player['name'], style: const TextStyle(color: Colors.white)),
-                  onTap: () {
-                    selectedPlayerId = pId;
-                    Navigator.pop(context);
-                  },
-                );
-              },
+    try {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: Text(
+              isStriker ? "Select Next Striker" : "Select Next Non-Striker",
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
             ),
-          ),
-        );
-      },
-    );
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: availableBatsmen.length,
+                itemBuilder: (context, index) {
+                  final player = availableBatsmen[index];
+                  final pId = player['id'].toString();
+
+                  return ListTile(
+                    leading: const Icon(Icons.person_outline, color: AppColors.primary),
+                    title: Text(player['name'], style: const TextStyle(color: Colors.white)),
+                    onTap: () {
+                      if (selectedPlayerId != null) return; // Debounce taps
+                      selectedPlayerId = pId;
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              ),
+            ),
+          );
+        },
+      );
+    } finally {
+      _isDialogActive = false;
+    }
 
     debugPrint("[ScoringScreen] Dialog closed for ${isStriker ? 'Striker' : 'Non-Striker'}. Selected player ID: $selectedPlayerId");
 
@@ -602,6 +637,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
   }
 
   Future<void> _promptNextBowler() async {
+    if (_isDialogActive) {
+      debugPrint("[ScoringScreen] _promptNextBowler aborted: another dialog is active");
+      return;
+    }
+    _isDialogActive = true;
+
     final currentInnings = _liveState!['current_innings'];
     final lastBowlerId = currentInnings != null && currentInnings['last_bowler_id'] != null
         ? currentInnings['last_bowler_id'].toString()
@@ -622,42 +663,50 @@ class _ScoringScreenState extends State<ScoringScreen> {
     debugPrint("[ScoringScreen] Last bowler ID: $lastBowlerId");
     debugPrint("[ScoringScreen] Filtered bowler list: $displayBowlers");
 
-    if (displayBowlers.isEmpty) return;
+    if (displayBowlers.isEmpty) {
+      _isDialogActive = false;
+      return;
+    }
 
     String? selectedPlayerId;
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          title: Text(
-            "Select Next Bowler",
-            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: displayBowlers.length,
-              itemBuilder: (context, index) {
-                final player = displayBowlers[index];
-                final pId = player['id'].toString();
-
-                return ListTile(
-                  leading: const Icon(Icons.sports_cricket_outlined, color: AppColors.secondary),
-                  title: Text(player['name'], style: const TextStyle(color: Colors.white)),
-                  onTap: () {
-                    selectedPlayerId = pId;
-                    Navigator.pop(context);
-                  },
-                );
-              },
+    try {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: Text(
+              "Select Next Bowler",
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
             ),
-          ),
-        );
-      },
-    );
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: displayBowlers.length,
+                itemBuilder: (context, index) {
+                  final player = displayBowlers[index];
+                  final pId = player['id'].toString();
+
+                  return ListTile(
+                    leading: const Icon(Icons.sports_cricket_outlined, color: AppColors.secondary),
+                    title: Text(player['name'], style: const TextStyle(color: Colors.white)),
+                    onTap: () {
+                      if (selectedPlayerId != null) return; // Debounce taps
+                      selectedPlayerId = pId;
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              ),
+            ),
+          );
+        },
+      );
+    } finally {
+      _isDialogActive = false;
+    }
 
     debugPrint("[ScoringScreen] Dialog closed for Bowler. Selected player ID: $selectedPlayerId");
 
@@ -817,185 +866,231 @@ class _ScoringScreenState extends State<ScoringScreen> {
     );
   }
 
-  void _openWicketDialog() {
+  Future<void> _openWicketDialog() async {
+    if (_isDialogActive) return;
+    _isDialogActive = true;
+
     String selectedWicketType = "bowled";
     String selectedDismissedId = _activeStrikerId;
 
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: AppColors.surface,
-              title: Text("Out! Select Wicket Details", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Wicket Type:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-                  DropdownButton<String>(
-                    value: selectedWicketType,
-                    dropdownColor: AppColors.surface,
-                    isExpanded: true,
-                    items: ["bowled", "caught", "lbw", "run_out", "stumped", "hit_wicket"]
-                        .map((type) => DropdownMenuItem(value: type, child: Text(type.toUpperCase())))
-                        .toList(),
-                    onChanged: (val) {
-                      if (val != null) setDialogState(() => selectedWicketType = val);
+    bool isSubmitting = false;
+
+    try {
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                scrollable: true,
+                backgroundColor: AppColors.surface,
+                title: Text("Out! Select Wicket Details", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Wicket Type:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                    DropdownButton<String>(
+                      value: selectedWicketType,
+                      dropdownColor: AppColors.surface,
+                      isExpanded: true,
+                      items: ["bowled", "caught", "lbw", "run_out", "stumped", "hit_wicket"]
+                          .map((type) => DropdownMenuItem(value: type, child: Text(type.toUpperCase())))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => selectedWicketType = val);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Text("Dismissed Batsman:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text("Striker"),
+                            selected: selectedDismissedId == _activeStrikerId,
+                            onSelected: (selected) {
+                              if (selected) setDialogState(() => selectedDismissedId = _activeStrikerId);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text("Non-Striker"),
+                            selected: selectedDismissedId == _activeNonStrikerId,
+                            onSelected: (selected) {
+                              if (selected) setDialogState(() => selectedDismissedId = _activeNonStrikerId);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      if (isSubmitting) return;
+                      Navigator.pop(context);
                     },
+                    child: const Text("Cancel"),
                   ),
-                  const SizedBox(height: 16),
-                  Text("Dismissed Batsman:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text("Striker"),
-                          selected: selectedDismissedId == _activeStrikerId,
-                          onSelected: (selected) {
-                            if (selected) setDialogState(() => selectedDismissedId = _activeStrikerId);
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text("Non-Striker"),
-                          selected: selectedDismissedId == _activeNonStrikerId,
-                          onSelected: (selected) {
-                            if (selected) setDialogState(() => selectedDismissedId = _activeNonStrikerId);
-                          },
-                        ),
-                      ),
-                    ],
+                  ElevatedButton(
+                    onPressed: () {
+                      if (isSubmitting) return;
+                      isSubmitting = true;
+                      Navigator.pop(context);
+                      _scoreWicket(selectedWicketType, selectedDismissedId);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.error,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text("Confirm Wicket", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
                   ),
                 ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _scoreWicket(selectedWicketType, selectedDismissedId);
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-                  child: const Text("Confirm Wicket"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      _isDialogActive = false;
+    }
   }
 
-  void _openExtrasDialog(String type) {
+  Future<void> _openExtrasDialog(String type) async {
+    if (_isDialogActive) return;
+    _isDialogActive = true;
+
     int extraRuns = 1; // standard Wd/Nb is 1 run
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: AppColors.surface,
-              title: Text("Log $type Extra", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Total runs from this extra (including boundary if any):", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [1, 2, 3, 4, 5, 6].map((run) {
-                      return ChoiceChip(
-                        label: Text(run.toString()),
-                        selected: extraRuns == run,
-                        onSelected: (selected) {
-                          if (selected) setDialogState(() => extraRuns = run);
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _scoreBall(0, extraRuns, type.toLowerCase());
-                  },
-                  child: const Text("Log Extra"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
+    bool isSubmitting = false;
 
-  void _openNoBallDialog() {
-    int batRuns = 0; // Default: 0 runs off the bat (dot ball on no-ball)
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: AppColors.surface,
-              title: Text("Log No Ball Extra", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Runs scored off the bat from this No Ball:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: Wrap(
-                      spacing: 8.0,
-                      runSpacing: 8.0,
-                      alignment: WrapAlignment.center,
-                      children: [0, 1, 2, 3, 4, 5, 6].map((run) {
+    try {
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                backgroundColor: AppColors.surface,
+                title: Text("Log $type Extra", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Total runs from this extra (including boundary if any):", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [1, 2, 3, 4, 5, 6].map((run) {
                         return ChoiceChip(
                           label: Text(run.toString()),
-                          selected: batRuns == run,
+                          selected: extraRuns == run,
                           onSelected: (selected) {
-                            if (selected) setDialogState(() => batRuns = run);
+                            if (selected) setDialogState(() => extraRuns = run);
                           },
                         );
                       }).toList(),
                     ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      if (isSubmitting) return;
+                      Navigator.pop(context);
+                    },
+                    child: const Text("Cancel"),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      if (isSubmitting) return;
+                      isSubmitting = true;
+                      Navigator.pop(context);
+                      _scoreBall(0, extraRuns, type.toLowerCase());
+                    },
+                    child: const Text("Log Extra"),
                   ),
                 ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      _isDialogActive = false;
+    }
+  }
+
+  Future<void> _openNoBallDialog() async {
+    if (_isDialogActive) return;
+    _isDialogActive = true;
+
+    int batRuns = 0; // Default: 0 runs off the bat (dot ball on no-ball)
+    bool isSubmitting = false;
+
+    try {
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                backgroundColor: AppColors.surface,
+                title: Text("Log No Ball Extra", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Runs scored off the bat from this No Ball:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                    const SizedBox(height: 16),
+                    Center(
+                      child: Wrap(
+                        spacing: 8.0,
+                        runSpacing: 8.0,
+                        alignment: WrapAlignment.center,
+                        children: [0, 1, 2, 3, 4, 5, 6].map((run) {
+                          return ChoiceChip(
+                            label: Text(run.toString()),
+                            selected: batRuns == run,
+                            onSelected: (selected) {
+                              if (selected) setDialogState(() => batRuns = run);
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
                 ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    // No Ball gives 1 extra run penalty, plus the runs scored off the bat
-                    _scoreBall(batRuns, 1, "no_ball");
-                  },
-                  child: const Text("Log No Ball"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      if (isSubmitting) return;
+                      Navigator.pop(context);
+                    },
+                    child: const Text("Cancel"),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      if (isSubmitting) return;
+                      isSubmitting = true;
+                      Navigator.pop(context);
+                      // No Ball gives 1 extra run penalty, plus the runs scored off the bat
+                      _scoreBall(batRuns, 1, "no_ball");
+                    },
+                    child: const Text("Log No Ball"),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      _isDialogActive = false;
+    }
   }
 
 
@@ -1152,8 +1247,9 @@ class _ScoringScreenState extends State<ScoringScreen> {
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.secondary,
+                          foregroundColor: Colors.white,
                         ),
-                        child: const Text("View Scorecard"),
+                        child: Text("View Scorecard", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
                       ),
                       const SizedBox(height: 12),
                       OutlinedButton(
@@ -1180,163 +1276,212 @@ class _ScoringScreenState extends State<ScoringScreen> {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // 1. Digital Scoreboard Card
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        gradient: AppColors.pitchGradient,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(color: AppColors.primary.withOpacity(0.25), blurRadius: 10, offset: const Offset(0, 5))
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                currentInnings != null
-                                    ? currentInnings['batting_team_name'].toString().toUpperCase()
-                                    : "BATTING TEAM",
-                                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight: constraints.maxHeight,
                               ),
-                              if (_liveState!['target'] != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    "TARGET: ${_liveState!['target']}",
-                                    style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.accent),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.baseline,
-                            textBaseline: TextBaseline.alphabetic,
-                            children: [
-                              // Animated scale-up total score text on change
-                              AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 300),
-                                transitionBuilder: (Widget child, Animation<double> animation) {
-                                  return ScaleTransition(
-                                    scale: animation,
-                                    child: child,
-                                  );
-                                },
-                                child: Text(
-                                  currentInnings != null
-                                      ? "${currentInnings['total_runs']}/${currentInnings['total_wickets']}"
-                                      : "0/0",
-                                  key: ValueKey<String>(currentInnings != null
-                                      ? "${currentInnings['total_runs']}/${currentInnings['total_wickets']}"
-                                      : "0/0"),
-                                  style: GoogleFonts.outfit(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.white),
-                                ),
-                              ),
-                              Text(
-                                currentInnings != null
-                                    ? "Overs: ${currentInnings['total_overs']}"
-                                    : "Overs: 0.0",
-                                style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white.withOpacity(0.9)),
-                              ),
-                            ],
-                          ),
-                          const Divider(color: Colors.white24, height: 20),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                currentInnings != null
-                                    ? "CRR: ${((currentInnings['total_runs'] as int) / (currentInnings['total_overs'] == 0 ? 1 : currentInnings['total_overs'] as double)).toStringAsFixed(2)}"
-                                    : "CRR: 0.00",
-                                style: GoogleFonts.outfit(color: Colors.white70, fontWeight: FontWeight.bold),
-                              ),
-                              Text(
-                                currentInnings != null
-                                    ? "Extras: ${currentInnings['extras_wides'] + currentInnings['extras_noballs'] + currentInnings['extras_byes'] + currentInnings['extras_legbyes']}"
-                                    : "Extras: 0",
-                                style: GoogleFonts.outfit(color: Colors.white70, fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          )
-                        ],
-                      ),
-                    ),
-
-                    // 2. Batter / Bowler Card Setup
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Row(
-                        children: [
-                          // Batsmen Panel
-                          Expanded(
-                            flex: 3,
-                            child: Card(
-                              color: AppColors.surface,
-                              child: Padding(
-                                padding: const EdgeInsets.all(12.0),
+                              child: IntrinsicHeight(
                                 child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
-                                    _buildBatsmanRow(striker, isOnStrike: true),
-                                    const Divider(color: Colors.white12, height: 16),
-                                    _buildBatsmanRow(nonStriker, isOnStrike: false),
+                                    const SizedBox(height: 8),
+                                    // 1. Digital Scoreboard Card
+                                    Container(
+                                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      padding: const EdgeInsets.all(20),
+                                      decoration: BoxDecoration(
+                                        gradient: AppColors.pitchGradient,
+                                        borderRadius: BorderRadius.circular(20),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: AppColors.primary.withOpacity(0.25),
+                                            blurRadius: 10,
+                                            offset: const Offset(0, 5),
+                                          )
+                                        ],
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                currentInnings != null
+                                                    ? currentInnings['batting_team_name'].toString().toUpperCase()
+                                                    : "BATTING TEAM",
+                                                style: GoogleFonts.outfit(
+                                                    fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70),
+                                              ),
+                                              if (_liveState!['target'] != null)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.black.withOpacity(0.2),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    "TARGET: ${_liveState!['target']}",
+                                                    style: GoogleFonts.outfit(
+                                                        fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.accent),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                                            textBaseline: TextBaseline.alphabetic,
+                                            children: [
+                                              AnimatedSwitcher(
+                                                duration: const Duration(milliseconds: 300),
+                                                transitionBuilder: (Widget child, Animation<double> animation) {
+                                                  return ScaleTransition(
+                                                    scale: animation,
+                                                    child: child,
+                                                  );
+                                                },
+                                                child: Text(
+                                                  currentInnings != null
+                                                      ? "${currentInnings['total_runs']}/${currentInnings['total_wickets']}"
+                                                      : "0/0",
+                                                  key: ValueKey<String>(currentInnings != null
+                                                      ? "${currentInnings['total_runs']}/${currentInnings['total_wickets']}"
+                                                      : "0/0"),
+                                                  style: GoogleFonts.outfit(
+                                                      fontSize: 48, fontWeight: FontWeight.w900, color: Colors.white),
+                                                ),
+                                              ),
+                                              Text(
+                                                currentInnings != null
+                                                    ? "Overs: ${currentInnings['total_overs']}"
+                                                    : "Overs: 0.0",
+                                                style: GoogleFonts.outfit(
+                                                    fontSize: 20,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.white.withOpacity(0.9)),
+                                              ),
+                                            ],
+                                          ),
+                                          const Divider(color: Colors.white24, height: 20),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                currentInnings != null
+                                                    ? "CRR: ${((currentInnings['total_runs'] as int) / (currentInnings['total_overs'] == 0 ? 1 : currentInnings['total_overs'] as double)).toStringAsFixed(2)}"
+                                                    : "CRR: 0.00",
+                                                style: GoogleFonts.outfit(color: Colors.white70, fontWeight: FontWeight.bold),
+                                              ),
+                                              Text(
+                                                currentInnings != null
+                                                    ? "Extras: ${currentInnings['extras_wides'] + currentInnings['extras_noballs'] + currentInnings['extras_byes'] + currentInnings['extras_legbyes']}"
+                                                    : "Extras: 0",
+                                                style: GoogleFonts.outfit(color: Colors.white70, fontWeight: FontWeight.bold),
+                                              ),
+                                            ],
+                                          )
+                                        ],
+                                      ),
+                                    ),
+                                    const Spacer(flex: 1),
+                                    // 2. Batter / Bowler Card Setup
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            flex: 3,
+                                            child: Card(
+                                              color: AppColors.surface,
+                                              child: Padding(
+                                                padding: const EdgeInsets.all(12.0),
+                                                child: Column(
+                                                  children: [
+                                                    _buildBatsmanRow(striker, isOnStrike: true),
+                                                    const Divider(color: Colors.white12, height: 16),
+                                                    _buildBatsmanRow(nonStriker, isOnStrike: false),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            flex: 2,
+                                            child: Card(
+                                              color: AppColors.surface,
+                                              child: Padding(
+                                                padding: const EdgeInsets.all(12.0),
+                                                child: bowler == null
+                                                    ? Center(
+                                                        child: Text("Select\nBowler",
+                                                            style: GoogleFonts.outfit(
+                                                                fontSize: 12,
+                                                                fontWeight: FontWeight.bold,
+                                                                color: AppColors.textSecondary),
+                                                            textAlign: TextAlign.center))
+                                                    : Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Row(
+                                                            children: [
+                                                              const Icon(Icons.circle, color: AppColors.secondary, size: 8),
+                                                              const SizedBox(width: 6),
+                                                              Expanded(
+                                                                child: Text(
+                                                                  bowler['name'],
+                                                                  style: GoogleFonts.outfit(
+                                                                      fontWeight: FontWeight.bold, fontSize: 13),
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          const SizedBox(height: 8),
+                                                          Text("Overs: ${bowler['overs']}",
+                                                              style: GoogleFonts.outfit(
+                                                                  fontSize: 12, color: AppColors.textSecondary)),
+                                                          Text("Mdns: ${bowler['maidens']}",
+                                                              style: GoogleFonts.outfit(
+                                                                  fontSize: 12, color: AppColors.textSecondary)),
+                                                          Text("Runs: ${bowler['runs']}",
+                                                              style: GoogleFonts.outfit(
+                                                                  fontSize: 12, color: AppColors.textSecondary)),
+                                                          Text("Wkts: ${bowler['wickets']}",
+                                                              style: GoogleFonts.outfit(
+                                                                  fontSize: 12, color: AppColors.textSecondary)),
+                                                        ],
+                                                      ),
+                                              ),
+                                            ),
+                                          )
+                                        ],
+                                      ),
+                                    ),
+                                    const Spacer(flex: 1),
+                                    // 3. Live Stats & Chasing Panel
+                                    _buildLiveStatsPanel(
+                                      currentInnings: currentInnings,
+                                      striker: striker,
+                                      nonStriker: nonStriker,
+                                      target: _liveState!['target'] as int?,
+                                      overLimit: _liveState!['over_limit'] as int? ?? 20,
+                                    ),
+                                    const Spacer(flex: 2),
                                   ],
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Bowler Panel
-                          Expanded(
-                            flex: 2,
-                            child: Card(
-                              color: AppColors.surface,
-                              child: Padding(
-                                padding: const EdgeInsets.all(12.0),
-                                child: bowler == null
-                                    ? Center(
-                                        child: Text("Select\nBowler",
-                                            style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                                            textAlign: TextAlign.center))
-                                    : Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              const Icon(Icons.circle, color: AppColors.secondary, size: 8),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: Text(
-                                                  bowler['name'],
-                                                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text("Overs: ${bowler['overs']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
-                                          Text("Mdns: ${bowler['maidens']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
-                                          Text("Runs: ${bowler['runs']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
-                                          Text("Wkts: ${bowler['wickets']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
-                                        ],
-                                      ),
-                              ),
-                            ),
-                          )
-                        ],
+                          );
+                        },
                       ),
                     ),
-
-                    const Spacer(),
 
                     // 3. Chronological Ball History Ticker (Color coded)
                     if (recentBalls.isNotEmpty) ...[
@@ -1410,7 +1555,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                     // 4. Large Circle Scoring Controls Pad
                     if (!_isViewerMode)
                       Container(
-                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+                        padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).padding.bottom + 16),
                         decoration: const BoxDecoration(
                           color: AppColors.surface,
                           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -1492,7 +1637,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                     else
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.fromLTRB(20, 24, 20, 36),
+                        padding: EdgeInsets.fromLTRB(20, 24, 20, MediaQuery.of(context).padding.bottom + 20),
                         decoration: const BoxDecoration(
                           color: AppColors.surface,
                           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -1642,6 +1787,140 @@ class _ScoringScreenState extends State<ScoringScreen> {
           text,
           style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLiveStatsPanel({
+    required Map<String, dynamic>? currentInnings,
+    required Map<String, dynamic>? striker,
+    required Map<String, dynamic>? nonStriker,
+    required int? target,
+    required int overLimit,
+  }) {
+    final int strikerRuns = striker != null ? (striker['runs'] as int? ?? 0) : 0;
+    final int nonStrikerRuns = nonStriker != null ? (nonStriker['runs'] as int? ?? 0) : 0;
+    final int strikerBalls = striker != null ? (striker['balls'] as int? ?? 0) : 0;
+    final int nonStrikerBalls = nonStriker != null ? (nonStriker['balls'] as int? ?? 0) : 0;
+
+    final int partnershipRuns = strikerRuns + nonStrikerRuns;
+    final int partnershipBalls = strikerBalls + nonStrikerBalls;
+
+    String chaseInfoText = "";
+    double requiredRunRate = 0.0;
+    final int currentRuns = currentInnings != null ? (currentInnings['total_runs'] as int? ?? 0) : 0;
+    final double currentOvers = currentInnings != null ? double.parse((currentInnings['total_overs'] ?? 0.0).toString()) : 0.0;
+
+    if (target != null && currentInnings != null) {
+      final int runsNeeded = target - currentRuns;
+
+      final int currentOversInt = currentOvers.toInt();
+      final int currentBallsInOver = ((currentOvers - currentOversInt) * 10).round();
+      final int totalBallsBowled = (currentOversInt * 6) + currentBallsInOver;
+      final int totalBallsInMatch = overLimit * 6;
+      final int ballsRemaining = totalBallsInMatch - totalBallsBowled;
+
+      if (runsNeeded > 0) {
+        if (ballsRemaining > 0) {
+          requiredRunRate = (runsNeeded / (ballsRemaining / 6.0));
+          chaseInfoText = "$runsNeeded runs needed off $ballsRemaining balls";
+        } else {
+          chaseInfoText = "Innings over";
+        }
+      } else {
+        chaseInfoText = "Target achieved!";
+      }
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF1E293B)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Partnership Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.people_outline, color: AppColors.primary, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Partnership",
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                "$partnershipRuns runs ($partnershipBalls balls)",
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          
+          // Chasing Row (Required Run Rate / Chase info)
+          if (target != null && chaseInfoText.isNotEmpty) ...[
+            const Divider(color: Colors.white12, height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.trending_up, color: AppColors.accent, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      "Required RR",
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  requiredRunRate.toStringAsFixed(2),
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    color: AppColors.accent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                chaseInfoText,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

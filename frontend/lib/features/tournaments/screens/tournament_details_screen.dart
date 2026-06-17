@@ -103,6 +103,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+              scrollable: true,
               backgroundColor: AppColors.surface,
               title: Text(
                 "Generate Fixtures",
@@ -822,11 +823,12 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
               onPressed: _showGenerateFixturesDialog,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accent,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               child: Text(
                 "Lock Teams & Generate Fixtures",
-                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
           ],

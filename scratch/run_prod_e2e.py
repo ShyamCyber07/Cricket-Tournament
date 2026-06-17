@@ -21,7 +21,7 @@ def run_adb(args):
     return stdout
 
 def capture_screen(filename):
-    dest = f"C:/Users/praja/.gemini/antigravity-ide/brain/fb893936-c729-493d-a4f1-fbb421f2812f/{filename}"
+    dest = f"C:/Users/praja/.gemini/antigravity-ide/brain/17ed54b0-3f2c-41a7-9707-81edcd070e89/{filename}"
     run_adb(["shell", "screencap", "-p", "/sdcard/screen.png"])
     run_adb(["pull", "/sdcard/screen.png", dest])
     print(f"Captured screenshot: {filename}")

@@ -128,8 +128,11 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                 Navigator.pop(context);
                 _deleteTeam(team['id'].toString());
               },
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-              child: const Text("Delete"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+              ),
+              child: Text("Delete", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -158,8 +161,11 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                 Navigator.pop(context);
                 _removePlayerFromTeam(teamId, player['id'].toString(), setModalState);
               },
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-              child: const Text("Remove"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+              ),
+              child: Text("Remove", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -179,6 +185,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          scrollable: true,
           backgroundColor: AppColors.surface,
           title: Text("Create Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
           content: Form(
@@ -197,11 +204,15 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
+              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
             ),
             ElevatedButton(
               onPressed: _createTeam,
-              child: const Text("Create"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.black,
+              ),
+              child: Text("Create", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -227,6 +238,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+              scrollable: true,
               backgroundColor: AppColors.surface,
               title: Text("Edit Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
               content: SingleChildScrollView(
@@ -301,7 +313,11 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                       _showSnackBar("Failed to update team: $errMsg", AppColors.error);
                     }
                   },
-                  child: const Text("Save"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.black,
+                  ),
+                  child: Text("Save", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
                 ),
               ],
             );
@@ -635,6 +651,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        tooltip: "Add Team FAB",
         onPressed: _openCreateTeamDialog,
         backgroundColor: AppColors.primary,
         child: const Icon(Icons.add, color: Colors.white),

@@ -134,7 +134,8 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
         title: const Text("Match Setup"),
         elevation: 0,
       ),
-      body: _teams.isEmpty
+      body: SafeArea(
+        child: _teams.isEmpty
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -366,6 +367,7 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
                 ),
               ),
             ),
+      ),
     );
   }
 }

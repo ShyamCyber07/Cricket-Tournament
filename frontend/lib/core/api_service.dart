@@ -387,6 +387,7 @@ class ApiService {
     required String team1Id,
     required String team2Id,
     String? tournamentId,
+    String? assignedScorerId,
   }) async {
     return await _dio.post(
       '/matches/',
@@ -397,7 +398,8 @@ class ApiService {
         'over_limit': overLimit,
         'team1_id': team1Id,
         'team2_id': team2Id,
-        'tournament_id': tournamentId,
+        if (tournamentId != null) 'tournament_id': tournamentId,
+        if (assignedScorerId != null) 'assigned_scorer_id': assignedScorerId,
       },
     );
   }

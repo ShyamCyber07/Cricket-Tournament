@@ -97,9 +97,10 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // 1. Match Summary Card
@@ -127,6 +128,7 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
               ...inningsList.map((innings) => _InningsCard(innings: innings)),
           ],
         ),
+      ),
       ),
     );
   }
