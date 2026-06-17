@@ -1,0 +1,668 @@
+import 'dart:ui';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:cricket_scorer/core/theme.dart';
+import 'package:cricket_scorer/core/api_service.dart';
+import 'package:intl/intl.dart';
+import 'edit_profile_screen.dart';
+
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
+  final ApiService _apiService = ApiService();
+  late TabController _tabController;
+
+  Map<String, dynamic>? _profile;
+  Map<String, dynamic>? _stats;
+  List<dynamic> _activities = [];
+  List<dynamic> _achievements = [];
+
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _loadProfileData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadProfileData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final pRes = await _apiService.getProfile();
+      final sRes = await _apiService.getProfileStats();
+      final actRes = await _apiService.getProfileActivity();
+      final achRes = await _apiService.getProfileAchievements();
+
+      setState(() {
+        _profile = pRes.data;
+        _stats = sRes.data;
+        _activities = actRes.data;
+        _achievements = achRes.data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.toString();
+      });
+    }
+  }
+
+  String _formatJoinDate(String? dateStr) {
+    if (dateStr == null) return "Joined CricUP";
+    try {
+      final date = DateTime.parse(dateStr);
+      return "Joined ${DateFormat('MMMM yyyy').format(date)}";
+    } catch (_) {
+      return "Joined CricUP";
+    }
+  }
+
+  Widget _buildGlassCard({required Widget child, EdgeInsets? padding, double? width}) {
+    return Container(
+      width: width,
+      padding: padding ?? const EdgeInsets.all(16),
+      decoration: AppColors.glassDecoration(
+        borderRadius: BorderRadius.circular(24),
+        borderColor: Colors.white.withOpacity(0.08),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildStatItem(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.03)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.outfit(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsTab() {
+    if (_stats == null) {
+      return const Center(child: Text("No statistics available"));
+    }
+
+    final batting = _stats!['batting'] ?? {};
+    final bowling = _stats!['bowling'] ?? {};
+    final fielding = _stats!['fielding'] ?? {};
+    final tournament = _stats!['tournament'] ?? {};
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.only(top: 16, bottom: 40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Batting Section
+          Text(
+            "🏏 BATTING STATS",
+            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white70, letterSpacing: 1),
+          ),
+          const SizedBox(height: 12),
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 1.1,
+            children: [
+              _buildStatItem("Matches", "${batting['matches_played'] ?? 0}"),
+              _buildStatItem("Innings", "${batting['innings'] ?? 0}"),
+              _buildStatItem("Runs", "${batting['runs'] ?? 0}"),
+              _buildStatItem("Highest Score", "${batting['highest_score'] ?? 0}"),
+              _buildStatItem("Average", "${batting['average'] ?? 0.0}"),
+              _buildStatItem("Strike Rate", "${batting['strike_rate'] ?? 0.0}"),
+              _buildStatItem("Fours (4s)", "${batting['fours'] ?? 0}"),
+              _buildStatItem("Sixes (6s)", "${batting['sixes'] ?? 0}"),
+              _buildStatItem("Fifties (50s)", "${batting['fifties'] ?? 0}"),
+              _buildStatItem("Hundreds (100s)", "${batting['hundreds'] ?? 0}"),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Bowling Section
+          Text(
+            "⚡ BOWLING STATS",
+            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white70, letterSpacing: 1),
+          ),
+          const SizedBox(height: 12),
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 1.1,
+            children: [
+              _buildStatItem("Wickets", "${bowling['wickets'] ?? 0}"),
+              _buildStatItem("Overs", "${bowling['overs_bowled'] ?? 0.0}"),
+              _buildStatItem("Economy", "${bowling['economy'] ?? 0.0}"),
+              _buildStatItem("Best Figures", "${bowling['best_bowling_figures'] ?? '0/0'}"),
+              _buildStatItem("Maidens", "${bowling['maidens'] ?? 0}"),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Fielding & Tournaments Section
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      "🛡️ FIELDING",
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white70, letterSpacing: 1),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildStatItem("Catches", "${fielding['catches'] ?? 0}"),
+                    const SizedBox(height: 8),
+                    _buildStatItem("Run Outs", "${fielding['run_outs'] ?? 0}"),
+                    const SizedBox(height: 8),
+                    _buildStatItem("Stumpings", "${fielding['stumpings'] ?? 0}"),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      "🏆 TOURNAMENTS",
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white70, letterSpacing: 1),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildStatItem("Played", "${tournament['tournaments_played'] ?? 0}"),
+                    const SizedBox(height: 8),
+                    _buildStatItem("Won", "${tournament['tournaments_won'] ?? 0}"),
+                    const SizedBox(height: 8),
+                    _buildStatItem("Win Rate", "${tournament['win_percentage'] ?? 0.0}%"),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAchievementsTab() {
+    if (_achievements.isEmpty) {
+      return const Center(child: Text("No achievements unlocked yet"));
+    }
+
+    final achievementTitles = {
+      "first_match": "First Match",
+      "first_fifty": "First Fifty",
+      "first_century": "First Century",
+      "first_wicket": "First Wicket",
+      "tournament_winner": "Tournament Champion",
+      "mvp": "Most Valuable Player"
+    };
+
+    final achievementDescriptions = {
+      "first_match": "Played in your first CricUP squad match",
+      "first_fifty": "Scored 50+ runs in a single innings",
+      "first_century": "Scored 100+ runs in a single innings",
+      "first_wicket": "Claimed your first wicket on CricUP",
+      "tournament_winner": "Won a cricket tournament cup",
+      "mvp": "Selected as MVP of a match or tournament"
+    };
+
+    final achievementBadges = {
+      "first_match": "🏃",
+      "first_fifty": "🔥",
+      "first_century": "💯",
+      "first_wicket": "🎯",
+      "tournament_winner": "👑",
+      "mvp": "⭐"
+    };
+
+    return GridView.builder(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.only(top: 16, bottom: 40),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.9,
+      ),
+      itemCount: _achievements.length,
+      itemBuilder: (context, index) {
+        final ach = _achievements[index];
+        final type = ach['achievement_type'] ?? "";
+        final isUnlocked = ach['is_unlocked'] ?? false;
+        final title = achievementTitles[type] ?? "Achievement";
+        final desc = achievementDescriptions[type] ?? "";
+        final badge = achievementBadges[type] ?? "🏆";
+
+        final cardChild = Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                badge,
+                style: const TextStyle(fontSize: 42),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: isUnlocked ? Colors.white : AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                desc,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  color: AppColors.textSecondary.withOpacity(0.7),
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        );
+
+        return Container(
+          decoration: BoxDecoration(
+            color: isUnlocked ? AppColors.surface : Colors.black.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isUnlocked ? AppColors.primary.withOpacity(0.3) : Colors.white.withOpacity(0.04),
+              width: 1.5,
+            ),
+            boxShadow: isUnlocked
+                ? [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    )
+                  ]
+                : [],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: isUnlocked
+                ? cardChild
+                : ColorFiltered(
+                    colorFilter: const ColorFilter.matrix(<double>[
+                      0.2126, 0.7152, 0.0722, 0, 0,
+                      0.2126, 0.7152, 0.0722, 0, 0,
+                      0.2126, 0.7152, 0.0722, 0, 0,
+                      0,      0,      0,      1, 0,
+                    ]),
+                    child: cardChild,
+                  ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActivityTab() {
+    if (_activities.isEmpty) {
+      return const Center(child: Text("No recent activities recorded"));
+    }
+
+    final activityIcons = {
+      "account_created": "🎉",
+      "profile_creation": "👤",
+      "profile_update": "✏️",
+      "team_creation": "👥",
+      "tournament_creation": "🏆",
+      "match_played": "🏏",
+      "match_won": "🏆",
+      "achievement_unlocked": "⭐",
+    };
+
+    return ListView.builder(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.only(top: 16, bottom: 40),
+      itemCount: _activities.length,
+      itemBuilder: (context, index) {
+        final act = _activities[index];
+        final type = act['activity_type'] ?? "";
+        final desc = act['description'] ?? "";
+        final icon = activityIcons[type] ?? "🏏";
+        final rawDate = act['created_at'];
+
+        String timeStr = "";
+        if (rawDate != null) {
+          try {
+            final date = DateTime.parse(rawDate);
+            timeStr = DateFormat('dd MMM yyyy, hh:mm a').format(date);
+          } catch (_) {}
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.015),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.03)),
+          ),
+          child: Row(
+            children: [
+              Text(
+                icon,
+                style: const TextStyle(fontSize: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      desc,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      timeStr,
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          // Background design
+          Container(
+            height: size.height,
+            width: size.width,
+            color: const Color(0xff090c15),
+          ),
+          Positioned(
+            top: -100,
+            left: -50,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primary.withOpacity(0.08),
+              ),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 90, sigmaY: 90),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  )
+                : _errorMessage != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                "Oops! Something went wrong",
+                                style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                _errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              ),
+                              const SizedBox(height: 24),
+                              ElevatedButton(
+                                onPressed: _loadProfileData,
+                                child: const Text("Retry"),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Custom App bar
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                                  onPressed: () => Navigator.pop(context),
+                                ),
+                                Text(
+                                  "PROFILE",
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.edit_rounded, color: Colors.white),
+                                  onPressed: () async {
+                                    final result = await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => EditProfileScreen(
+                                          user: _profile!,
+                                        ),
+                                      ),
+                                    );
+                                    if (result == true) {
+                                      _loadProfileData();
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Header Card
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+                            child: _buildGlassCard(
+                              child: Column(
+                                children: [
+                                  CircleAvatar(
+                                    backgroundColor: Colors.white.withOpacity(0.04),
+                                    radius: 44,
+                                    child: Text(
+                                      _profile!['profile_picture'] ?? "🏏",
+                                      style: const TextStyle(fontSize: 48),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _profile!['full_name'] ?? "CricUP Scorer",
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    "@${_profile!['username'] ?? 'user'}",
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          (_profile!['account_type'] ?? "Scorer").toString().toUpperCase(),
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 10,
+                                            color: AppColors.primary,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        _formatJoinDate(_profile!['joined_at']),
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          color: AppColors.textSecondary,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (_profile!['bio'] != null && _profile!['bio'].toString().isNotEmpty) ...[
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      _profile!['bio'],
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13,
+                                        color: AppColors.textSecondary,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          // Sliding Tab Bar
+                          Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.03),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.white.withOpacity(0.04)),
+                            ),
+                            child: TabBar(
+                              controller: _tabController,
+                              indicator: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              labelColor: Colors.black,
+                              unselectedLabelColor: Colors.white70,
+                              labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 13),
+                              unselectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13),
+                              tabs: const [
+                                Tab(text: "STATS"),
+                                Tab(text: "ACHIEVED"),
+                                Tab(text: "ACTIVITY"),
+                              ],
+                            ),
+                          ),
+
+                          // Tab View Contents
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                              child: TabBarView(
+                                controller: _tabController,
+                                children: [
+                                  _buildStatsTab(),
+                                  _buildAchievementsTab(),
+                                  _buildActivityTab(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -281,6 +281,40 @@ class ApiService {
     return response;
   }
 
+  // PROFILE ENDPOINTS
+  Future<Response> getProfile() async {
+    return await _dio.get('/profile/');
+  }
+
+  Future<Response> updateProfile({
+    required String fullName,
+    required String username,
+    String? bio,
+    String? profilePicture,
+  }) async {
+    return await _dio.put(
+      '/profile/',
+      data: {
+        'full_name': fullName,
+        'username': username,
+        if (bio != null) 'bio': bio,
+        if (profilePicture != null) 'profile_picture': profilePicture,
+      },
+    );
+  }
+
+  Future<Response> getProfileStats() async {
+    return await _dio.get('/profile/stats');
+  }
+
+  Future<Response> getProfileActivity() async {
+    return await _dio.get('/profile/activity');
+  }
+
+  Future<Response> getProfileAchievements() async {
+    return await _dio.get('/profile/achievements');
+  }
+
   // PLAYERS
   Future<Response> getPlayers({String? search}) async {
     final query = search != null ? {'search': search} : null;

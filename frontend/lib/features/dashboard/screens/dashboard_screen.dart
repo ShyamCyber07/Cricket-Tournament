@@ -12,6 +12,7 @@ import 'package:cricket_scorer/features/dashboard/screens/player_management_scre
 import 'package:cricket_scorer/features/matches/screens/scoring_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
 import 'package:cricket_scorer/features/tournaments/screens/tournament_list_screen.dart';
+import 'package:cricket_scorer/features/profile/screens/profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -78,23 +79,31 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         title: Row(
           children: [
             // User Avatar Indicator with Green Glow
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.primary, width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(0.2),
-                    blurRadius: 6,
-                  )
-                ],
-              ),
-              child: CircleAvatar(
-                backgroundColor: AppColors.surface,
-                radius: 18,
-                child: Text(
-                  userAvatar,
-                  style: const TextStyle(fontSize: 16),
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                );
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.primary, width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.2),
+                      blurRadius: 6,
+                    )
+                  ],
+                ),
+                child: CircleAvatar(
+                  backgroundColor: AppColors.surface,
+                  radius: 18,
+                  child: Text(
+                    userAvatar,
+                    style: const TextStyle(fontSize: 16),
+                  ),
                 ),
               ),
             ),
