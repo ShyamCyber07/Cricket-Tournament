@@ -93,7 +93,6 @@ async def lifespan(app: FastAPI):
         print("  Please migrate to PostgreSQL as soon as possible.")
         print("="*80 + "\n")
         
-    import os
     env_keys = sorted(list(os.environ.keys()))
     logger.info(f"Loaded environment variables: {', '.join(env_keys)}")
     
