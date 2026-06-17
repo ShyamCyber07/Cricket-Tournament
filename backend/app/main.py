@@ -220,6 +220,25 @@ def debug_db_url(secret: str = None):
     return PlainTextResponse(settings.DATABASE_URL)
 
 
+@app.get("/api/v1/debug-query")
+def debug_query(secret: str = None):
+    if secret != "cricup_e2e_secret_2026":
+        return PlainTextResponse("Unauthorized", status_code=403)
+    
+    from sqlalchemy import text
+    from app.core.database import SessionLocal
+    
+    db = SessionLocal()
+    try:
+        res = db.execute(text("SELECT assigned_scorer_id FROM matches LIMIT 1;")).fetchall()
+        return {"status": "success", "results": [str(r[0]) for r in res]}
+    except Exception as e:
+        import traceback
+        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
+    finally:
+        db.close()
+
+
 @app.get("/api/v1/debug-env")
 def debug_env():
     from fastapi import HTTPException
