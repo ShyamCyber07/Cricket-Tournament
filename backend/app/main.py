@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqladmin import Admin
+from sqladmin.authentication import AuthenticationBackend
+from starlette.requests import Request
+from starlette.responses import RedirectResponse, Response
 
 from app.core.config import settings
 from app.core.database import engine
@@ -161,10 +164,36 @@ async def generic_exception_handler(request: Request, exc: Exception):
 
 
 # Set up CORS middleware
-app.add_middleware(
+# Get allowed origins from environment (comma-separated)
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "")
+if settings.APP_ENV.lower() in ["production", "prod"]:
+    # In production, require ALLOWED_ORIGINS to be set
+    allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()]
+    if not allowed_origins:
+        print("\n" + "="*80)
+        print("  WARNING: CORS - ALLOWED_ORIGINS not set in production!")
+        print("  Set ALLOWED_ORIGINS env var (comma-separated domains)")
+        print("  Defaulting to restrictive CORS - only same origin allowed")
+        print("="*80 + "\n")
+        allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+else:
+    # Development: allow localhost and common dev ports
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://localhost:5000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8080",
+        "http://127.0.0.1:5000",
+        "http://10.0.2.2:8000",  # Android emulator
+        "http://10.0.2.2:3000",  # Android emulator
+    ]
+    if allowed_origins_str:
+        allowed_origins.extend([origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()])
 
+app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust for production
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -174,8 +203,72 @@ app.add_middleware(
 os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Set up SQLAdmin
+# Set up SQLAdmin with authentication
+class AdminAuthBackend(AuthenticationBackend):
+    async def login(self, request: Request) -> Response:
+        """Handle admin login - check credentials against admin users"""
+        from app.models.user import User
+        from app.core.security import verify_password
+        from app.core.database import SessionLocal
+
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+
+        db = SessionLocal()
+        try:
+            # Check if user exists and is admin
+            user = db.query(User).filter(User.email == username).first()
+            if user and user.role == "admin" and verify_password(password, user.password_hash):
+                # Create simple session - set a cookie
+                from app.core.security import create_access_token
+                token = create_access_token(str(user.id))
+                response = RedirectResponse(request.url_for("admin:index"), status_code=302)
+                response.set_cookie(
+                    key="cricup_admin_session",
+                    value=token,
+                    httponly=True,
+                    samesite="lax",
+                    max_age=60 * 60 * 24  # 24 hours
+                )
+                return response
+            return Response("Invalid credentials", status_code=401)
+        finally:
+            db.close()
+
+    async def logout(self, request: Request) -> Response:
+        response = RedirectResponse(request.url_for("admin:login"))
+        response.delete_cookie("cricup_admin_session")
+        return response
+
+    async def authenticate(self, request: Request) -> bool:
+        """Check if user is authenticated as admin"""
+        from jose import jwt, JWTError
+
+        token = request.cookies.get("cricup_admin_session")
+        if not token:
+            return False
+
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            user_id_str = payload.get("sub")
+            if not user_id_str:
+                return False
+
+            from app.models.user import User
+            from app.core.database import SessionLocal
+
+            db = SessionLocal()
+            try:
+                user = db.query(User).filter(User.id == user_id_str).first()
+                return user is not None and user.role == "admin"
+            finally:
+                db.close()
+        except JWTError:
+            return False
+
+# Create admin with authentication
 admin = Admin(app, engine, title="CricHeroes Admin Panel")
+admin.authentication_backend = AdminAuthBackend(secret_key=settings.SECRET_KEY)
 
 # Register admin views
 from app.admin.views import (
@@ -219,7 +312,11 @@ app.include_router(admin_router, prefix=f"{settings.API_V1_STR}", tags=["admin"]
 @app.get("/api/v1/debug-logs")
 def debug_logs(secret: str = None):
     from fastapi import HTTPException
+    # Debug endpoints disabled in production
     if settings.APP_ENV.lower() in ["production", "prod"]:
+        raise HTTPException(status_code=404, detail="Not Found")
+    # Also check for debug flag
+    if os.getenv("ENABLE_DEBUG_ENDPOINTS", "").lower() != "true":
         raise HTTPException(status_code=404, detail="Not Found")
     if secret != "cricup_e2e_secret_2026":
         return PlainTextResponse("Unauthorized", status_code=403)
@@ -231,7 +328,11 @@ def debug_logs(secret: str = None):
 @app.get("/api/v1/debug-env")
 def debug_env():
     from fastapi import HTTPException
+    # Debug endpoints disabled in production
     if settings.APP_ENV.lower() in ["production", "prod"]:
+        raise HTTPException(status_code=404, detail="Not Found")
+    # Also check for debug flag
+    if os.getenv("ENABLE_DEBUG_ENDPOINTS", "").lower() != "true":
         raise HTTPException(status_code=404, detail="Not Found")
 
     # 1. Print prefixes to logs
