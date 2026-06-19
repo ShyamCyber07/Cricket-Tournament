@@ -52,6 +52,8 @@ def list_teams(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if current_user.role == "admin":
+        return db.query(Team).all()
     return db.query(Team).filter(Team.created_by == current_user.id).all()
 
 @router.get("/{id}", response_model=TeamResponse)
@@ -200,8 +202,8 @@ def update_team(
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
-    # Check authorization (only creator can edit)
-    if team.created_by != current_user.id:
+    # Check authorization (creator or admin)
+    if team.created_by != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to manage this team")
 
     # Update name if provided and verify uniqueness
@@ -242,7 +244,7 @@ def delete_team(
         raise HTTPException(status_code=404, detail="Team not found")
 
     # Check authorization
-    if team.created_by != current_user.id:
+    if team.created_by != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to manage this team")
 
     # Block deletion if team belongs to active tournament (status == ongoing)

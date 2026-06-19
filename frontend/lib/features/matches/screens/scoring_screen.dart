@@ -618,14 +618,15 @@ class _ScoringScreenState extends State<ScoringScreen> {
     String selectedTossDecision = "bat";
 
     bool isSubmitting = false;
+    final screenContext = context;
 
     try {
       await showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) {
+        builder: (dialogContext) {
           return StatefulBuilder(
-            builder: (context, setDialogState) {
+            builder: (statefulContext, setDialogState) {
               return AlertDialog(
                 scrollable: true,
                 backgroundColor: AppColors.surface,
@@ -649,7 +650,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                       ],
                       onChanged: (val) {
                         if (val != null) {
-                          setDialogState(() {
+                           setDialogState(() {
                             selectedTossWinner = val;
                           });
                         }
@@ -696,13 +697,13 @@ class _ScoringScreenState extends State<ScoringScreen> {
                     onPressed: () async {
                       if (isSubmitting) return;
                       isSubmitting = true;
-                      Navigator.pop(context);
+                      Navigator.pop(statefulContext);
                       setState(() => _isLoading = true);
                       try {
                         await _apiService.submitToss(widget.matchId, selectedTossWinner, selectedTossDecision);
                         if (mounted) {
                           Navigator.pushReplacement(
-                            context,
+                            screenContext,
                             MaterialPageRoute(
                               builder: (context) => SquadSelectionScreen(
                                 matchId: widget.matchId,

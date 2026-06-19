@@ -40,6 +40,8 @@ from app.models import Base
 
 # Import routers
 from app.routers import auth, players, teams, matches, tournaments, profile
+from app.routers.admin import router as admin_router
+
 
 
 @asynccontextmanager
@@ -211,6 +213,8 @@ app.include_router(teams.router, prefix=f"{settings.API_V1_STR}/teams", tags=["t
 app.include_router(matches.router, prefix=f"{settings.API_V1_STR}/matches", tags=["matches"])
 app.include_router(tournaments.router, prefix=f"{settings.API_V1_STR}/tournaments", tags=["tournaments"])
 app.include_router(profile.router, prefix=f"{settings.API_V1_STR}/profile", tags=["profile"])
+app.include_router(admin_router, prefix=f"{settings.API_V1_STR}", tags=["admin"])
+
 
 @app.get("/api/v1/debug-logs")
 def debug_logs(secret: str = None):

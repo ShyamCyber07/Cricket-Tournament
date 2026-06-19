@@ -167,6 +167,7 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
       return;
     }
 
+    final screenContext = context;
     String strikerId = battingPlayers[0]['id'];
     String nonStrikerId = battingPlayers[1]['id'];
     String bowlerId = bowlingPlayers[0]['id'];
@@ -174,9 +175,9 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) {
+      builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
+          builder: (statefulContext, setDialogState) {
             return AlertDialog(
               scrollable: true,
               backgroundColor: AppColors.surface,
@@ -260,9 +261,9 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
               actions: [
                 ElevatedButton(
                   onPressed: () {
-                    Navigator.pop(context); // Close dialog
+                    Navigator.pop(statefulContext); // Close dialog
                     Navigator.pushReplacement(
-                      context,
+                      screenContext,
                       MaterialPageRoute(
                         builder: (context) => ScoringScreen(
                           matchId: widget.matchId,

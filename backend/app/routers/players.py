@@ -45,7 +45,10 @@ def list_players(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(Player).filter(Player.created_by == current_user.id)
+    if current_user.role == "admin":
+        query = db.query(Player)
+    else:
+        query = db.query(Player).filter(Player.created_by == current_user.id)
     if search:
         query = query.filter(Player.name.ilike(f"%{search}%"))
     return query.limit(50).all()
@@ -356,7 +359,7 @@ def update_player(
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    if player.created_by != current_user.id:
+    if player.created_by != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to manage this player")
 
     # Update fields if provided
@@ -380,7 +383,7 @@ def delete_player(
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    if player.created_by != current_user.id:
+    if player.created_by != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to manage this player")
 
     # Prevent deletion if player is in an active (non-completed/non-abandoned) match squad

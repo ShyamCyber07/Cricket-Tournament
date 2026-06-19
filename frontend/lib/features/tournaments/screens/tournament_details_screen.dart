@@ -495,6 +495,212 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
     );
   }
 
+  void _showEditTournamentDialog(Map<String, dynamic> summary) {
+    final nameController = TextEditingController(text: summary['name']);
+    final numTeamsController = TextEditingController(text: summary['num_teams']?.toString());
+    final startDateController = TextEditingController(text: summary['start_date']);
+    final endDateController = TextEditingController(text: summary['end_date']);
+    String selectedFormat = summary['format'] ?? 'Knockout';
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              title: Text("Edit Tournament", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(labelText: "Tournament Name"),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: selectedFormat,
+                      decoration: const InputDecoration(labelText: "Format"),
+                      dropdownColor: AppColors.surface,
+                      items: const [
+                        DropdownMenuItem(value: "Knockout", child: Text("Knockout")),
+                        DropdownMenuItem(value: "Round-Robin", child: Text("Round-Robin")),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() => selectedFormat = val);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: numTeamsController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: "Max Teams"),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: startDateController,
+                      decoration: const InputDecoration(labelText: "Start Date (YYYY-MM-DD)"),
+                      onTap: () async {
+                        DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.tryParse(startDateController.text) ?? DateTime.now(),
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          startDateController.text = picked.toString().split(' ').first;
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: endDateController,
+                      decoration: const InputDecoration(labelText: "End Date (YYYY-MM-DD)"),
+                      onTap: () async {
+                        DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.tryParse(endDateController.text) ?? DateTime.now(),
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          endDateController.text = picked.toString().split(' ').first;
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    setState(() => _isLoading = true);
+                    try {
+                      await _apiService.updateTournament(widget.tournamentId, {
+                        'name': nameController.text.trim(),
+                        'format': selectedFormat,
+                        'num_teams': int.tryParse(numTeamsController.text) ?? 4,
+                        'start_date': startDateController.text.trim(),
+                        'end_date': endDateController.text.trim(),
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Tournament updated!"), backgroundColor: AppColors.primary),
+                      );
+                      _fetchData();
+                    } catch (e) {
+                      setState(() => _isLoading = false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Update failed: $e"), backgroundColor: AppColors.error),
+                      );
+                    }
+                  },
+                  child: const Text("Save"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showDeleteTournamentDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text("Delete Tournament", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        content: Text("Are you sure you want to delete this tournament? This action is irreversible.", style: GoogleFonts.outfit()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              setState(() => _isLoading = true);
+              try {
+                await _apiService.deleteTournament(widget.tournamentId);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Tournament deleted successfully"), backgroundColor: AppColors.primary),
+                );
+                Navigator.pop(context); // Go back to tournaments list
+              } catch (e) {
+                setState(() => _isLoading = false);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Failed to delete: $e"), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showReportTournamentDialog() {
+    final reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text("Report Tournament", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text("Help us understand the issue. Why are you reporting this tournament?", style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: "Enter reason for reporting...",
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final reason = reasonController.text.trim();
+              if (reason.isEmpty) return;
+              Navigator.pop(context);
+              setState(() => _isLoading = true);
+              try {
+                await _apiService.submitReport('tournament', widget.tournamentId, reason);
+                setState(() => _isLoading = false);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Tournament reported successfully"), backgroundColor: AppColors.primary),
+                );
+              } catch (e) {
+                setState(() => _isLoading = false);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Failed to report: $e"), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text("Submit"),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -511,6 +717,28 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
 
     return Scaffold(
       appBar: AppBar(
+        actions: [
+          if (_currentUser != null) ...[
+            if (_currentUser!['id'].toString() == summary['organizer_id']?.toString() || _currentUser!['role'] == 'admin') ...[
+              IconButton(
+                icon: const Icon(Icons.edit, color: Colors.white),
+                tooltip: "Edit Tournament",
+                onPressed: () => _showEditTournamentDialog(summary),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete, color: AppColors.error),
+                tooltip: "Delete Tournament",
+                onPressed: _showDeleteTournamentDialog,
+              ),
+            ] else ...[
+              IconButton(
+                icon: const Icon(Icons.report_problem_outlined, color: Colors.white),
+                tooltip: "Report Tournament",
+                onPressed: _showReportTournamentDialog,
+              ),
+            ]
+          ]
+        ],
         title: Row(
           children: [
             _buildTournamentLogo(summary['banner_url'], widget.tournamentName, size: 36),

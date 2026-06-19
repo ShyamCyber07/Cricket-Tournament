@@ -13,7 +13,8 @@ from app.schemas.match import (
     MatchCreate, MatchResponse, TossSubmit, SquadSubmit, 
     BallCreate, LiveMatchState, StrikerState, BowlerState, 
     InningsSummarySchema, RecentBallSchema,
-    OverSummarySchema, ActivePartnershipSchema, BatterBowlerStatsSchema
+    OverSummarySchema, ActivePartnershipSchema, BatterBowlerStatsSchema,
+    MatchUpdate
 )
 from fastapi.encoders import jsonable_encoder
 
@@ -59,6 +60,8 @@ def list_matches(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if current_user.role == "admin":
+        return db.query(Match).order_by(desc(Match.created_at)).all()
     return db.query(Match).filter(
         or_(
             Match.created_by == current_user.id,
@@ -1254,4 +1257,45 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
         match_summary=summary,
         innings=innings_list
     )
+
+@router.put("/{id}", response_model=MatchResponse)
+def update_match(
+    id: UUID,
+    match_in: MatchUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    match = db.query(Match).filter(Match.id == id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    if match.created_by != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to edit this match")
+
+    update_data = match_in.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(match, field, value)
+
+    db.add(match)
+    db.commit()
+    db.refresh(match)
+    return match
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_match(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    match = db.query(Match).filter(Match.id == id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    if match.created_by != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to delete this match")
+
+    db.delete(match)
+    db.commit()
+    return None
+
 

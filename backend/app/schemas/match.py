@@ -232,3 +232,17 @@ class MatchSummaryCardSchema(BaseModel):
 class MatchScorecardResponse(BaseModel):
     match_summary: MatchSummaryCardSchema
     innings: List[InningsScorecardSchema]
+
+class MatchUpdate(BaseModel):
+    venue: Optional[str] = None
+    match_date: Optional[datetime] = None
+    match_type: Optional[str] = None
+    over_limit: Optional[int] = None
+    status: Optional[str] = None
+    toss_winner_id: Optional[UUID] = None
+    toss_decision: Optional[str] = None
+    winner_id: Optional[UUID] = None
+    win_margin_runs: Optional[int] = None
+    win_margin_wickets: Optional[int] = None
+    assigned_scorer_id: Optional[UUID] = None
+

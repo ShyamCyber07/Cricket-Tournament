@@ -29,8 +29,11 @@ class User(Base):
     last_otp_sent_at = Column(DateTime, nullable=True)
     bio = Column(String, nullable=True)
     account_type = Column(String, default="Scorer", nullable=True)
+    role = Column(String, default="user", nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
     joined_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
 
     # Relationships
     players = relationship("Player", back_populates="user", uselist=False, foreign_keys="[Player.user_id]")
@@ -69,3 +72,20 @@ class RefreshToken(Base):
     token = Column(String, unique=True, index=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class Report(Base):
+    __tablename__ = "reports"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    reporter_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    content_type = Column(String, nullable=False) # e.g. "tournament", "match", "team", "player"
+    content_id = Column(UUID(as_uuid=True), nullable=False)
+    reason = Column(String, nullable=False)
+    status = Column(String, default="pending", nullable=False) # pending, resolved, dismissed
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    resolved_at = Column(DateTime, nullable=True)
+    resolved_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    reporter = relationship("User", foreign_keys=[reporter_id])
+    resolver = relationship("User", foreign_keys=[resolved_by])
+

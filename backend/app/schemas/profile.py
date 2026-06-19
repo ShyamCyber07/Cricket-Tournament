@@ -14,8 +14,11 @@ class ProfileResponse(BaseModel):
     bio: Optional[str] = None
     account_type: Optional[str] = None
     joined_at: Optional[datetime] = None
+    role: str = "user"
+    is_active: bool = True
 
     model_config = ConfigDict(from_attributes=True)
+
 
 class ProfileUpdate(BaseModel):
     full_name: Optional[str] = None

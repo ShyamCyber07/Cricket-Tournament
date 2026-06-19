@@ -135,6 +135,261 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     }
   }
 
+  Widget _buildMatchMenu(dynamic match) {
+    final isOwner = match['created_by']?.toString() == _currentUser['id']?.toString() || _currentUser['role'] == 'admin';
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, color: Colors.white70),
+      backgroundColor: AppColors.surface,
+      onSelected: (val) {
+        if (val == 'edit') {
+          _showEditMatchDialog(match);
+        } else if (val == 'delete') {
+          _showDeleteMatchDialog(match);
+        } else if (val == 'report') {
+          _showReportMatchDialog(match);
+        }
+      },
+      itemBuilder: (context) => isOwner
+          ? [
+              PopupMenuItem(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    const Icon(Icons.edit, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Text("Edit Match", style: GoogleFonts.outfit(color: Colors.white)),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    const Icon(Icons.delete, color: AppColors.error, size: 18),
+                    const SizedBox(width: 8),
+                    Text("Delete Match", style: GoogleFonts.outfit(color: AppColors.error)),
+                  ],
+                ),
+              ),
+            ]
+          : [
+              PopupMenuItem(
+                value: 'report',
+                child: Row(
+                  children: [
+                    const Icon(Icons.report_problem_outlined, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Text("Report Match", style: GoogleFonts.outfit(color: Colors.white)),
+                  ],
+                ),
+              ),
+            ],
+    );
+  }
+
+  void _showEditMatchDialog(dynamic match) {
+    final venueController = TextEditingController(text: match['venue']);
+    final matchDateController = TextEditingController(text: match['match_date']);
+    String selectedMatchType = match['match_type'] ?? 'T20';
+    int selectedOverLimit = match['over_limit'] ?? 20;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              title: Text("Edit Match", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: venueController,
+                      decoration: const InputDecoration(labelText: "Venue"),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: matchDateController,
+                      decoration: const InputDecoration(labelText: "Match Date (YYYY-MM-DD)"),
+                      onTap: () async {
+                        DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.tryParse(matchDateController.text) ?? DateTime.now(),
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          matchDateController.text = picked.toString().split(' ').first;
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: selectedMatchType,
+                      decoration: const InputDecoration(labelText: "Match Type"),
+                      dropdownColor: AppColors.surface,
+                      items: const [
+                        DropdownMenuItem(value: "T20", child: Text("T20")),
+                        DropdownMenuItem(value: "ODI", child: Text("ODI")),
+                        DropdownMenuItem(value: "Test", child: Text("Test")),
+                        DropdownMenuItem(value: "Friendly", child: Text("Friendly")),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() => selectedMatchType = val);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      value: selectedOverLimit,
+                      decoration: const InputDecoration(labelText: "Overs Limit"),
+                      dropdownColor: AppColors.surface,
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text("1 Over")),
+                        DropdownMenuItem(value: 2, child: Text("2 Overs")),
+                        DropdownMenuItem(value: 5, child: Text("5 Overs")),
+                        DropdownMenuItem(value: 10, child: Text("10 Overs")),
+                        DropdownMenuItem(value: 20, child: Text("20 Overs")),
+                        DropdownMenuItem(value: 50, child: Text("50 Overs")),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() => selectedOverLimit = val);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    setState(() => _isLoading = true);
+                    try {
+                      await _apiService.updateMatch(match['id'], {
+                        'venue': venueController.text.trim(),
+                        'match_date': matchDateController.text.trim(),
+                        'match_type': selectedMatchType,
+                        'over_limit': selectedOverLimit,
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Match updated successfully!"), backgroundColor: AppColors.primary),
+                      );
+                      _fetchMatches();
+                    } catch (e) {
+                      setState(() => _isLoading = false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Failed to update: $e"), backgroundColor: AppColors.error),
+                      );
+                    }
+                  },
+                  child: const Text("Save"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showDeleteMatchDialog(dynamic match) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text("Delete Match", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        content: Text("Are you sure you want to delete this match? This action is irreversible.", style: GoogleFonts.outfit()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              setState(() => _isLoading = true);
+              try {
+                await _apiService.deleteMatch(match['id']);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Match deleted successfully"), backgroundColor: AppColors.primary),
+                );
+                _fetchMatches();
+              } catch (e) {
+                setState(() => _isLoading = false);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Failed to delete match: $e"), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showReportMatchDialog(dynamic match) {
+    final reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text("Report Match", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text("Help us understand the issue. Why are you reporting this match?", style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: "Enter reason for reporting...",
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final reason = reasonController.text.trim();
+              if (reason.isEmpty) return;
+              Navigator.pop(context);
+              setState(() => _isLoading = true);
+              try {
+                await _apiService.submitReport('match', match['id'], reason);
+                setState(() => _isLoading = false);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Match reported successfully"), backgroundColor: AppColors.primary),
+                );
+              } catch (e) {
+                setState(() => _isLoading = false);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Failed to report: $e"), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text("Submit"),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Separate matches into categories
@@ -449,9 +704,17 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     style: GoogleFonts.outfit(color: AppColors.secondary, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 ),
-                Text(
-                  match['match_type'].toString().toUpperCase(),
-                  style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w700),
+                Row(
+                  children: [
+                    Text(
+                      match['match_type'].toString().toUpperCase(),
+                      style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w700),
+                    ),
+                    GestureDetector(
+                      onTap: () {},
+                      child: _buildMatchMenu(match),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -579,6 +842,10 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   ),
                 ],
               ),
+            ),
+            GestureDetector(
+              onTap: () {},
+              child: _buildMatchMenu(match),
             ),
             const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.primary, size: 16),
           ],
@@ -737,7 +1004,16 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               "Type: ${match['match_type']} • Overs: ${match['over_limit']}",
               style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
             ),
-            trailing: const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textSecondary, size: 14),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: () {},
+                  child: _buildMatchMenu(match),
+                ),
+                const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textSecondary, size: 14),
+              ],
+            ),
             onTap: () async {
               await Navigator.push(
                 context,

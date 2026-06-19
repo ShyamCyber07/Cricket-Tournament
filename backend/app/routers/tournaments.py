@@ -16,7 +16,7 @@ from app.models.user import User
 from app.models.cricket import Tournament, Team, TournamentTeam, Match, Innings, TeamPlayer, Player, Ball, MatchSquad
 from app.schemas.tournament import (
     TournamentCreate, TournamentResponse, PointsTableEntry, 
-    LeaderboardResponse, PlayerLeaderboardEntry
+    LeaderboardResponse, PlayerLeaderboardEntry, TournamentUpdate
 )
 
 router = APIRouter()
@@ -685,3 +685,44 @@ def upload_tournament_logo(
     db.commit()
     db.refresh(tour)
     return {"url": url, "banner_url": url}
+
+@router.put("/{id}", response_model=TournamentResponse)
+def update_tournament(
+    id: UUID,
+    tour_in: TournamentUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tour = db.query(Tournament).filter(Tournament.id == id).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+        
+    if tour.organizer_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to edit this tournament")
+
+    update_data = tour_in.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(tour, field, value)
+
+    db.add(tour)
+    db.commit()
+    db.refresh(tour)
+    return tour
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_tournament(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tour = db.query(Tournament).filter(Tournament.id == id).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+
+    if tour.organizer_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to delete this tournament")
+
+    db.delete(tour)
+    db.commit()
+    return None
+

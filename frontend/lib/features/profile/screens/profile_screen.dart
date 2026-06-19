@@ -6,6 +6,7 @@ import 'package:cricket_scorer/core/api_service.dart';
 import 'package:cricket_scorer/core/app_config.dart';
 import 'package:intl/intl.dart';
 import 'edit_profile_screen.dart';
+import 'package:cricket_scorer/features/admin/screens/admin_dashboard_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -643,6 +644,27 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                         fontSize: 13,
                                         color: AppColors.textSecondary,
                                         height: 1.4,
+                                      ),
+                                    ),
+                                  ],
+                                  if (_profile!['role'] == 'admin') ...[
+                                    const SizedBox(height: 16),
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => const AdminDashboardScreen()),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.admin_panel_settings_rounded, color: Colors.white),
+                                      label: const Text("Admin Control Panel"),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primary,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(16),
+                                        ),
                                       ),
                                     ),
                                   ],

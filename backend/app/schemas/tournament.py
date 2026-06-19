@@ -49,3 +49,14 @@ class PlayerLeaderboardEntry(BaseModel):
 class LeaderboardResponse(BaseModel):
     top_batsmen: List[PlayerLeaderboardEntry] = []
     top_bowlers: List[PlayerLeaderboardEntry] = []
+
+class TournamentUpdate(BaseModel):
+    name: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    format: Optional[str] = None
+    num_teams: Optional[int] = None
+    banner_url: Optional[str] = None
+    status: Optional[str] = None
+    winner_id: Optional[UUID] = None
+

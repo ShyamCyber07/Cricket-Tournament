@@ -52,6 +52,13 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     if user is None:
         raise credentials_exception
         
+    # Check if user is active/disabled
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account has been disabled."
+        )
+
     # Check if lockout is still active (just in case they have a token but got locked out)
     if user.lockout_until and user.lockout_until > get_utc_now():
         raise HTTPException(
@@ -60,6 +67,7 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
         )
         
     return user
+
 
 def create_refresh_token(db: Session, user_id: UUID) -> str:
     token_str = secrets.token_urlsafe(64)
@@ -127,6 +135,7 @@ def signup(user_in: UserSignup, db: Session = Depends(get_db)):
             email_verified=False,
             profile_completed=False,
             provider="local",
+            role="admin" if user_in.email.strip().lower() == "cricupservice@gmail.com" else "user",
             otp_code=otp_code,
             otp_expiry=otp_expiry,
             last_otp_sent_at=get_utc_now(),
@@ -195,6 +204,8 @@ def verify_otp(req: VerifyOTPRequest, db: Session = Depends(get_db)):
     user.email_verified = True
     user.otp_code = None
     user.otp_expiry = None
+    if user.email.strip().lower() == "cricupservice@gmail.com" and user.role != "admin":
+        user.role = "admin"
     db.commit()
     
     access_token = create_access_token(subject=user.id)
@@ -296,6 +307,8 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     user.failed_login_attempts = 0
     user.lockout_until = None
     user.last_login = get_utc_now()
+    if user.email.strip().lower() == "cricupservice@gmail.com" and user.role != "admin":
+        user.role = "admin"
     db.commit()
     
     access_token = create_access_token(subject=user.id)
@@ -663,6 +676,8 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
         if picture and not user.profile_photo_url:
             user.profile_photo_url = picture
             user.profile_picture = picture
+        if user.email.strip().lower() == "cricupservice@gmail.com" and user.role != "admin":
+            user.role = "admin"
         db.commit()
         db.refresh(user)
     else:
@@ -683,6 +698,7 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
             provider="google",
             email_verified=True,
             profile_completed=False,
+            role="admin" if email == "cricupservice@gmail.com" else "user",
             created_at=get_utc_now()
         )
         db.add(user)

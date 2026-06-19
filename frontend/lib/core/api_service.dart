@@ -627,6 +627,57 @@ class ApiService {
     return await _dio.get('/tournaments/$tournamentId/dashboard');
   }
 
+  Future<Response> updateTournament(String id, Map<String, dynamic> data) async {
+    return await _dio.put('/tournaments/$id', data: data);
+  }
+
+  Future<Response> deleteTournament(String id) async {
+    return await _dio.delete('/tournaments/$id');
+  }
+
+  Future<Response> updateMatch(String id, Map<String, dynamic> data) async {
+    return await _dio.put('/matches/$id', data: data);
+  }
+
+  Future<Response> deleteMatch(String id) async {
+    return await _dio.delete('/matches/$id');
+  }
+
+  Future<Response> submitReport(String contentType, String contentId, String reason) async {
+    return await _dio.post('/reports', data: {
+      'content_type': contentType,
+      'content_id': contentId,
+      'reason': reason,
+    });
+  }
+
+  Future<Response> adminGetAnalytics() async {
+    return await _dio.get('/admin/analytics');
+  }
+
+  Future<Response> adminGetUsers({String? query}) async {
+    return await _dio.get(
+      '/admin/users',
+      queryParameters: query != null ? {'search': query} : null,
+    );
+  }
+
+  Future<Response> adminToggleUserActive(String userId) async {
+    return await _dio.put('/admin/users/$userId/toggle-active');
+  }
+
+  Future<Response> adminDeleteUser(String userId) async {
+    return await _dio.delete('/admin/users/$userId');
+  }
+
+  Future<Response> adminGetReports() async {
+    return await _dio.get('/admin/reports');
+  }
+
+  Future<Response> adminResolveReport(String reportId, {String action = 'resolved'}) async {
+    return await _dio.post('/admin/reports/$reportId/resolve', queryParameters: {'action': action});
+  }
+
   Future<Response> testConnection() async {
     final uri = Uri.parse(AppConfig.baseUrl);
     final hostUrl = "${uri.scheme}://${uri.host}:${uri.port}/";
@@ -637,3 +688,4 @@ class ApiService {
     return await dio.get(hostUrl);
   }
 }
+
