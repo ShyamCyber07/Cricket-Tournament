@@ -148,29 +148,61 @@ class _ScoringScreenState extends State<ScoringScreen> {
     List<Widget> children = [];
     for (int i = 0; i < currentOverBalls.length; i++) {
       final ball = currentOverBalls[i];
+      final coord = ball['over_ball_coord']?.toString() ?? ''; // e.g., "12.1"
       final label = ball['ball_label']?.toString() ?? '';
       final isWkt = ball['is_wicket'] == true;
 
       Color textColor = Colors.white;
+      Color bgColor = Colors.transparent;
       if (isWkt) {
         textColor = AppColors.error;
+        bgColor = AppColors.error.withOpacity(0.15);
       } else if (label == '4') {
         textColor = AppColors.primary;
+        bgColor = AppColors.primary.withOpacity(0.15);
       } else if (label == '6') {
         textColor = AppColors.secondary;
+        bgColor = AppColors.secondary.withOpacity(0.15);
       } else if (label.contains('WD') || label.contains('NB') || label.contains('LB') || label.contains('B')) {
         textColor = AppColors.accent;
+        bgColor = AppColors.accent.withOpacity(0.15);
       } else if (label == '0') {
         textColor = AppColors.textSecondary;
       }
 
+      // Show coordinate + label in a pill
       children.add(
-        Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.w900,
-            fontSize: 12,
-            color: textColor,
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: textColor.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                coord,
+                style: GoogleFonts.outfit(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: textColor.withOpacity(0.6),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  color: textColor,
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -178,12 +210,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
       if (i < currentOverBalls.length - 1) {
         children.add(
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6.0),
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
             child: Text(
               "|",
               style: GoogleFonts.outfit(
                 color: Colors.white24,
-                fontSize: 12,
+                fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -192,9 +224,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
       }
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: children,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: children,
+      ),
     );
   }
 
@@ -291,6 +326,107 @@ class _ScoringScreenState extends State<ScoringScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildLastOversTimeline(List<dynamic> recentBalls) {
+    if (recentBalls.isEmpty) return const SizedBox.shrink();
+
+    // Get unique over numbers (last 2 overs)
+    final Set<int> overNumbers = {};
+    final List<int> sortedOverNumbers = [];
+    for (int i = recentBalls.length - 1; i >= 0 && sortedOverNumbers.length < 2; i--) {
+      final overNum = recentBalls[i]['over_number'] as int;
+      if (!overNumbers.contains(overNum)) {
+        overNumbers.add(overNum);
+        sortedOverNumbers.insert(0, overNum);
+      }
+    }
+
+    if (sortedOverNumbers.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Row(
+        children: sortedOverNumbers.map((overNum) {
+          final overBalls = recentBalls.where((b) => b['over_number'] == overNum).toList();
+          final totalRuns = overBalls.fold<int>(0, (sum, b) => sum + ((b['runs'] as int?) ?? 0));
+          final wickets = overBalls.where((b) => b['is_wicket'] == true).length;
+
+          return Expanded(
+            child: Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surface.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.primary.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Over $overNum",
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      Text(
+                        "$totalRuns/$wickets",
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          color: totalRuns >= 10 ? AppColors.primary : Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Mini ball-by-ball display
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: overBalls.map((ball) {
+                      final label = ball['ball_label']?.toString() ?? '';
+                      final isWkt = ball['is_wicket'] == true;
+                      Color chipColor = Colors.grey[700]!;
+                      if (isWkt) chipColor = AppColors.error;
+                      else if (label == '4') chipColor = Colors.green[700]!;
+                      else if (label == '6') chipColor = AppColors.primary;
+                      else if (label.contains('WD') || label.contains('NB')) chipColor = Colors.purple[700]!;
+                      else if (label == '0') chipColor = Colors.grey[800]!;
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: chipColor,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          label,
+                          style: GoogleFonts.outfit(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -1141,12 +1277,16 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
   Future<void> _undo() async {
     try {
+      // Optimistic update: show feedback immediately
+      _showSnackBar("Undoing last ball...", AppColors.primary);
+
       await _apiService.undoLastBall(widget.matchId);
+
       // Clear active states to let fetch live state resync them
       _activeStrikerId = "";
       _activeNonStrikerId = "";
       _activeBowlerId = "";
-      
+
       await _fetchLiveState();
       _showSnackBar("Last ball undone", AppColors.primary);
     } catch (e) {
@@ -1822,6 +1962,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
                     // 3. Chronological Ball History Ticker
                     if (recentBalls.isNotEmpty) ...[
+                      // Current Over with coordinates
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
                         child: Row(
@@ -1832,10 +1973,20 @@ class _ScoringScreenState extends State<ScoringScreen> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      // Last 2 overs summary
+                      _buildLastOversTimeline(recentBalls),
                       const SizedBox(height: 8),
+                      // Full recent balls history
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Text("Recent Balls:", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text("Recent Balls:", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+                            Text("Last ${recentBalls.length} balls", style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textSecondary)),
+                          ],
+                        ),
                       ),
                       _buildRecentBallsHistoryList(recentBalls),
                     ],
