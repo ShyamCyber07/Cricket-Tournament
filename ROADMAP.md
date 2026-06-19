@@ -7,20 +7,20 @@
 - Identify bugs, incomplete features, dead code, security issues
 - Generate: ROADMAP.md, BUGS.md, IMPROVEMENTS.md
 
-### Phase 2: Scorer Timeline
-**Status**: Not Started
-- Implement professional ball-by-ball timeline
-- Current Over display: `1 | 4 | WD | 0 | W | 6`
-- Recent Balls display with coordinates
-- Undo must update timeline instantly
+### Phase 2: Scorer Timeline (COMPLETED)
+- ✅ Professional ball-by-ball timeline
+- ✅ Current Over display with coordinates (12.1, 12.2, etc.)
+- ✅ Recent Balls display with coordinates
+- ✅ Last 2 Overs summary panel
+- ✅ Undo shows instant feedback
 
 ### Phase 3: Viewer Mode Overhaul
-**Status**: Not Started
-- Ball-by-ball timeline
-- Recent overs
-- Partnership card
-- Batter card
-- Bowler card
+**Status**: In Progress
+- Ball-by-ball timeline ✅ (from Phase 2)
+- Recent overs ✅ (from Phase 2)
+- Partnership card (existing)
+- Batter card (existing)
+- Bowler card (existing)
 - Match information
 - Better spacing and typography
 
@@ -29,13 +29,13 @@
 - Global search for teams, players, tournaments, matches
 - Loading states and empty states
 
-### Phase 5: Security Review
-**Status**: Not Started
-- CORS configuration
-- Admin permissions
-- SQLAdmin access
-- Upload endpoints
-- JWT auth
+### Phase 5: Security Review (COMPLETED)
+- ✅ CORS configuration restricted
+- ✅ Admin permissions protected
+- ✅ SQLAdmin access with auth
+- ✅ Debug endpoints disabled in production
+- ✅ SECRET_KEY validation
+- Generated: SECURITY_AUDIT.md, SECURITY_DEPLOYMENT_VERIFICATION.md
 
 ### Phase 6: Testing
 **Status**: Not Started
@@ -48,14 +48,14 @@
 ## Implementation Priority
 
 ### P0 - Critical (Security & Core Functionality)
-1. Fix CORS allow_origins (currently "*")
-2. Secure/remove debug endpoints
-3. Protect SQLAdmin access
-4. Scorer timeline implementation
-5. Undo timeline sync fix
+1. ✅ Fix CORS allow_origins
+2. ✅ Secure/remove debug endpoints
+3. ✅ Protect SQLAdmin access
+4. ✅ Scorer timeline implementation
+5. ✅ Undo timeline sync fix
 
 ### P1 - High (User Experience)
-1. Viewer mode overhaul
+1. Viewer mode overhaul (in progress)
 2. Global search implementation
 3. Loading/empty states
 
