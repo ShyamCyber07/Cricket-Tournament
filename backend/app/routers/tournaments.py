@@ -1,9 +1,13 @@
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from uuid import UUID
+import uuid
+import os
+from PIL import Image
+import io
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -429,6 +433,8 @@ def get_tournament_dashboard(id: UUID, db: Session = Depends(get_db)):
             "over_limit": m.over_limit,
             "team1_name": m.team1.name,
             "team2_name": m.team2.name,
+            "team1_logo_url": m.team1.logo_url if m.team1 else None,
+            "team2_logo_url": m.team2.logo_url if m.team2 else None,
             "team1_id": str(m.team1_id),
             "team2_id": str(m.team2_id),
             "status": m.status,
@@ -624,3 +630,58 @@ def check_and_progress_tournament(tournament_id: UUID, db: Session):
                 tour.status = "completed"
                 db.add(tour)
                 db.commit()
+
+
+# Helper to crop image to square and resize
+def crop_and_resize_image(image_bytes: bytes, target_size=(256, 256)) -> bytes:
+    img = Image.open(io.BytesIO(image_bytes))
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    width, height = img.size
+    min_side = min(width, height)
+    left = (width - min_side) // 2
+    top = (height - min_side) // 2
+    right = left + min_side
+    bottom = top + min_side
+    img = img.crop((left, top, right, bottom))
+    img = img.resize(target_size, Image.Resampling.LANCZOS)
+    out_io = io.BytesIO()
+    img.save(out_io, format="JPEG", quality=90)
+    return out_io.getvalue()
+
+
+@router.post("/{id}/upload-logo")
+def upload_tournament_logo(
+    id: UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tour = db.query(Tournament).filter(Tournament.id == id).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    if tour.organizer_id != current_user.id and tour.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to manage this tournament")
+
+    ext = file.filename.split(".")[-1].lower()
+    if ext not in ["jpg", "jpeg", "png", "gif", "webp"]:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only image files are allowed.")
+
+    filename = f"tour_{tour.id}_{uuid.uuid4().hex}.jpg"
+    os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
+    filepath = os.path.join("static", "uploads", filename)
+
+    try:
+        content = file.file.read()
+        processed_content = crop_and_resize_image(content)
+        with open(filepath, "wb") as buffer:
+            buffer.write(processed_content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to process image: {str(e)}")
+
+    url = f"/static/uploads/{filename}"
+    tour.banner_url = url
+    db.add(tour)
+    db.commit()
+    db.refresh(tour)
+    return {"url": url, "banner_url": url}

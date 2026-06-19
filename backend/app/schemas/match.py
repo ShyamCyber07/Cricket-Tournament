@@ -21,6 +21,8 @@ class MatchResponse(MatchBase):
     team2_id: UUID
     team1_name: Optional[str] = None
     team2_name: Optional[str] = None
+    team1_logo_url: Optional[str] = None
+    team2_logo_url: Optional[str] = None
     tournament_id: Optional[UUID] = None
     status: str
     toss_winner_id: Optional[UUID] = None
@@ -103,6 +105,8 @@ class RecentBallSchema(BaseModel):
     runs: int
     extra_type: str
     is_wicket: bool
+    over_ball_coord: Optional[str] = None
+    over_number: Optional[int] = None
 
 class OverSummarySchema(BaseModel):
     over_number: int
@@ -142,8 +146,8 @@ class LiveMatchState(BaseModel):
     assigned_scorer_id: Optional[UUID] = None
     tournament_organizer_id: Optional[UUID] = None
     
-    # Metadata fields
     tournament_name: Optional[str] = None
+    tournament_logo_url: Optional[str] = None
     toss_winner_name: Optional[str] = None
     toss_decision: Optional[str] = None
     team1_logo_url: Optional[str] = None

@@ -716,34 +716,41 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
             b_name = db.query(Player.name).filter(Player.id == match.current_bowler_id).scalar() or "Bowler"
             bowler_state = calculate_bowler_live_stats(match.current_bowler_id, b_name)
 
-    # Compile recent balls ticker (last 12 balls)
+    # Compile recent balls ticker (all balls in chronological order with coordinates)
     recent_balls = []
     if current_innings:
         balls_logged = db.query(Ball).filter(
             Ball.innings_id == current_innings.id
-        ).order_by(Ball.ball_number.desc()).limit(12).all()
-        # reverse to show chronological order
-        balls_logged.reverse()
+        ).order_by(Ball.created_at.asc(), Ball.ball_number.asc()).all()
         
+        legit_balls_in_over = {}
         for bl in balls_logged:
+            over = bl.over_number
+            legit_count = legit_balls_in_over.get(over, 0)
+            coord = f"{over}.{legit_count + 1}"
+            if bl.extra_type not in ["wide", "no_ball"]:
+                legit_balls_in_over[over] = legit_count + 1
+                
             label = str(bl.runs_batsman)
             if bl.is_wicket:
                 label = "W"
             elif bl.extra_type == "wide":
-                label = f"{bl.runs_extras}Wd"
+                label = "WD"
             elif bl.extra_type == "no_ball":
-                label = f"{bl.runs_batsman + bl.runs_extras}Nb"
+                label = "NB"
             elif bl.extra_type == "bye":
-                label = f"{bl.runs_extras}B"
+                label = "B"
             elif bl.extra_type == "leg_bye":
-                label = f"{bl.runs_extras}Lb"
+                label = "LB"
                 
             recent_balls.append(
                 RecentBallSchema(
                     ball_label=label,
                     runs=bl.runs_batsman + bl.runs_extras,
                     extra_type=bl.extra_type,
-                    is_wicket=bl.is_wicket
+                    is_wicket=bl.is_wicket,
+                    over_ball_coord=coord,
+                    over_number=over
                 )
             )
 
@@ -754,6 +761,7 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
 
     # Metadata fields calculation
     tournament_name = match.tournament.name if match.tournament else None
+    tournament_logo_url = match.tournament.banner_url if match.tournament else None
     toss_winner_name = match.toss_winner.name if match.toss_winner else None
     toss_decision = match.toss_decision
     team1_logo_url = match.team1.logo_url if match.team1 else None
@@ -862,6 +870,7 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
         tournament_organizer_id=match.tournament.organizer_id if match.tournament else None,
         
         tournament_name=tournament_name,
+        tournament_logo_url=tournament_logo_url,
         toss_winner_name=toss_winner_name,
         toss_decision=toss_decision,
         team1_logo_url=team1_logo_url,

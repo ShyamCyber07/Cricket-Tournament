@@ -1,7 +1,11 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from uuid import UUID
+import uuid
+import os
+from PIL import Image
+import io
 
 from app.core.database import get_db
 from app.routers.auth import get_current_user
@@ -311,3 +315,58 @@ def remove_player_from_team(
     db.commit()
     db.refresh(team)
     return team
+
+
+# Helper to crop image to square and resize
+def crop_and_resize_image(image_bytes: bytes, target_size=(256, 256)) -> bytes:
+    img = Image.open(io.BytesIO(image_bytes))
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    width, height = img.size
+    min_side = min(width, height)
+    left = (width - min_side) // 2
+    top = (height - min_side) // 2
+    right = left + min_side
+    bottom = top + min_side
+    img = img.crop((left, top, right, bottom))
+    img = img.resize(target_size, Image.Resampling.LANCZOS)
+    out_io = io.BytesIO()
+    img.save(out_io, format="JPEG", quality=90)
+    return out_io.getvalue()
+
+
+@router.post("/{id}/upload-logo")
+def upload_team_logo(
+    id: UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    if team.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to manage this team")
+
+    ext = file.filename.split(".")[-1].lower()
+    if ext not in ["jpg", "jpeg", "png", "gif", "webp"]:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only image files are allowed.")
+
+    filename = f"team_{team.id}_{uuid.uuid4().hex}.jpg"
+    os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
+    filepath = os.path.join("static", "uploads", filename)
+
+    try:
+        content = file.file.read()
+        processed_content = crop_and_resize_image(content)
+        with open(filepath, "wb") as buffer:
+            buffer.write(processed_content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to process image: {str(e)}")
+
+    url = f"/static/uploads/{filename}"
+    team.logo_url = url
+    db.add(team)
+    db.commit()
+    db.refresh(team)
+    return {"url": url, "logo_url": url}
