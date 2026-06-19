@@ -48,10 +48,13 @@ class Settings(BaseSettings):
         # Check SECRET_KEY
         if not self.SECRET_KEY:
             if app_env in ["production", "prod"]:
-                raise ValueError(
-                    "SECRET_KEY must be set in production! "
-                    "Set SECRET_KEY environment variable."
-                )
+                # WARNING: Generate a key but warn loudly
+                self.SECRET_KEY = secrets.token_urlsafe(32)
+                print("\n" + "="*80)
+                print("  WARNING: SECRET_KEY not set in production!")
+                print("  Using auto-generated key (sessions will be invalid on restart)")
+                print("  Set SECRET_KEY environment variable for persistent sessions")
+                print("="*80 + "\n")
             else:
                 # Generate random key for development
                 self.SECRET_KEY = secrets.token_urlsafe(32)
