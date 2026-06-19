@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 class TournamentCreateScreen extends StatefulWidget {
   const TournamentCreateScreen({super.key});
@@ -20,6 +22,7 @@ class _TournamentCreateScreenState extends State<TournamentCreateScreen> {
   int _numTeams = 4;
   DateTime? _startDate;
   DateTime? _endDate;
+  File? _logoFile;
   bool _isSubmitting = false;
 
   final List<String> _formats = ["League", "Knockout", "League + Knockout"];
@@ -110,13 +113,18 @@ class _TournamentCreateScreenState extends State<TournamentCreateScreen> {
 
     try {
       final DateFormat formatter = DateFormat('yyyy-MM-dd');
-      await _apiService.createTournament(
+      final res = await _apiService.createTournament(
         name: _nameController.text.trim(),
         startDate: formatter.format(_startDate!),
         endDate: formatter.format(_endDate!),
         format: _format,
         numTeams: _numTeams,
       );
+
+      final tourId = res.data['id'].toString();
+      if (_logoFile != null) {
+        await _apiService.uploadTournamentLogo(tourId, _logoFile!.path);
+      }
 
       setState(() => _isSubmitting = false);
       if (mounted) {
@@ -184,7 +192,52 @@ class _TournamentCreateScreenState extends State<TournamentCreateScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
+
+              // Tournament Logo Selector
+              Center(
+                child: Column(
+                  children: [
+                    GestureDetector(
+                      onTap: () async {
+                        final picker = ImagePicker();
+                        final picked = await picker.pickImage(source: ImageSource.gallery);
+                        if (picked != null) {
+                          setState(() {
+                            _logoFile = File(picked.path);
+                          });
+                        }
+                      },
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.primary, width: 1.5),
+                        ),
+                        child: _logoFile != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(40),
+                                child: Image.file(
+                                  _logoFile!,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : const Icon(Icons.add_a_photo_outlined, color: AppColors.primary, size: 28),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _logoFile != null ? "Change Tournament Logo" : "Upload Tournament Logo",
+                      style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
 
               // Tournament Name
               Text(

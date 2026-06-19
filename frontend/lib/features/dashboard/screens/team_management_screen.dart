@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
+import 'package:cricket_scorer/core/app_config.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import 'package:dio/dio.dart';
 
 class TeamManagementScreen extends StatefulWidget {
@@ -18,6 +21,56 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
 
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+
+  String _resolvePhotoUrl(String? path) {
+    if (path == null || path.isEmpty) return "";
+    if (path.startsWith("http")) return path;
+    final uri = Uri.parse(AppConfig.baseUrl);
+    final host = "${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}";
+    return "$host$path";
+  }
+
+  Widget _buildTeamLogo(String? logoUrl, String teamName, {double size = 40}) {
+    if (logoUrl != null && logoUrl.isNotEmpty) {
+      final url = _resolvePhotoUrl(logoUrl);
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(size / 2),
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildInitialsLogo(teamName, size),
+        ),
+      );
+    } else {
+      return _buildInitialsLogo(teamName, size);
+    }
+  }
+
+  Widget _buildInitialsLogo(String name, double size) {
+    final initials = name.trim().split(RegExp(r'\s+'))
+        .take(2)
+        .map((e) => e.isNotEmpty ? e[0].toUpperCase() : '')
+        .join();
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.secondary.withOpacity(0.15),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initials.isEmpty ? "?" : initials,
+        style: GoogleFonts.outfit(
+          fontWeight: FontWeight.bold,
+          color: AppColors.secondary,
+          fontSize: size * 0.4,
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -181,40 +234,104 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
 
   void _openCreateTeamDialog() {
     _nameController.clear();
+    File? selectedLogoFile;
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          scrollable: true,
-          backgroundColor: AppColors.surface,
-          title: Text("Create Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-          content: Form(
-            key: _formKey,
-            child: TextFormField(
-              controller: _nameController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: "Team Name",
-                prefixIcon: Icon(Icons.shield_outlined, color: AppColors.primary),
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              scrollable: true,
+              backgroundColor: AppColors.surface,
+              title: Text("Create Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              content: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () async {
+                        final picker = ImagePicker();
+                        final picked = await picker.pickImage(source: ImageSource.gallery);
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedLogoFile = File(picked.path);
+                          });
+                        }
+                      },
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.primary, width: 1.5),
+                        ),
+                        child: selectedLogoFile != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(40),
+                                child: Image.file(
+                                  selectedLogoFile!,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : const Icon(Icons.add_a_photo_outlined, color: AppColors.primary, size: 28),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      selectedLogoFile != null ? "Tap to change logo" : "Tap to upload logo",
+                      style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 20),
+                    TextFormField(
+                      controller: _nameController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        labelText: "Team Name",
+                        prefixIcon: Icon(Icons.shield_outlined, color: AppColors.primary),
+                      ),
+                      validator: (val) =>
+                          val == null || val.trim().isEmpty ? "Please enter a team name" : null,
+                    ),
+                  ],
+                ),
               ),
-              validator: (val) =>
-                  val == null || val.trim().isEmpty ? "Please enter a team name" : null,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-            ),
-            ElevatedButton(
-              onPressed: _createTeam,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.black,
-              ),
-              child: Text("Create", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (!_formKey.currentState!.validate()) return;
+                    Navigator.pop(context); // close dialog
+                    setState(() => _isLoading = true);
+                    try {
+                      final res = await _apiService.createTeam(_nameController.text.trim());
+                      final teamId = res.data['id'].toString();
+                      if (selectedLogoFile != null) {
+                        await _apiService.uploadTeamLogo(teamId, selectedLogoFile!.path);
+                      }
+                      _showSnackBar("Team created successfully!", AppColors.primary);
+                      _nameController.clear();
+                      _fetchTeams();
+                    } catch (e) {
+                      setState(() => _isLoading = false);
+                      _showSnackBar("Failed to create team: $e", AppColors.error);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.black,
+                  ),
+                  child: Text("Create", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -232,6 +349,9 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
       selectedCaptainId = null;
     }
 
+    File? selectedLogoFile;
+    final currentLogoUrl = team['logo_url'];
+
     showDialog(
       context: context,
       builder: (context) {
@@ -245,6 +365,55 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    GestureDetector(
+                      onTap: () async {
+                        final picker = ImagePicker();
+                        final picked = await picker.pickImage(source: ImageSource.gallery);
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedLogoFile = File(picked.path);
+                          });
+                        }
+                      },
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.primary, width: 1.5),
+                        ),
+                        child: selectedLogoFile != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(40),
+                                child: Image.file(
+                                  selectedLogoFile!,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : (currentLogoUrl != null && currentLogoUrl.toString().isNotEmpty
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(40),
+                                    child: Image.network(
+                                      _resolvePhotoUrl(currentLogoUrl),
+                                      width: 80,
+                                      height: 80,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) =>
+                                          _buildInitialsLogo(team['name'] ?? '?', 80),
+                                    ),
+                                  )
+                                : _buildInitialsLogo(team['name'] ?? '?', 80)),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Tap to change logo",
+                      style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 20),
                     Form(
                       key: _formKey,
                       child: TextFormField(
@@ -301,6 +470,9 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                       // Send UUID(int=0) to clear captain if null
                       final capId = selectedCaptainId ?? '00000000-0000-0000-0000-000000000000';
                       await _apiService.updateTeam(teamId, _nameController.text.trim(), captainId: capId);
+                      if (selectedLogoFile != null) {
+                        await _apiService.uploadTeamLogo(teamId, selectedLogoFile!.path);
+                      }
                       _showSnackBar("Team updated successfully!", AppColors.primary);
                       _nameController.clear();
                       _fetchTeams();
@@ -674,14 +846,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ListTile(
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.secondary.withOpacity(0.15),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.shield_outlined, color: AppColors.secondary),
-                        ),
+                        leading: _buildTeamLogo(team['logo_url'], team['name']),
                         title: Text(
                           team['name'],
                           style: GoogleFonts.outfit(fontWeight: FontWeight.bold),

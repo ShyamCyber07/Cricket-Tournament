@@ -24,7 +24,10 @@ def create_team(
     # Check if team name exists
     existing = db.query(Team).filter(Team.name == team_in.name).first()
     if existing:
-        return existing
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Team name already taken"
+        )
 
     # If captain_id is provided, check if player exists
     if team_in.captain_id:

@@ -414,7 +414,7 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
                   ),
                   const Divider(color: Colors.white24, height: 20),
                   _buildRosterList(
-                    _team1Players,
+                    _team1Players.where((p) => !_selectedTeam2.contains(p['id'].toString())).toList(),
                     _selectedTeam1,
                     _team1CaptainId,
                     _team1KeeperId,
@@ -460,6 +460,10 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
                           _selectedTeam2.remove(pId);
                         } else {
                           _selectedTeam2.add(pId);
+                          // Sync: deselect from Team 1 if they are selected here
+                          _selectedTeam1.remove(pId);
+                          if (_team1CaptainId == pId) _team1CaptainId = null;
+                          if (_team1KeeperId == pId) _team1KeeperId = null;
                         }
                       });
                     },

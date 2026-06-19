@@ -4,6 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:dio/dio.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
+import 'package:cricket_scorer/core/app_config.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import 'package:cricket_scorer/features/matches/screens/scoring_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
 
@@ -27,18 +30,216 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
   bool _isLoading = true;
   Map<String, dynamic> _dashboardData = {};
   List<dynamic> _allTeams = []; // All teams in the system for registration dropdown
+  Map<String, dynamic>? _currentUser;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _fetchData();
+    _fetchUserProfile();
+  }
+
+  Future<void> _fetchUserProfile() async {
+    try {
+      final res = await _apiService.getProfile();
+      if (mounted) {
+        setState(() {
+          _currentUser = res.data;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching user profile: $e");
+    }
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  String _resolvePhotoUrl(String? path) {
+    if (path == null || path.isEmpty) return "";
+    if (path.startsWith("http")) return path;
+    final uri = Uri.parse(AppConfig.baseUrl);
+    final host = "${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}";
+    return "$host$path";
+  }
+
+  Widget _buildTournamentLogo(String? logoUrl, String tourName, {double size = 48}) {
+    if (logoUrl != null && logoUrl.isNotEmpty) {
+      final url = _resolvePhotoUrl(logoUrl);
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildInitialsLogo(tourName, size),
+        ),
+      );
+    } else {
+      return _buildInitialsLogo(tourName, size);
+    }
+  }
+
+  Widget _buildInitialsLogo(String name, double size) {
+    final initials = name.trim().split(RegExp(r'\s+'))
+        .take(2)
+        .map((e) => e.isNotEmpty ? e[0].toUpperCase() : '')
+        .join();
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initials.isEmpty ? "?" : initials,
+        style: GoogleFonts.outfit(
+          fontWeight: FontWeight.bold,
+          color: AppColors.primary,
+          fontSize: size * 0.38,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeamLogo(String? logoUrl, String teamName, {double size = 28}) {
+    if (logoUrl != null && logoUrl.isNotEmpty) {
+      final url = _resolvePhotoUrl(logoUrl);
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(size / 2),
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildTeamInitialsLogo(teamName, size),
+        ),
+      );
+    } else {
+      return _buildTeamInitialsLogo(teamName, size);
+    }
+  }
+
+  Widget _buildTeamInitialsLogo(String name, double size) {
+    final initials = name.trim().split(RegExp(r'\s+'))
+        .take(2)
+        .map((e) => e.isNotEmpty ? e[0].toUpperCase() : '')
+        .join();
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.secondary.withOpacity(0.15),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initials.isEmpty ? "?" : initials,
+        style: GoogleFonts.outfit(
+          fontWeight: FontWeight.bold,
+          color: AppColors.secondary,
+          fontSize: size * 0.4,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTournamentHeaderCard(Map<String, dynamic> summary) {
+    final logoUrl = summary['banner_url'];
+    final tourName = summary['name'] ?? 'Tournament';
+    final organizerId = summary['organizer_id']?.toString();
+    final isOrganizer = _currentUser != null && _currentUser!['id'].toString() == organizerId;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: AppColors.glassDecoration(borderRadius: BorderRadius.circular(16)),
+      child: Row(
+        children: [
+          Stack(
+            children: [
+              _buildTournamentLogo(logoUrl, tourName, size: 72),
+              if (isOrganizer)
+                Positioned(
+                  right: -4,
+                  bottom: -4,
+                  child: GestureDetector(
+                    onTap: () async {
+                      final picker = ImagePicker();
+                      final picked = await picker.pickImage(source: ImageSource.gallery);
+                      if (picked != null) {
+                        setState(() => _isLoading = true);
+                        try {
+                          await _apiService.uploadTournamentLogo(widget.tournamentId, picked.path);
+                          _fetchData();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Tournament logo updated!"), backgroundColor: AppColors.primary),
+                          );
+                        } catch (e) {
+                          setState(() => _isLoading = false);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("Failed to upload logo: $e"), backgroundColor: AppColors.error),
+                          );
+                        }
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.camera_alt,
+                        size: 14,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tourName,
+                  style: GoogleFonts.outfit(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Format: ${summary['format']} • ${summary['num_teams']} Teams Limit",
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  "Dates: ${summary['start_date']} to ${summary['end_date']}",
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _fetchData() async {
@@ -310,15 +511,25 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
 
     return Scaffold(
       appBar: AppBar(
-        title: Column(
+        title: Row(
           children: [
-            Text(
-              widget.tournamentName,
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            Text(
-              "$format • ${status.toString().toUpperCase()}",
-              style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+            _buildTournamentLogo(summary['banner_url'], widget.tournamentName, size: 36),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.tournamentName,
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    "$format • ${status.toString().toUpperCase()}",
+                    style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -355,6 +566,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
     final leaderboards = _dashboardData['leaderboards'] ?? {};
     final topBatsmen = leaderboards['top_batsmen'] as List<dynamic>? ?? [];
     final topBowlers = leaderboards['top_bowlers'] as List<dynamic>? ?? [];
+    final summary = _dashboardData['summary'] ?? {};
 
     return RefreshIndicator(
       onRefresh: _fetchData,
@@ -365,6 +577,8 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildTournamentHeaderCard(summary),
+            const SizedBox(height: 20),
             // Completed Winner Card with Trophy & Confetti Particles
             if (status.toLowerCase() == 'completed' && winnerName != null) ...[
               _buildChampionsCelebrationCard(winnerName),
@@ -675,7 +889,15 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                         ),
                       ),
                     ),
-                    DataCell(Text(entry['team_name'] ?? '', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white))),
+                    DataCell(
+                      Row(
+                        children: [
+                          _buildTeamLogo(entry['logo_url'], entry['team_name'] ?? 'Team', size: 24),
+                          const SizedBox(width: 8),
+                          Text(entry['team_name'] ?? '', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+                        ],
+                      ),
+                    ),
                     DataCell(Text("${entry['played']}", style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold))),
                     DataCell(Text("${entry['won']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold))),
                     DataCell(Text("${entry['lost']}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.error))),
@@ -802,6 +1024,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                       return Card(
                         margin: const EdgeInsets.only(bottom: 10),
                         child: ListTile(
+                          leading: _buildTeamLogo(team['logo_url'], team['team_name'] ?? 'Team'),
                           title: Text(
                             team['team_name'] ?? '',
                             style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
@@ -931,15 +1154,19 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
             ),
             const SizedBox(height: 16),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                _buildTeamLogo(match['team1_logo_url'], match['team1_name'] ?? 'Team', size: 28),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     match['team1_name'] ?? 'Unknown Team',
                     style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ),
-                Text("vs", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Text("vs", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                ),
                 Expanded(
                   child: Text(
                     match['team2_name'] ?? 'Unknown Team',
@@ -947,6 +1174,8 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                     style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ),
+                const SizedBox(width: 8),
+                _buildTeamLogo(match['team2_logo_url'], match['team2_name'] ?? 'Team', size: 28),
               ],
             ),
             const SizedBox(height: 12),

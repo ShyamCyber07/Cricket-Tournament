@@ -1,0 +1,31 @@
+{
+  "match_id": "ef217337-f3d2-450e-99de-fd2bc9ddeeec",
+  "team1_id": "d3b3c9c7-8305-40ec-9f9e-14ce54d2b571",
+  "team2_id": "4508ba50-eef9-44cf-8a00-12d1b62174e8",
+  "team1_players": [
+    "247a4293-135b-4e28-b829-6f1e46f06f18",
+    "e08c5c86-08af-4cd3-8196-230459e20336",
+    "403e85cd-98ff-40ff-a3dd-a42d72bfed78",
+    "c8f02f27-6fbe-42f3-adfe-398a23523f5f",
+    "797a51c0-a6d6-412e-88dc-c82650008500",
+    "316a1ef9-145b-495c-adf9-b9221ba5f0ea",
+    "082dea80-f062-40c5-86d1-56868dfc25f3",
+    "8ea1ab91-9ab2-42fc-a015-75d6cb5e676d",
+    "eabcb4f0-e003-42bd-b2c5-ef46cf2c70e2",
+    "30664e1f-d59e-45a4-9c74-9c5ad2cb1292",
+    "c15a18b8-7183-42f8-ba35-75bb049474f0"
+  ],
+  "team2_players": [
+    "8b61ffe7-4099-4adc-841a-830c3d39b48d",
+    "93eb5898-b81b-4599-8426-6dac2c3d7a45",
+    "ed33e00a-c409-4cdc-94be-d9293d63e11a",
+    "c591ba2f-5c28-4ba2-b5aa-30e1abbf229f",
+    "24d8564d-ee51-4032-bca7-f979ac9f99f4",
+    "34790bf2-2250-43bb-a8bc-ccc343b1b69c",
+    "d18a9d71-79da-4cfb-a605-640dfb79bbd3",
+    "198e6e81-2b24-4fe4-a326-06f0f637b33d",
+    "9f76fb13-0f37-4af3-9642-faf2e8d80eff",
+    "51bad071-81fc-49b2-aedc-a10364724cd5",
+    "ad5c3b8c-bce9-48d2-8e4d-5bb27e44f2b3"
+  ]
+}

@@ -51,6 +51,48 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     return "$host$path";
   }
 
+  Widget _buildTeamLogo(String? logoUrl, String teamName, {double size = 28}) {
+    if (logoUrl != null && logoUrl.isNotEmpty) {
+      final url = _resolvePhotoUrl(logoUrl);
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(size / 2),
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildTeamInitialsLogo(teamName, size),
+        ),
+      );
+    } else {
+      return _buildTeamInitialsLogo(teamName, size);
+    }
+  }
+
+  Widget _buildTeamInitialsLogo(String name, double size) {
+    final initials = name.trim().split(RegExp(r'\s+'))
+        .take(2)
+        .map((e) => e.isNotEmpty ? e[0].toUpperCase() : '')
+        .join();
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.secondary.withOpacity(0.15),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initials.isEmpty ? "?" : initials,
+        style: GoogleFonts.outfit(
+          fontWeight: FontWeight.bold,
+          color: AppColors.secondary,
+          fontSize: size * 0.4,
+        ),
+      ),
+    );
+  }
+
   Future<void> _fetchUserProfile() async {
     try {
       final res = await _apiService.getProfile();
@@ -418,12 +460,20 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    match['team1_name'] ?? 'Unknown Team',
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildTeamLogo(match['team1_logo_url'], match['team1_name'] ?? 'Team', size: 32),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          match['team1_name'] ?? 'Unknown Team',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 15),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Container(
@@ -438,12 +488,21 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   ),
                 ),
                 Expanded(
-                  child: Text(
-                    match['team2_name'] ?? 'Unknown Team',
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          match['team2_name'] ?? 'Unknown Team',
+                          textAlign: TextAlign.end,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 15),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildTeamLogo(match['team2_logo_url'], match['team2_name'] ?? 'Team', size: 32),
+                    ],
                   ),
                 ),
               ],
@@ -494,13 +553,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         ),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.sensors_rounded, color: AppColors.primary, size: 24),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTeamLogo(match['team1_logo_url'], match['team1_name'] ?? 'Team', size: 32),
+                const SizedBox(width: 4),
+                _buildTeamLogo(match['team2_logo_url'], match['team2_name'] ?? 'Team', size: 32),
+              ],
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -662,21 +721,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       child: Column(
         children: [
           ListTile(
-            leading: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.03),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: const Color(0x14FFFFFF)),
-              ),
-              child: Text(
-                "FINISHED",
-                style: GoogleFonts.outfit(
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textSecondary,
-                ),
-              ),
+            leading: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTeamLogo(match['team1_logo_url'], match['team1_name'] ?? 'Team', size: 28),
+                const SizedBox(width: 4),
+                _buildTeamLogo(match['team2_logo_url'], match['team2_name'] ?? 'Team', size: 28),
+              ],
             ),
             title: Text(
               "Match @ ${match['venue']}",

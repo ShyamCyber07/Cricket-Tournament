@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
+import 'package:cricket_scorer/core/app_config.dart';
 import 'tournament_create_screen.dart';
 import 'tournament_details_screen.dart';
 
@@ -16,6 +17,56 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
   final ApiService _apiService = ApiService();
   List<dynamic> _tournaments = [];
   bool _isLoading = true;
+
+  String _resolvePhotoUrl(String? path) {
+    if (path == null || path.isEmpty) return "";
+    if (path.startsWith("http")) return path;
+    final uri = Uri.parse(AppConfig.baseUrl);
+    final host = "${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}";
+    return "$host$path";
+  }
+
+  Widget _buildTournamentLogo(String? logoUrl, String tourName, {double size = 48}) {
+    if (logoUrl != null && logoUrl.isNotEmpty) {
+      final url = _resolvePhotoUrl(logoUrl);
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8), // rounded corners instead of perfect circle for tournament logos
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildInitialsLogo(tourName, size),
+        ),
+      );
+    } else {
+      return _buildInitialsLogo(tourName, size);
+    }
+  }
+
+  Widget _buildInitialsLogo(String name, double size) {
+    final initials = name.trim().split(RegExp(r'\s+'))
+        .take(2)
+        .map((e) => e.isNotEmpty ? e[0].toUpperCase() : '')
+        .join();
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initials.isEmpty ? "?" : initials,
+        style: GoogleFonts.outfit(
+          fontWeight: FontWeight.bold,
+          color: AppColors.primary,
+          fontSize: size * 0.38,
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -190,13 +241,20 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  tour['name'] ?? 'Unnamed Tournament',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                Row(
+                                  children: [
+                                    _buildTournamentLogo(tour['banner_url'], tour['name'] ?? 'Tournament'),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Text(
+                                        tour['name'] ?? 'Unnamed Tournament',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                                 const SizedBox(height: 8),
                                 Row(

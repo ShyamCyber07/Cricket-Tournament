@@ -35,6 +35,266 @@ class _ScoringScreenState extends State<ScoringScreen> {
   Map<String, dynamic>? _liveState;
   bool _isLoading = true;
 
+  String _resolvePhotoUrl(String? path) {
+    if (path == null || path.isEmpty) return "";
+    if (path.startsWith("http")) return path;
+    final uri = Uri.parse(AppConfig.baseUrl);
+    final host = "${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}";
+    return "$host$path";
+  }
+
+  String? _getBattingTeamLogoUrl(Map<String, dynamic>? currentInnings) {
+    if (currentInnings == null || _liveState == null) return null;
+    final battingTeamId = currentInnings['batting_team_id']?.toString();
+    if (battingTeamId == _liveState!['team1_id']?.toString()) {
+      return _liveState!['team1_logo_url'];
+    } else if (battingTeamId == _liveState!['team2_id']?.toString()) {
+      return _liveState!['team2_logo_url'];
+    }
+    return null;
+  }
+
+  Widget _buildTeamLogo(String? logoUrl, String teamName, {double size = 28}) {
+    if (logoUrl != null && logoUrl.isNotEmpty) {
+      final url = _resolvePhotoUrl(logoUrl);
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(size / 2),
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildTeamInitialsLogo(teamName, size),
+        ),
+      );
+    } else {
+      return _buildTeamInitialsLogo(teamName, size);
+    }
+  }
+
+  Widget _buildTeamInitialsLogo(String name, double size) {
+    final initials = name.trim().split(RegExp(r'\s+'))
+        .take(2)
+        .map((e) => e.isNotEmpty ? e[0].toUpperCase() : '')
+        .join();
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.secondary.withOpacity(0.15),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initials.isEmpty ? "?" : initials,
+        style: GoogleFonts.outfit(
+          fontWeight: FontWeight.bold,
+          color: AppColors.secondary,
+          fontSize: size * 0.4,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTournamentLogo(String? logoUrl, String tourName, {double size = 48}) {
+    if (logoUrl != null && logoUrl.isNotEmpty) {
+      final url = _resolvePhotoUrl(logoUrl);
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildInitialsLogo(tourName, size),
+        ),
+      );
+    } else {
+      return _buildInitialsLogo(tourName, size);
+    }
+  }
+
+  Widget _buildInitialsLogo(String name, double size) {
+    final initials = name.trim().split(RegExp(r'\s+'))
+        .take(2)
+        .map((e) => e.isNotEmpty ? e[0].toUpperCase() : '')
+        .join();
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initials.isEmpty ? "?" : initials,
+        style: GoogleFonts.outfit(
+          fontWeight: FontWeight.bold,
+          color: AppColors.primary,
+          fontSize: size * 0.38,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentOverRow(List<dynamic> currentOverBalls) {
+    if (currentOverBalls.isEmpty) {
+      return Text(
+        "No balls bowled in this over yet.",
+        style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11),
+      );
+    }
+    List<Widget> children = [];
+    for (int i = 0; i < currentOverBalls.length; i++) {
+      final ball = currentOverBalls[i];
+      final label = ball['ball_label']?.toString() ?? '';
+      final isWkt = ball['is_wicket'] == true;
+
+      Color textColor = Colors.white;
+      if (isWkt) {
+        textColor = AppColors.error;
+      } else if (label == '4') {
+        textColor = AppColors.primary;
+      } else if (label == '6') {
+        textColor = AppColors.secondary;
+      } else if (label.contains('WD') || label.contains('NB') || label.contains('LB') || label.contains('B')) {
+        textColor = AppColors.accent;
+      } else if (label == '0') {
+        textColor = AppColors.textSecondary;
+      }
+
+      children.add(
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.w900,
+            fontSize: 12,
+            color: textColor,
+          ),
+        ),
+      );
+
+      if (i < currentOverBalls.length - 1) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6.0),
+            child: Text(
+              "|",
+              style: GoogleFonts.outfit(
+                color: Colors.white24,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
+  }
+
+  Widget _buildRecentBallsHistoryList(List<dynamic> recentBalls) {
+    if (recentBalls.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+        child: Text(
+          "No balls bowled yet.",
+          style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12),
+        ),
+      );
+    }
+    return Container(
+      height: 48,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        physics: const BouncingScrollPhysics(),
+        itemCount: recentBalls.length,
+        itemBuilder: (context, index) {
+          final ball = recentBalls[index];
+          final coord = ball['over_ball_coord']?.toString() ?? '';
+          final label = ball['ball_label']?.toString() ?? '';
+          final isWkt = ball['is_wicket'] == true;
+
+          Color bg = const Color(0xFF1E293B);
+          Color fg = Colors.white;
+
+          if (isWkt) {
+            bg = AppColors.error;
+            fg = Colors.white;
+          } else if (label == '4') {
+            bg = Colors.green[700]!;
+            fg = Colors.white;
+          } else if (label == '6') {
+            bg = AppColors.primary;
+            fg = Colors.black;
+          } else if (label == '0' || label == '•') {
+            bg = Colors.grey[850]!;
+            fg = Colors.white70;
+          } else if (label.toLowerCase().contains('wd')) {
+            bg = Colors.purple[700]!;
+            fg = Colors.white;
+          } else if (label.toLowerCase().contains('nb')) {
+            bg = Colors.orange[700]!;
+            fg = Colors.white;
+          } else if (label == '1' || label == '2' || label == '3') {
+            bg = const Color(0xFF334155);
+            fg = Colors.white;
+          }
+
+          return Container(
+            margin: const EdgeInsets.only(right: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isWkt ? AppColors.error : const Color(0x14FFFFFF),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: bg.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                )
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  coord,
+                  style: GoogleFonts.outfit(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: fg.withOpacity(0.7),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: fg,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   bool _showScorecard = false;
   Map<String, dynamic>? _scorecardData;
   bool _isScorecardLoading = false;
@@ -1324,7 +1584,36 @@ class _ScoringScreenState extends State<ScoringScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
-                                    const SizedBox(height: 8),
+                                    if (_liveState!['tournament_name'] != null) ...[
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 4.0),
+                                        child: Row(
+                                          children: [
+                                            _buildTournamentLogo(
+                                              _liveState!['tournament_logo_url'],
+                                              _liveState!['tournament_name']!,
+                                              size: 24,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                _liveState!['tournament_name']!.toUpperCase(),
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: AppColors.primary,
+                                                  letterSpacing: 1.2,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                    ] else ...[
+                                      const SizedBox(height: 8),
+                                    ],
                                     // 1. Digital Scoreboard Card
                                     Container(
                                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1345,12 +1634,24 @@ class _ScoringScreenState extends State<ScoringScreen> {
                                           Row(
                                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
-                                              Text(
-                                                currentInnings != null
-                                                    ? currentInnings['batting_team_name'].toString().toUpperCase()
-                                                    : "BATTING TEAM",
-                                                style: GoogleFonts.outfit(
-                                                    fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70),
+                                              Row(
+                                                children: [
+                                                  _buildTeamLogo(
+                                                    _getBattingTeamLogoUrl(currentInnings),
+                                                    currentInnings != null
+                                                        ? currentInnings['batting_team_name'].toString()
+                                                        : "Batting Team",
+                                                    size: 24,
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    currentInnings != null
+                                                        ? currentInnings['batting_team_name'].toString().toUpperCase()
+                                                        : "BATTING TEAM",
+                                                    style: GoogleFonts.outfit(
+                                                        fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70),
+                                                  ),
+                                                ],
                                               ),
                                               if (_liveState!['target'] != null)
                                                 Container(
@@ -1518,73 +1819,24 @@ class _ScoringScreenState extends State<ScoringScreen> {
                       ),
                     ),
 
-                    // 3. Chronological Ball History Ticker (Color coded)
+                    // 3. Chronological Ball History Ticker
                     if (recentBalls.isNotEmpty) ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Text("This Over:", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
-                      ),
-                      Container(
-                        height: 40,
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: recentBalls.length,
-                          itemBuilder: (context, index) {
-                            final ball = recentBalls[index];
-                            final label = ball['ball_label']?.toString() ?? '';
-                            final isWkt = ball['is_wicket'] == true;
-
-                            Color ballBgColor = const Color(0x0DFFFFFF);
-                            Color ballTextColor = Colors.white;
-
-                            if (isWkt) {
-                              ballBgColor = AppColors.error;
-                              ballTextColor = Colors.white;
-                            } else if (label == '4') {
-                              ballBgColor = AppColors.primary;
-                              ballTextColor = Colors.black;
-                            } else if (label == '6') {
-                              ballBgColor = AppColors.secondary;
-                              ballTextColor = Colors.black;
-                            } else if (label == '0' || label == '•') {
-                              ballBgColor = Colors.white.withOpacity(0.04);
-                              ballTextColor = AppColors.textSecondary;
-                            } else if (label.toLowerCase().contains('wd') ||
-                                       label.toLowerCase().contains('nb') ||
-                                       label.toLowerCase().contains('lb') ||
-                                       label.toLowerCase().contains('b')) {
-                              ballBgColor = AppColors.accent;
-                              ballTextColor = Colors.black;
-                            }
-
-                            return Container(
-                              width: 34,
-                              height: 34,
-                              margin: const EdgeInsets.only(right: 8),
-                              decoration: BoxDecoration(
-                                color: ballBgColor,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: isWkt 
-                                      ? AppColors.error 
-                                      : (label == '4' || label == '6' ? Colors.transparent : const Color(0x14FFFFFF)),
-                                ),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                label,
-                                style: GoogleFonts.outfit(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 11,
-                                  color: ballTextColor,
-                                ),
-                              ),
-                            );
-                          },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text("Current Over:", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+                            _buildCurrentOverRow(recentBalls.where((b) => b['over_number'] == (recentBalls.isEmpty ? 1 : recentBalls.last['over_number'] as int)).toList()),
+                          ],
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Text("Recent Balls:", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+                      ),
+                      _buildRecentBallsHistoryList(recentBalls),
                     ],
 
                     // 4. Large Circle Scoring Controls Pad
@@ -2103,16 +2355,30 @@ class _ScoringScreenState extends State<ScoringScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Text(
-                    "$tName • $mType".toUpperCase(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textSecondary,
-                      letterSpacing: 1,
-                    ),
+                  child: Row(
+                    children: [
+                      if (_liveState?['tournament_logo_url'] != null) ...[
+                        _buildTournamentLogo(
+                          _liveState!['tournament_logo_url'],
+                          tName,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: Text(
+                          "$tName • $mType".toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textSecondary,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -2267,7 +2533,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
               ),
               child: ClipOval(
                 child: logoUrl != null && logoUrl.isNotEmpty
-                    ? Image.network(logoUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _buildFallbackAvatar(name, themeColor))
+                    ? Image.network(_resolvePhotoUrl(logoUrl), fit: BoxFit.cover, errorBuilder: (_, __, ___) => _buildFallbackAvatar(name, themeColor))
                     : _buildFallbackAvatar(name, themeColor),
               ),
             ),
@@ -2395,17 +2661,18 @@ class _ScoringScreenState extends State<ScoringScreen> {
             ),
             const SizedBox(height: 12),
             SizedBox(
-              height: 40,
+              height: 48,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 itemCount: recentBalls.length,
                 itemBuilder: (context, index) {
                   final ball = recentBalls[index];
+                  final coord = ball['over_ball_coord']?.toString() ?? '';
                   final label = ball['ball_label']?.toString() ?? '•';
                   final isWkt = ball['is_wicket'] == true;
 
-                  Color bg = const Color(0xFF1E293B); // Default Slate
+                  Color bg = const Color(0xFF1E293B);
                   Color fg = Colors.white;
 
                   if (isWkt) {
@@ -2415,7 +2682,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                     bg = Colors.green[700]!;
                     fg = Colors.white;
                   } else if (label == '6') {
-                    bg = AppColors.primary; // Bright Neon Green
+                    bg = AppColors.primary;
                     fg = Colors.black;
                   } else if (label == '0' || label == '•') {
                     bg = Colors.grey[850]!;
@@ -2427,17 +2694,20 @@ class _ScoringScreenState extends State<ScoringScreen> {
                     bg = Colors.orange[700]!;
                     fg = Colors.white;
                   } else if (label == '1' || label == '2' || label == '3') {
-                    bg = const Color(0xFF334155); // Neutral Slate Light
+                    bg = const Color(0xFF334155);
                     fg = Colors.white;
                   }
 
                   return Container(
-                    width: 36,
-                    height: 36,
                     margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: bg,
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isWkt ? AppColors.error : const Color(0x14FFFFFF),
+                        width: 1,
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: bg.withOpacity(0.2),
@@ -2447,13 +2717,27 @@ class _ScoringScreenState extends State<ScoringScreen> {
                       ],
                     ),
                     alignment: Alignment.center,
-                    child: Text(
-                      label,
-                      style: GoogleFonts.outfit(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 11,
-                        color: fg,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          coord,
+                          style: GoogleFonts.outfit(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: fg.withOpacity(0.7),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          label,
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: fg,
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 },

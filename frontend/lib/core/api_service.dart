@@ -350,6 +350,28 @@ class ApiService {
     return await _dio.post('/profile/upload-photo', data: formData);
   }
 
+  Future<Response> uploadTeamLogo(String teamId, String filePath) async {
+    final fileName = filePath.split('/').last;
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(
+        filePath,
+        filename: fileName,
+      ),
+    });
+    return await _dio.post('/teams/$teamId/upload-logo', data: formData);
+  }
+
+  Future<Response> uploadTournamentLogo(String tournamentId, String filePath) async {
+    final fileName = filePath.split('/').last;
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(
+        filePath,
+        filename: fileName,
+      ),
+    });
+    return await _dio.post('/tournaments/$tournamentId/upload-logo', data: formData);
+  }
+
   Future<Response> getProfileStats() async {
     return await _dio.get('/profile/stats');
   }
