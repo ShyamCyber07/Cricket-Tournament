@@ -18,7 +18,11 @@ depends_on = None
 
 def upgrade() -> None:
     with op.batch_alter_table('users', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('is_deleted', sa.Boolean(), nullable=False, server_default='0'))
+        # Postgres rejects server_default='0' for a Boolean column (it expects
+        # a boolean expression, not a text literal). Use sa.false() so the SQL
+        # emitted is `DEFAULT false` on Postgres and `DEFAULT 0` on SQLite,
+        # both of which the dialect accepts.
+        batch_op.add_column(sa.Column('is_deleted', sa.Boolean(), nullable=False, server_default=sa.false()))
 
 
 def downgrade() -> None:
