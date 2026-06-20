@@ -627,109 +627,125 @@ def verify_google_id_token(token: str, client_id: str | None) -> dict:
 @router.post("/google", response_model=Token)
 def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
     logger.info(f"[GOOGLE LOGIN ENDPOINT] Request received. Token length: {len(login_req.token)} | Token value: '{login_req.token}'")
-    
-    # Verify the real Google ID token
+
     try:
-        payload = verify_google_id_token(login_req.token, settings.GOOGLE_CLIENT_ID)
-    except HTTPException as e:
-        logger.error(f"[GOOGLE LOGIN ENDPOINT] verify_google_id_token raised HTTPException. status_code={e.status_code} detail={e.detail}", exc_info=True)
-        raise e
+        # Verify the real Google ID token
+        try:
+            payload = verify_google_id_token(login_req.token, settings.GOOGLE_CLIENT_ID)
+        except HTTPException as e:
+            logger.error(f"[GOOGLE LOGIN ENDPOINT] verify_google_id_token raised HTTPException. status_code={e.status_code} detail={e.detail}", exc_info=True)
+            raise e
+        except Exception as e:
+            logger.error(f"[GOOGLE LOGIN ENDPOINT] verify_google_id_token raised unexpected error: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Google verification unexpected error: {str(e)}"
+            )
+
+        email = payload.get("email")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Google ID token payload does not contain an email."
+            )
+        email = email.lower().strip()
+        name = payload.get("name", "")
+        picture = payload.get("picture", "")
+        google_sub = payload.get("sub")
+
+        if not google_sub:
+             raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Google ID token payload does not contain a subject (sub) identifier."
+            )
+
+        masked_sub = f"{google_sub[:4]}***{google_sub[-4:]}" if len(google_sub) > 8 else "***"
+        print(f"[GOOGLE SUBJECT ID] {masked_sub}")
+        print(f"[GOOGLE EMAIL] {email}")
+
+        # Ensure user is found by Google subject ID or email
+        user = db.query(User).filter(
+            (User.google_id == google_sub) |
+            (func.lower(func.trim(User.email)) == func.lower(email.strip()))
+        ).first()
+
+        if user:
+            # Link Google ID if not linked, update verification state
+            user.google_id = google_sub
+            user.email_verified = True
+            user.provider = "google"
+            if picture and not user.profile_photo_url:
+                user.profile_photo_url = picture
+                user.profile_picture = picture
+            if user.email.strip().lower() == "cricupservice@gmail.com" and user.role != "admin":
+                user.role = "admin"
+            db.commit()
+            db.refresh(user)
+        else:
+            username = email.split("@")[0]
+            # Check if username is taken, append random sequence if so
+            existing_username = db.query(User).filter(User.username == username).first()
+            if existing_username:
+                username = f"{username}_{secrets.token_hex(4)}"
+
+            user = User(
+                email=email,
+                username=username,
+                full_name=name,
+                display_name=name,
+                profile_photo_url=picture,
+                profile_picture=picture,
+                google_id=google_sub,
+                provider="google",
+                email_verified=True,
+                profile_completed=False,
+                role="admin" if email == "cricupservice@gmail.com" else "user",
+                created_at=get_utc_now()
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+            # Create Player profile
+            db_player = Player(
+                user_id=user.id,
+                created_by=user.id,
+                name=name if name else user.username,
+                role="all_rounder",
+                batting_style="right_hand",
+                bowling_style="right_arm_spin",
+                profile_photo_url=picture
+            )
+            db.add(db_player)
+            db.commit()
+
+        access_token = create_access_token(subject=user.id)
+        refresh_token = create_refresh_token(db, user.id)
+
+        # Log successful login
+        logger.info(f"[GOOGLE LOGIN SUCCESS] user_id={user.id} email={user.email} role={user.role} access_token_generated={bool(access_token)}")
+
+        return Token(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            email_verified=user.email_verified,
+            profile_completed=user.profile_completed
+        )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"[GOOGLE LOGIN ENDPOINT] verify_google_id_token raised unexpected error: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Google verification unexpected error: {str(e)}"
-        )
-    
-    email = payload.get("email")
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Google ID token payload does not contain an email."
-        )
-    email = email.lower().strip()
-    name = payload.get("name", "")
-    picture = payload.get("picture", "")
-    google_sub = payload.get("sub")
-    
-    if not google_sub:
-         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Google ID token payload does not contain a subject (sub) identifier."
-        )
-
-    masked_sub = f"{google_sub[:4]}***{google_sub[-4:]}" if len(google_sub) > 8 else "***"
-    print(f"[GOOGLE SUBJECT ID] {masked_sub}")
-    print(f"[GOOGLE EMAIL] {email}")
-
-    # Ensure user is found by Google subject ID or email
-    user = db.query(User).filter(
-        (User.google_id == google_sub) | 
-        (func.lower(func.trim(User.email)) == func.lower(email.strip()))
-    ).first()
-    
-    if user:
-        # Link Google ID if not linked, update verification state
-        user.google_id = google_sub
-        user.email_verified = True
-        user.provider = "google"
-        if picture and not user.profile_photo_url:
-            user.profile_photo_url = picture
-            user.profile_picture = picture
-        if user.email.strip().lower() == "cricupservice@gmail.com" and user.role != "admin":
-            user.role = "admin"
-        db.commit()
-        db.refresh(user)
-    else:
-        username = email.split("@")[0]
-        # Check if username is taken, append random sequence if so
-        existing_username = db.query(User).filter(User.username == username).first()
-        if existing_username:
-            username = f"{username}_{secrets.token_hex(4)}"
-            
-        user = User(
-            email=email,
-            username=username,
-            full_name=name,
-            display_name=name,
-            profile_photo_url=picture,
-            profile_picture=picture,
-            google_id=google_sub,
-            provider="google",
-            email_verified=True,
-            profile_completed=False,
-            role="admin" if email == "cricupservice@gmail.com" else "user",
-            created_at=get_utc_now()
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        
-        # Create Player profile
-        db_player = Player(
-            user_id=user.id,
-            created_by=user.id,
-            name=name if name else user.username,
-            role="all_rounder",
-            batting_style="right_hand",
-            bowling_style="right_arm_spin",
-            profile_photo_url=picture
-        )
-        db.add(db_player)
-        db.commit()
-        
-    access_token = create_access_token(subject=user.id)
-    refresh_token = create_refresh_token(db, user.id)
-    
-    return Token(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        token_type="bearer",
-        email_verified=user.email_verified,
-        profile_completed=user.profile_completed
-    )
+        logger.error(f"[GOOGLE LOGIN ENDPOINT] FULL TRACEBACK:\n{traceback.format_exc()}", exc_info=True)
+        logger.error(f"[GOOGLE LOGIN ENDPOINT] Exception during login. Email: {email if 'email' in locals() else 'UNKNOWN'}")
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+    try:
+        logger.info(f"[GET_ME] user_id={current_user.id} email={current_user.email} role={current_user.role}")
+        return current_user
+    except Exception as e:
+        logger.error(f"[GET_ME ENDPOINT] FULL TRACEBACK:\n{traceback.format_exc()}", exc_info=True)
+        logger.error(f"[GET_ME] user_id={current_user.id} email={current_user.email}")
+        raise
 
