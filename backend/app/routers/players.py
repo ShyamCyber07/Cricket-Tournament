@@ -7,7 +7,7 @@ from uuid import UUID
 from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User
-from app.models.cricket import Player, Ball, MatchSquad, Match
+from app.models.cricket import Player, Ball, MatchSquad, Match, TeamPlayer
 from app.schemas.player import PlayerCreate, PlayerResponse, PlayerUpdate
 
 router = APIRouter()
@@ -42,6 +42,7 @@ def create_player(
 @router.get("/", response_model=List[PlayerResponse])
 def list_players(
     search: Optional[str] = Query(None, description="Search player by name"),
+    include_assigned: bool = Query(False, description="Include players already assigned to a team"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -49,6 +50,13 @@ def list_players(
         query = db.query(Player)
     else:
         query = db.query(Player).filter(Player.created_by == current_user.id)
+
+    # By default, exclude players already assigned to any team
+    if not include_assigned:
+        query = query.outerjoin(TeamPlayer, Player.id == TeamPlayer.player_id).filter(
+            TeamPlayer.player_id == None
+        )
+
     if search:
         query = query.filter(Player.name.ilike(f"%{search}%"))
     return query.limit(50).all()
