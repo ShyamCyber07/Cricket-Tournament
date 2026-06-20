@@ -379,6 +379,20 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // DEBUG: Log filtering details for Team 2
+    if (!_isLoading && _team2Players.isNotEmpty) {
+      final team2Filtered = _team2Players.where((p) => !_selectedTeam1.contains(p['id'].toString())).toList();
+      debugPrint('=== SQUAD SELECTION UI DEBUG ===');
+      debugPrint('Team 2 selector - All players: ${_team2Players.length}');
+      debugPrint('Team 2 selector - Selected Team 1 IDs: $_selectedTeam1');
+      debugPrint('Team 2 selector - Filtered (excluded): ${_team2Players.length - team2Filtered.length}');
+      debugPrint('Team 2 selector - Rendered: ${team2Filtered.length}');
+      for (var p in team2Filtered) {
+        debugPrint('  RENDERED: ${p['name']} (${p['id']})');
+      }
+      debugPrint('=== END ===');
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Squad Selection"),
