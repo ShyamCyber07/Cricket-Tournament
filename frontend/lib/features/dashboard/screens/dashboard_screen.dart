@@ -139,7 +139,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     final isOwner = match['created_by']?.toString() == _currentUser['id']?.toString() || _currentUser['role'] == 'admin';
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert, color: Colors.white70),
-      backgroundColor: AppColors.surface,
+      color: AppColors.surface,
       onSelected: (val) {
         if (val == 'edit') {
           _showEditMatchDialog(match);
