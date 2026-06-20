@@ -69,7 +69,7 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
       return;
     }
     if (_selectedTeam1Id == _selectedTeam2Id) {
-      _showSnackBar("Teams must be different", AppColors.error);
+      _showSnackBar("Please select two different teams.", AppColors.error);
       return;
     }
     if (_tossWinner == null) {

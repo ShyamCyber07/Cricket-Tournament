@@ -77,6 +77,13 @@ def create_match(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # Validate: Team 1 and Team 2 must be different
+    if match_in.team1_id == match_in.team2_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Team 1 and Team 2 must be different teams"
+        )
+
     # Check if teams exist
     team1 = db.query(Team).filter(Team.id == match_in.team1_id).first()
     team2 = db.query(Team).filter(Team.id == match_in.team2_id).first()
