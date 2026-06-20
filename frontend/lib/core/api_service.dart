@@ -672,12 +672,123 @@ class ApiService {
     return await _dio.delete('/admin/users/$userId');
   }
 
-  Future<Response> adminGetReports() async {
-    return await _dio.get('/admin/reports');
+  Future<Response> adminGetReports({String? status}) async {
+    return await _dio.get('/admin/reports', queryParameters: status != null ? {'status': status} : null);
   }
 
-  Future<Response> adminResolveReport(String reportId, {String action = 'resolved'}) async {
-    return await _dio.post('/admin/reports/$reportId/resolve', queryParameters: {'action': action});
+  Future<Response> adminResolveReport(String reportId, {String action = 'resolved', String? adminNotes}) async {
+    final params = <String, dynamic>{'action': action};
+    if (adminNotes != null) params['admin_notes'] = adminNotes;
+    return await _dio.post('/admin/reports/$reportId/resolve', queryParameters: params);
+  }
+
+  // Admin Activity Logs
+  Future<Response> adminGetActivityLogs({int limit = 50}) async {
+    return await _dio.get('/admin/activity-logs', queryParameters: {'limit': limit});
+  }
+
+  // Admin User Management
+  Future<Response> adminGetUserDetails(String userId) async {
+    return await _dio.get('/admin/users/$userId');
+  }
+
+  Future<Response> adminBanUser(String userId) async {
+    return await _dio.put('/admin/users/$userId/ban');
+  }
+
+  Future<Response> adminUnbanUser(String userId) async {
+    return await _dio.put('/admin/users/$userId/unban');
+  }
+
+  // Admin Team Management
+  Future<Response> adminGetTeams({String? search}) async {
+    return await _dio.get('/admin/teams', queryParameters: search != null ? {'search': search} : null);
+  }
+
+  Future<Response> adminGetTeamDetails(String teamId) async {
+    return await _dio.get('/admin/teams/$teamId');
+  }
+
+  Future<Response> adminUpdateTeam(String teamId, {String? name, String? captainId}) async {
+    final data = <String, dynamic>{};
+    if (name != null) data['name'] = name;
+    if (captainId != null) data['captain_id'] = captainId;
+    return await _dio.put('/admin/teams/$teamId', data: data);
+  }
+
+  Future<Response> adminDeleteTeam(String teamId) async {
+    return await _dio.delete('/admin/teams/$teamId');
+  }
+
+  // Admin Player Management
+  Future<Response> adminGetPlayers({String? search}) async {
+    return await _dio.get('/admin/players', queryParameters: search != null ? {'search': search} : null);
+  }
+
+  Future<Response> adminGetPlayerDetails(String playerId) async {
+    return await _dio.get('/admin/players/$playerId');
+  }
+
+  Future<Response> adminUpdatePlayer(String playerId, {String? name, String? role, String? battingStyle, String? bowlingStyle, int? jerseyNumber}) async {
+    final data = <String, dynamic>{};
+    if (name != null) data['name'] = name;
+    if (role != null) data['role'] = role;
+    if (battingStyle != null) data['batting_style'] = battingStyle;
+    if (bowlingStyle != null) data['bowling_style'] = bowlingStyle;
+    if (jerseyNumber != null) data['jersey_number'] = jerseyNumber;
+    return await _dio.put('/admin/players/$playerId', data: data);
+  }
+
+  Future<Response> adminDeletePlayer(String playerId) async {
+    return await _dio.delete('/admin/players/$playerId');
+  }
+
+  // Admin Tournament Management
+  Future<Response> adminGetTournaments({String? search}) async {
+    return await _dio.get('/admin/tournaments', queryParameters: search != null ? {'search': search} : null);
+  }
+
+  Future<Response> adminGetTournamentDetails(String tournamentId) async {
+    return await _dio.get('/admin/tournaments/$tournamentId');
+  }
+
+  Future<Response> adminUpdateTournament(String tournamentId, {String? name, String? status}) async {
+    final data = <String, dynamic>{};
+    if (name != null) data['name'] = name;
+    if (status != null) data['status'] = status;
+    return await _dio.put('/admin/tournaments/$tournamentId', data: data);
+  }
+
+  Future<Response> adminDeleteTournament(String tournamentId) async {
+    return await _dio.delete('/admin/tournaments/$tournamentId');
+  }
+
+  // Admin Match Management
+  Future<Response> adminGetMatches({String? search, String? status}) async {
+    final params = <String, dynamic>{};
+    if (search != null) params['search'] = search;
+    if (status != null) params['status'] = status;
+    return await _dio.get('/admin/matches', queryParameters: params.isNotEmpty ? params : null);
+  }
+
+  Future<Response> adminGetMatchDetails(String matchId) async {
+    return await _dio.get('/admin/matches/$matchId');
+  }
+
+  Future<Response> adminUpdateMatch(String matchId, {String? title, String? status, String? result}) async {
+    final data = <String, dynamic>{};
+    if (title != null) data['title'] = title;
+    if (status != null) data['status'] = status;
+    if (result != null) data['result'] = result;
+    return await _dio.put('/admin/matches/$matchId', data: data);
+  }
+
+  Future<Response> adminForceEndMatch(String matchId) async {
+    return await _dio.post('/admin/matches/$matchId/force-end');
+  }
+
+  Future<Response> adminDeleteMatch(String matchId) async {
+    return await _dio.delete('/admin/matches/$matchId');
   }
 
   Future<Response> testConnection() async {
