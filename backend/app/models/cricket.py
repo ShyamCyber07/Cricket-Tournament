@@ -43,8 +43,7 @@ class Player(Base):
     highest_score = Column(Integer, default=0, nullable=True)
     best_bowling_figures = Column(String, default="", nullable=True)
 
-    # Relationships
-    user = relationship("User", back_populates="players", foreign_keys=[user_id])
+    # Relationships - Removed problematic User.back_populates="players" reference
     teams = relationship("Team", secondary="team_players", back_populates="players")
 
     def to_dict(self):

@@ -287,15 +287,26 @@ def get_all_teams(
         query = query.filter(Team.name.ilike(search_term))
     teams = query.all()
 
-    return [{
-        "id": str(t.id),
-        "name": t.name,
-        "captain_id": str(t.captain_id) if t.captain_id else None,
-        "created_by": str(t.created_by),
-        "creator_name": t.creator.full_name if t.creator else None,
-        "player_count": len(t.players) if hasattr(t, 'players') else 0,
-        "created_at": t.created_at.isoformat() if t.created_at else None
-    } for t in teams]
+    result = []
+    for t in teams:
+        # Get creator name with explicit query
+        creator_name = None
+        creator = db.query(User).filter(User.id == t.created_by).first()
+        creator_name = creator.full_name if creator else None
+
+        # Get player count from team_players table
+        player_count = db.query(TeamPlayer).filter(TeamPlayer.team_id == t.id).count()
+
+        result.append({
+            "id": str(t.id),
+            "name": t.name,
+            "captain_id": str(t.captain_id) if t.captain_id else None,
+            "created_by": str(t.created_by),
+            "creator_name": creator_name,
+            "player_count": player_count,
+            "created_at": t.created_at.isoformat() if t.created_at else None
+        })
+    return result
 
 @router.get("/admin/teams/{id}", status_code=status.HTTP_200_OK)
 def get_team_details(
@@ -501,13 +512,19 @@ def get_all_tournaments(
         # Count teams in tournament
         team_count = db.query(TournamentTeam).filter(TournamentTeam.tournament_id == t.id).count()
 
+        # Get organizer name with explicit query instead of lazy loading
+        organizer_name = None
+        if t.organizer_id:
+            organizer = db.query(User).filter(User.id == t.organizer_id).first()
+            organizer_name = organizer.full_name if organizer else None
+
         result.append({
             "id": str(t.id),
             "name": t.name,
             "format": t.format,
             "status": t.status,
             "organizer_id": str(t.organizer_id) if t.organizer_id else None,
-            "organizer_name": t.organizer.full_name if t.organizer else None,
+            "organizer_name": organizer_name,
             "team_count": team_count,
             "created_at": t.created_at.isoformat() if t.created_at else None
         })
@@ -535,6 +552,12 @@ def get_tournament_details(
                 "name": team.name
             })
 
+    # Get organizer name with explicit query
+    organizer_name = None
+    if tournament.organizer_id:
+        organizer = db.query(User).filter(User.id == tournament.organizer_id).first()
+        organizer_name = organizer.full_name if organizer else None
+
     return {
         "id": str(tournament.id),
         "name": tournament.name,
@@ -543,7 +566,7 @@ def get_tournament_details(
         "start_date": tournament.start_date.isoformat() if tournament.start_date else None,
         "end_date": tournament.end_date.isoformat() if tournament.end_date else None,
         "organizer_id": str(tournament.organizer_id) if tournament.organizer_id else None,
-        "organizer_name": tournament.organizer.full_name if tournament.organizer else None,
+        "organizer_name": organizer_name,
         "teams": teams
     }
 
