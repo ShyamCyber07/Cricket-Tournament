@@ -504,7 +504,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
     List<dynamic> allPlayers = [];
     try {
       final res = await _apiService.getPlayers();
-      allPlayers = res.data;
+      allPlayers = res.data ?? [];
     } catch (e) {
       _showSnackBar("Error listing players: $e", AppColors.error);
     } finally {
@@ -513,10 +513,31 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
 
     if (!mounted) return;
 
+    // Handle edge cases: ensure existingPlayers is not null
+    final safeExistingPlayers = existingPlayers ?? [];
+
+    // Build a Set of existing player IDs for O(1) lookup
+    // Handle different ID formats (UUID object, string, etc.)
+    final Set<String> existingIds = {};
+    for (final p in safeExistingPlayers) {
+      final id = p['id'];
+      if (id != null) {
+        existingIds.add(id.toString());
+      }
+    }
+
     // Filter out players already in the team
-    final existingIds = existingPlayers.map((p) => p['id'].toString()).toSet();
-    final availablePlayers =
-        allPlayers.where((p) => !existingIds.contains(p['id'].toString())).toList();
+    // Use explicit loop for clarity and robustness
+    final List<dynamic> availablePlayers = [];
+    for (final player in allPlayers) {
+      final playerId = player['id'];
+      if (playerId != null) {
+        final playerIdStr = playerId.toString();
+        if (!existingIds.contains(playerIdStr)) {
+          availablePlayers.add(player);
+        }
+      }
+    }
 
     final Set<String> selectedPlayerIds = {};
 
@@ -698,7 +719,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                   (t) => t['id'].toString() == teamId,
                   orElse: () => team,
                 );
-                final currentPlayers = currentTeam['players'] as List<dynamic>;
+                final currentPlayers = (currentTeam['players'] as List<dynamic>?) ?? [];
                 final captainId = currentTeam['captain_id']?.toString();
 
                 return Padding(
