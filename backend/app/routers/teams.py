@@ -21,12 +21,15 @@ def create_team(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Check if team name exists
-    existing = db.query(Team).filter(Team.name == team_in.name).first()
+    # Check if team name exists for this user (unique per owner, not globally)
+    existing = db.query(Team).filter(
+        Team.name == team_in.name,
+        Team.created_by == current_user.id
+    ).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Team name already taken"
+            detail="You already have a team with this name"
         )
 
     # If captain_id is provided, check if player exists
@@ -206,11 +209,15 @@ def update_team(
     if team.created_by != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to manage this team")
 
-    # Update name if provided and verify uniqueness
+    # Update name if provided and verify uniqueness per user
     if team_in.name is not None and team_in.name != team.name:
-        existing = db.query(Team).filter(Team.name == team_in.name, Team.id != id).first()
+        existing = db.query(Team).filter(
+            Team.name == team_in.name,
+            Team.created_by == team.created_by,  # Same user
+            Team.id != id  # Not the same team
+        ).first()
         if existing:
-            raise HTTPException(status_code=400, detail="Team name already taken")
+            raise HTTPException(status_code=400, detail="You already have a team with this name")
         team.name = team_in.name
 
     # Update captain if provided and check membership
