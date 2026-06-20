@@ -76,22 +76,28 @@ def get_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    # Count active users (last 30 days)
-    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
-    active_users = db.query(User).filter(User.created_at >= thirty_days_ago).count()
+    try:
+        # Count active users (last 30 days) - handle NULL created_at
+        thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+        active_users = db.query(User).filter(
+            User.created_at != None,
+            User.created_at >= thirty_days_ago
+        ).count()
 
-    # Count live matches
-    live_matches = db.query(Match).filter(Match.status == "live").count()
+        # Count live matches
+        live_matches = db.query(Match).filter(Match.status == "live").count()
 
-    return {
-        "total_users": db.query(User).count(),
-        "total_teams": db.query(Team).count(),
-        "total_players": db.query(Player).count(),
-        "total_tournaments": db.query(Tournament).count(),
-        "total_matches": db.query(Match).count(),
-        "live_matches": live_matches,
-        "active_users_30_days": active_users
-    }
+        return {
+            "total_users": db.query(User).count(),
+            "total_teams": db.query(Team).count(),
+            "total_players": db.query(Player).count(),
+            "total_tournaments": db.query(Tournament).count(),
+            "total_matches": db.query(Match).count(),
+            "live_matches": live_matches,
+            "active_users_30_days": active_users
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analytics error: {str(e)}")
 
 # --- Admin Activity Logs ---
 
@@ -254,11 +260,18 @@ def delete_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    db.delete(user)
-    db.commit()
+    try:
+        # First deactivate user (soft delete) to avoid FK constraint issues
+        user.is_active = False
+        user.email = f"deleted_{user.id}_{user.email}" if user.email else f"deleted_{user.id}"
+        user.username = f"deleted_{user.id}_{user.username}" if user.username else None
+        db.commit()
 
-    log_admin_action(db, current_user.id, "delete", "user", id)
-    return None
+        log_admin_action(db, current_user.id, "delete", "user", id)
+        return None
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete user: {str(e)}")
 
 # --- Team Management ---
 

@@ -117,16 +117,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
   Future<void> _loadContent() async {
     setState(() => _isLoadingContent = true);
     try {
-      final teamsRes = await _apiService.getTeams();
-      final tournamentsRes = await _apiService.getTournaments();
-      final matchesRes = await _apiService.getMatches();
-      final playersRes = await _apiService.getPlayers(includeAssigned: true);
+      // Use admin endpoints to get ALL data, not just user's data
+      final teamsRes = await _apiService.adminGetTeams();
+      final tournamentsRes = await _apiService.adminGetTournaments();
+      final matchesRes = await _apiService.adminGetMatches();
+      final playersRes = await _apiService.adminGetPlayers();
 
       setState(() {
-        _teams = teamsRes.data;
-        _tournaments = tournamentsRes.data;
-        _matches = matchesRes.data;
-        _players = playersRes.data;
+        _teams = teamsRes.data ?? [];
+        _tournaments = tournamentsRes.data ?? [];
+        _matches = matchesRes.data ?? [];
+        _players = playersRes.data ?? [];
         _isLoadingContent = false;
       });
     } catch (e) {
@@ -926,18 +927,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
                   ),
                   child: TabBar(
                     controller: _tabController,
+                    isScrollable: true,
                     indicatorColor: AppColors.primary,
                     indicatorWeight: 3.0,
                     indicatorSize: TabBarIndicatorSize.tab,
                     labelColor: AppColors.primary,
                     unselectedLabelColor: Colors.white70,
-                    labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 0.5),
-                    unselectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 12, letterSpacing: 0.5),
+                    labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 0.5),
+                    unselectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 11, letterSpacing: 0.5),
                     tabs: const [
-                      Tab(text: "ANALYTICS"),
+                      Tab(text: "STATS"),
                       Tab(text: "USERS"),
                       Tab(text: "REPORTS"),
-                      Tab(text: "MODERATE"),
+                      Tab(text: "DATA"),
                       Tab(text: "LOGS"),
                     ],
                   ),
