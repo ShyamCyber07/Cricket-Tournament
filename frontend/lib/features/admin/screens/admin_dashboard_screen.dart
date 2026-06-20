@@ -193,6 +193,31 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
     }
   }
 
+  Future<void> _banUser(String userId) async {
+    final confirm = await _showConfirmDialog("Ban User", "Are you sure you want to ban this user? They will not be able to access the app.");
+    if (confirm) {
+      try {
+        await _apiService.adminBanUser(userId);
+        _showSuccess("User banned successfully");
+        _loadUsers(query: _searchController.text.isNotEmpty ? _searchController.text : null);
+        _loadAnalytics();
+      } catch (e) {
+        _showError("Failed to ban user: $e");
+      }
+    }
+  }
+
+  Future<void> _unbanUser(String userId) async {
+    try {
+      await _apiService.adminUnbanUser(userId);
+      _showSuccess("User unbanned successfully");
+      _loadUsers(query: _searchController.text.isNotEmpty ? _searchController.text : null);
+      _loadAnalytics();
+    } catch (e) {
+      _showError("Failed to unban user: $e");
+    }
+  }
+
   Future<void> _resolveReport(String reportId, String action) async {
     try {
       await _apiService.adminResolveReport(reportId, action: action);
