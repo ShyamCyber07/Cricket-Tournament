@@ -44,6 +44,7 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
     try {
       final res = await _apiService.getPlayers(
         search: _searchQuery.isNotEmpty ? _searchQuery : null,
+        includeAssigned: true,
       );
       setState(() {
         _players = res.data;

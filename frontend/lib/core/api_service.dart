@@ -385,9 +385,11 @@ class ApiService {
   }
 
   // PLAYERS
-  Future<Response> getPlayers({String? search}) async {
-    final query = search != null ? {'search': search} : null;
-    return await _dio.get('/players/', queryParameters: query);
+  Future<Response> getPlayers({String? search, bool includeAssigned = false}) async {
+    final Map<String, dynamic> query = {};
+    if (search != null) query['search'] = search;
+    if (includeAssigned) query['include_assigned'] = 'true';
+    return await _dio.get('/players/', queryParameters: query.isNotEmpty ? query : null);
   }
 
   Future<Response> getPlayerStats(String id) async {

@@ -103,7 +103,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
       final teamsRes = await _apiService.getTeams();
       final tournamentsRes = await _apiService.getTournaments();
       final matchesRes = await _apiService.getMatches();
-      final playersRes = await _apiService.getPlayers();
+      final playersRes = await _apiService.getPlayers(includeAssigned: true);
 
       setState(() {
         _teams = teamsRes.data;
