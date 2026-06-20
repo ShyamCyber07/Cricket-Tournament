@@ -21,10 +21,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
   bool _isLoadingUsers = true;
   bool _isLoadingReports = true;
   bool _isLoadingContent = true;
+  bool _isLoadingActivityLogs = true;
 
   Map<String, dynamic> _analytics = {};
   List<dynamic> _users = [];
   List<dynamic> _reports = [];
+  List<dynamic> _activityLogs = [];
 
   // Content lists
   List<dynamic> _teams = [];
@@ -37,7 +39,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadAllData();
   }
 
@@ -53,6 +55,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
     _loadUsers();
     _loadReports();
     _loadContent();
+    _loadActivityLogs();
   }
 
   Future<void> _loadAnalytics() async {
@@ -66,6 +69,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
     } catch (e) {
       setState(() => _isLoadingAnalytics = false);
       _showError("Error loading analytics: $e");
+    }
+  }
+
+  Future<void> _loadActivityLogs() async {
+    setState(() => _isLoadingActivityLogs = true);
+    try {
+      final res = await _apiService.adminGetActivityLogs(limit: 100);
+      setState(() {
+        _activityLogs = res.data;
+        _isLoadingActivityLogs = false;
+      });
+    } catch (e) {
+      setState(() => _isLoadingActivityLogs = false);
+      // Silent fail for activity logs
     }
   }
 
@@ -559,6 +576,95 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
     );
   }
 
+  Widget _buildActivityLogsTab() {
+    if (_isLoadingActivityLogs) {
+      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+    }
+
+    if (_activityLogs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.history, size: 48, color: Colors.white.withOpacity(0.3)),
+            const SizedBox(height: 16),
+            Text("No admin activity logs yet", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: _loadActivityLogs,
+              icon: const Icon(Icons.refresh),
+              label: const Text("Refresh"),
+            )
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _activityLogs.length,
+      itemBuilder: (context, index) {
+        final log = _activityLogs[index];
+        final rawDate = log['created_at'];
+        String dateStr = "";
+        if (rawDate != null) {
+          try {
+            dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(rawDate));
+          } catch (_) {
+            dateStr = rawDate;
+          }
+        }
+
+        final activityType = log['activity_type'] ?? '';
+        final isDelete = activityType.contains('delete');
+        final isBan = activityType.contains('ban');
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: _buildGlassCard(
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isDelete
+                        ? Colors.red.withOpacity(0.2)
+                        : isBan
+                            ? Colors.orange.withOpacity(0.2)
+                            : AppColors.primary.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    isDelete ? Icons.delete : isBan ? Icons.block : Icons.admin_panel_settings,
+                    size: 20,
+                    color: isDelete ? Colors.red : isBan ? Colors.orange : AppColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        log['description'] ?? activityType,
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        dateStr,
+                        style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildContentTab() {
     if (_isLoadingContent) {
       return const Center(child: CircularProgressIndicator(color: AppColors.primary));
@@ -807,6 +913,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
                       Tab(text: "USERS"),
                       Tab(text: "REPORTS"),
                       Tab(text: "MODERATE"),
+                      Tab(text: "LOGS"),
                     ],
                   ),
                 ),
@@ -819,6 +926,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
                       _buildUsersTab(),
                       _buildReportsTab(),
                       _buildContentTab(),
+                      _buildActivityLogsTab(),
                     ],
                   ),
                 ),
