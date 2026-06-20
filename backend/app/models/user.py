@@ -31,6 +31,7 @@ class User(Base):
     account_type = Column(String, default="Scorer", nullable=True)
     role = Column(String, default="user", nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    is_deleted = Column(Boolean, default=False, nullable=False)
     joined_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 

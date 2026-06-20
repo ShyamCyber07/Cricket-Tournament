@@ -77,18 +77,31 @@ def get_analytics(
     current_user: User = Depends(require_admin)
 ):
     try:
+        # Count total users - exclude deleted if column exists
+        total_users_query = db.query(User)
+        try:
+            total_users_query = total_users_query.filter(User.is_deleted != True)
+        except Exception:
+            pass  # Column doesn't exist yet
+        total_users = total_users_query.count()
+
         # Count active users (last 30 days) - handle NULL created_at
         thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
-        active_users = db.query(User).filter(
+        active_users_query = db.query(User).filter(
             User.created_at != None,
             User.created_at >= thirty_days_ago
-        ).count()
+        )
+        try:
+            active_users_query = active_users_query.filter(User.is_deleted != True)
+        except Exception:
+            pass
+        active_users = active_users_query.count()
 
         # Count live matches
         live_matches = db.query(Match).filter(Match.status == "live").count()
 
         return {
-            "total_users": db.query(User).count(),
+            "total_users": total_users,
             "total_teams": db.query(Team).count(),
             "total_players": db.query(Player).count(),
             "total_tournaments": db.query(Tournament).count(),
@@ -97,7 +110,8 @@ def get_analytics(
             "active_users_30_days": active_users
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Analytics error: {str(e)}")
+        import traceback
+        raise HTTPException(status_code=500, detail=f"Analytics error: {str(e)}\n{traceback.format_exc()}")
 
 # --- Admin Activity Logs ---
 
@@ -125,10 +139,20 @@ def get_admin_activity_logs(
 @router.get("/admin/users", response_model=List[UserResponse])
 def get_users(
     search: Optional[str] = Query(None),
+    include_deleted: bool = Query(False, description="Include deleted users"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
     query = db.query(User)
+
+    # Exclude deleted users by default
+    if not include_deleted:
+        # Handle case where is_deleted column might not exist yet
+        try:
+            query = query.filter(User.is_deleted == False)
+        except Exception:
+            pass  # Column doesn't exist yet, continue without filter
+
     if search:
         search_term = f"%{search}%"
         query = query.filter(
@@ -260,11 +284,17 @@ def delete_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Check if already deleted (idempotent check)
+    if getattr(user, 'is_deleted', False):
+        raise HTTPException(
+            status_code=400,
+            detail="User already deleted"
+        )
+
     try:
-        # First deactivate user (soft delete) to avoid FK constraint issues
+        # Soft delete using is_deleted flag
+        user.is_deleted = True
         user.is_active = False
-        user.email = f"deleted_{user.id}_{user.email}" if user.email else f"deleted_{user.id}"
-        user.username = f"deleted_{user.id}_{user.username}" if user.username else None
         db.commit()
 
         log_admin_action(db, current_user.id, "delete", "user", id)
