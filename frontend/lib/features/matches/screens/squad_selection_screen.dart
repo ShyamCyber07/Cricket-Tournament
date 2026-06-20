@@ -55,52 +55,30 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
         _team1Players = t1Res.data['players'] ?? [];
         _team2Players = t2Res.data['players'] ?? [];
 
-        // BUG FIX: Create a COMBINED player pool from both teams
-        // Players selected for Team 1 should NOT appear in Team 2's list
-        // Players selected for Team 2 should NOT appear in Team 1's list
-
-        // Build combined player list with unique IDs
-        final combinedPlayers = <Map<String, dynamic>>{};
+        // Auto-select all by default for ease of MVP testing
         for (var p in _team1Players) {
-          combinedPlayers[p['id'].toString()] = p;
+          _selectedTeam1.add(p['id'].toString());
         }
         for (var p in _team2Players) {
-          combinedPlayers[p['id'].toString()] = p;
+          final pId = p['id'].toString();
+          if (!_selectedTeam1.contains(pId)) {
+            _selectedTeam2.add(pId);
+          }
         }
 
-        final allPlayerList = combinedPlayers.values.toList();
-
-        // Auto-select first 11 for Team 1, remaining for Team 2
-        for (int i = 0; i < allPlayerList.length && i < 11; i++) {
-          _selectedTeam1.add(allPlayerList[i]['id'].toString());
-        }
-        for (int i = 11; i < allPlayerList.length; i++) {
-          _selectedTeam2.add(allPlayerList[i]['id'].toString());
-        }
-
-        debugPrint('=== SQUAD SELECTION FIX ===');
-        debugPrint('Team 1 roster: ${_team1Players.length} players');
-        debugPrint('Team 2 roster: ${_team2Players.length} players');
-        debugPrint('Combined pool: ${combinedPlayers.length} unique players');
-        debugPrint('Team 1 selected: $_selectedTeam1');
-        debugPrint('Team 2 selected: $_selectedTeam2');
-
-        // Set captains
         if (_team1Players.isNotEmpty) {
           _team1CaptainId = _team1Players[0]['id'];
           _team1KeeperId = _team1Players[0]['id'];
         }
-
-        // Find first available player for Team 2 captain
-        for (var p in _team2Players) {
-          if (!_selectedTeam1.contains(p['id'].toString())) {
-            _team2CaptainId = p['id'];
-            _team2KeeperId = p['id'];
-            break;
-          }
+        
+        final availableTeam2Players = _team2Players
+            .where((p) => !_selectedTeam1.contains(p['id'].toString()))
+            .toList();
+        if (availableTeam2Players.isNotEmpty) {
+          _team2CaptainId = availableTeam2Players[0]['id'];
+          _team2KeeperId = availableTeam2Players[0]['id'];
         }
 
-        debugPrint('=== FIXED ===');
         _isLoading = false;
       });
     } catch (e) {
@@ -437,11 +415,7 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
                   ),
                   const Divider(color: Colors.white24, height: 20),
                   _buildRosterList(
-                    // FIX: Show Team 1's own players that are NOT already selected for Team 2
-                    _team1Players.where((p) {
-                      final pid = p['id'].toString();
-                      return !_selectedTeam2.contains(pid);
-                    }).toList(),
+                    _team1Players.where((p) => !_selectedTeam2.contains(p['id'].toString())).toList(),
                     _selectedTeam1,
                     _team1CaptainId,
                     _team1KeeperId,
@@ -477,11 +451,7 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
                   ),
                   const Divider(color: Colors.white24, height: 20),
                   _buildRosterList(
-                    // FIX: Show only Team 2's own players that are NOT already selected for Team 1
-                    _team2Players.where((p) {
-                      final pid = p['id'].toString();
-                      return !_selectedTeam1.contains(pid);
-                    }).toList(),
+                    _team2Players.where((p) => !_selectedTeam1.contains(p['id'].toString())).toList(),
                     _selectedTeam2,
                     _team2CaptainId,
                     _team2KeeperId,
