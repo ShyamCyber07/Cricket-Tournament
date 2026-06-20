@@ -11,7 +11,7 @@ from app.routers.auth import get_current_user
 from app.models.user import User, Report, UserActivity
 from app.models.cricket import Team, Player, Tournament, Match, TournamentTeam, MatchSquad
 from app.schemas.user import UserResponse
-from app.schemas.report import ReportCreate, ReportResponse, ReportUpdate
+from app.schemas.report import ReportCreate, ReportResponse
 
 router = APIRouter()
 
