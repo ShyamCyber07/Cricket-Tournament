@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import secrets
 import logging
+import traceback  # used by FULL TRACEBACK logs in except blocks below
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
@@ -663,25 +664,48 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
         print(f"[GOOGLE SUBJECT ID] {masked_sub}")
         print(f"[GOOGLE EMAIL] {email}")
 
+        # ---- CHECKPOINT A: token verified ----
+        logger.info(f"[GOOGLE LOGIN] CHECKPOINT A: token verified email={email!r} sub={masked_sub}")
+
         # Ensure user is found by Google subject ID or email
+        # NOTE: filter out soft-deleted users so a deleted account doesn't get
+        # silently resurrected by an old email/sub match.
+        # ---- CHECKPOINT B: before DB user lookup ----
+        logger.info("[GOOGLE LOGIN] CHECKPOINT B-1: querying user by google_id or email (excluding is_deleted=True)")
         user = db.query(User).filter(
-            (User.google_id == google_sub) |
-            (func.lower(func.trim(User.email)) == func.lower(email.strip()))
+            User.is_deleted == False,
+            (
+                (User.google_id == google_sub) |
+                (func.lower(func.trim(User.email)) == func.lower(email.strip()))
+            )
         ).first()
+        # ---- CHECKPOINT B: after DB user lookup ----
+        logger.info(f"[GOOGLE LOGIN] CHECKPOINT B-2: user lookup complete. found={user is not None} id={user.id if user else None}")
 
         if user:
+            # ---- CHECKPOINT C-1: user update path ----
+            logger.info(f"[GOOGLE LOGIN] CHECKPOINT C-1: updating existing user id={user.id}")
             # Link Google ID if not linked, update verification state
             user.google_id = google_sub
             user.email_verified = True
             user.provider = "google"
+            user.is_deleted = False  # re-activate soft-deleted user on successful login
             if picture and not user.profile_photo_url:
                 user.profile_photo_url = picture
                 user.profile_picture = picture
             if user.email.strip().lower() == "cricupservice@gmail.com" and user.role != "admin":
                 user.role = "admin"
-            db.commit()
-            db.refresh(user)
+            try:
+                db.commit()
+                db.refresh(user)
+                logger.info(f"[GOOGLE LOGIN] CHECKPOINT C-2: existing user update committed id={user.id}")
+            except Exception as e:
+                logger.error(f"[GOOGLE LOGIN] CHECKPOINT C-2 FAIL: existing user update commit failed: {e!r}", exc_info=True)
+                db.rollback()
+                raise
         else:
+            # ---- CHECKPOINT C-1: user create path ----
+            logger.info("[GOOGLE LOGIN] CHECKPOINT C-1: creating new user")
             username = email.split("@")[0]
             # Check if username is taken, append random sequence if so
             existing_username = db.query(User).filter(User.username == username).first()
@@ -703,10 +727,18 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
                 created_at=get_utc_now()
             )
             db.add(user)
-            db.commit()
-            db.refresh(user)
+            try:
+                db.commit()
+                db.refresh(user)
+                logger.info(f"[GOOGLE LOGIN] CHECKPOINT C-2: new user created id={user.id}")
+            except Exception as e:
+                logger.error(f"[GOOGLE LOGIN] CHECKPOINT C-2 FAIL: new user commit failed: {e!r}", exc_info=True)
+                db.rollback()
+                raise
 
             # Create Player profile
+            # ---- CHECKPOINT E: player creation ----
+            logger.info(f"[GOOGLE LOGIN] CHECKPOINT E-1: creating Player profile for user_id={user.id}")
             db_player = Player(
                 user_id=user.id,
                 created_by=user.id,
@@ -717,21 +749,42 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
                 profile_photo_url=picture
             )
             db.add(db_player)
-            db.commit()
+            try:
+                db.commit()
+                logger.info(f"[GOOGLE LOGIN] CHECKPOINT E-2: Player profile created id={db_player.id}")
+            except Exception as e:
+                logger.error(f"[GOOGLE LOGIN] CHECKPOINT E-2 FAIL: Player commit failed: {e!r}", exc_info=True)
+                db.rollback()
+                raise
 
+        # ---- CHECKPOINT D: refresh token saved (create_refresh_token commits internally) ----
+        logger.info(f"[GOOGLE LOGIN] CHECKPOINT D-1: writing refresh_token for user_id={user.id}")
+        try:
+            refresh_token = create_refresh_token(db, user.id)
+            logger.info(f"[GOOGLE LOGIN] CHECKPOINT D-2: refresh_token saved len={len(refresh_token)}")
+        except Exception as e:
+            logger.error(f"[GOOGLE LOGIN] CHECKPOINT D-2 FAIL: refresh_token write failed: {e!r}", exc_info=True)
+            db.rollback()
+            raise
+
+        # ---- CHECKPOINT F: JWT created ----
+        logger.info(f"[GOOGLE LOGIN] CHECKPOINT F: creating access JWT for user_id={user.id}")
         access_token = create_access_token(subject=user.id)
-        refresh_token = create_refresh_token(db, user.id)
+        logger.info(f"[GOOGLE LOGIN] CHECKPOINT F-OK: access JWT created len={len(access_token)}")
 
         # Log successful login
         logger.info(f"[GOOGLE LOGIN SUCCESS] user_id={user.id} email={user.email} role={user.role} access_token_generated={bool(access_token)}")
 
-        return Token(
+        # ---- CHECKPOINT G: response returned ----
+        response_obj = Token(
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="bearer",
             email_verified=user.email_verified,
             profile_completed=user.profile_completed
         )
+        logger.info(f"[GOOGLE LOGIN] CHECKPOINT G: returning Token to client user_id={user.id}")
+        return response_obj
     except HTTPException:
         raise
     except Exception as e:

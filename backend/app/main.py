@@ -52,17 +52,73 @@ async def lifespan(app: FastAPI):
     import asyncio
     from app.core.backup import daily_sqlite_backup_loop
     from sqlalchemy.engine import make_url
-    
+    from sqlalchemy import inspect, text
+
+    # ---- STARTUP: APP_VERSION (commit SHA) ---------------------------------
+    try:
+        commit_sha = os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("GIT_COMMIT_SHA") or "unknown"
+        print(f"APP_VERSION = {commit_sha}")
+        logger.info(f"APP_VERSION = {commit_sha}")
+    except Exception as e:
+        print(f"APP_VERSION lookup error: {e}")
+
+    # ---- STARTUP: alembic current version + dialect + table column checks --
+    try:
+        db_url = make_url(settings.DATABASE_URL)
+        dialect = db_url.drivername
+        print(f"DATABASE_DIALECT = {dialect}")
+        logger.info(f"DATABASE_DIALECT = {dialect}")
+
+        # Read alembic version directly from the DB.
+        with engine.connect() as conn:
+            try:
+                row = conn.execute(text("SELECT version_num FROM alembic_version")).first()
+                alembic_ver = row[0] if row else "EMPTY"
+            except Exception as e:
+                alembic_ver = f"ERROR: {e}"
+            print(f"ALEMBIC_VERSION = {alembic_ver}")
+            logger.info(f"ALEMBIC_VERSION = {alembic_ver}")
+
+            # Check that critical columns the User model depends on actually
+            # exist. This catches the "stale deploy / unrun migration" case
+            # where the ORM model references a column the table doesn't have.
+            required = {
+                "users": [
+                    "id", "email", "google_id", "email_verified", "profile_completed",
+                    "provider", "role", "is_active", "is_deleted",
+                    "joined_at", "created_at",
+                ],
+                "refresh_tokens": ["id", "user_id", "token", "expires_at", "created_at"],
+                "players": ["id", "user_id", "created_by", "name", "role", "batting_style", "bowling_style"],
+            }
+            insp = inspect(engine)
+            for table, cols in required.items():
+                if not insp.has_table(table):
+                    print(f"SCHEMA_CHECK FAIL: table {table!r} does not exist")
+                    logger.error(f"SCHEMA_CHECK FAIL: table {table!r} does not exist")
+                    continue
+                actual = {c["name"] for c in insp.get_columns(table)}
+                missing = [c for c in cols if c not in actual]
+                if missing:
+                    print(f"SCHEMA_CHECK FAIL: {table} missing columns: {missing}")
+                    logger.error(f"SCHEMA_CHECK FAIL: {table} missing columns: {missing}")
+                else:
+                    print(f"SCHEMA_CHECK OK: {table} has all required columns")
+                    logger.info(f"SCHEMA_CHECK OK: {table} has all required columns")
+    except Exception as e:
+        print(f"Startup schema-check error: {e}", flush=True)
+        logger.error(f"Startup schema-check error: {e}", exc_info=True)
+
     # Run Alembic migrations programmatically on startup
     import alembic.config
     import alembic.command
     from alembic.config import Config
-    
+
     try:
         ini_path = "alembic.ini"
         if not os.path.exists(ini_path):
             ini_path = os.path.join(os.path.dirname(__file__), "..", "alembic.ini")
-            
+
         if os.path.exists(ini_path):
             logger.info(f"Running database migrations from config: {ini_path}")
             cfg = Config(ini_path)
