@@ -1,7 +1,7 @@
 """Change team name uniqueness from global to per-user.
 
 Revision ID: team_uniqueness_per_user
-Revises:
+Revises: 150e7fa72c85
 Create Date: 2026-06-20
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'team_uniqueness_per_user'
-down_revision = '150e7fa72c85_add_role_and_reports'
+down_revision = '150e7fa72c85'
 branch_labels = None
 depends_on = None
 
