@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -5,6 +6,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_
 from uuid import UUID
 import uuid
+
+logger = logging.getLogger(__name__)
 
 from app.core.database import get_db
 from app.routers.auth import get_current_user
@@ -17,6 +20,7 @@ router = APIRouter()
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != "admin":
+        logger.error("403 REASON = ROLE_CHECK_FAILED")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin privileges required"

@@ -306,6 +306,9 @@ class ApiService {
   }
 
   Future<Response> getMe() async {
+    print("[FRONTEND VERIFICATION] Access Token: $_token");
+    print("[FRONTEND VERIFICATION] Refresh Token: $_refreshToken");
+    print("[FRONTEND VERIFICATION] Authorization Header: Bearer $_token");
     return await _dio.get('/auth/me');
   }
 

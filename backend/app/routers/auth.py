@@ -51,10 +51,25 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
         
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
+        logger.error("403 REASON = USER_NOT_FOUND")
         raise credentials_exception
+        
+    # Mandatory Logging Inside get_current_user()
+    logger.error(
+        f"""
+        AUTH DEBUG
+        id={user.id}
+        email={user.email}
+        role={user.role}
+        is_active={user.is_active}
+        is_deleted={getattr(user,'is_deleted',None)}
+        lockout_until={user.lockout_until}
+        """
+    )
         
     # Check if user is active/disabled
     if not user.is_active:
+        logger.error("403 REASON = USER_INACTIVE")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account has been disabled."
@@ -62,6 +77,7 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
 
     # Check if lockout is still active (just in case they have a token but got locked out)
     if user.lockout_until and user.lockout_until > get_utc_now():
+        logger.error("403 REASON = USER_LOCKED")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is temporarily locked. Please try again later."
@@ -668,16 +684,13 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
         logger.info(f"[GOOGLE LOGIN] CHECKPOINT A: token verified email={email!r} sub={masked_sub}")
 
         # Ensure user is found by Google subject ID or email
-        # NOTE: filter out soft-deleted users so a deleted account doesn't get
-        # silently resurrected by an old email/sub match.
+        # NOTE: Do NOT filter out soft-deleted/inactive users here, as we want to reactivate
+        # them upon successful Google OAuth authentication.
         # ---- CHECKPOINT B: before DB user lookup ----
-        logger.info("[GOOGLE LOGIN] CHECKPOINT B-1: querying user by google_id or email (excluding is_deleted=True)")
+        logger.info("[GOOGLE LOGIN] CHECKPOINT B-1: querying user by google_id or email")
         user = db.query(User).filter(
-            User.is_deleted == False,
-            (
-                (User.google_id == google_sub) |
-                (func.lower(func.trim(User.email)) == func.lower(email.strip()))
-            )
+            (User.google_id == google_sub) |
+            (func.lower(func.trim(User.email)) == func.lower(email.strip()))
         ).first()
         # ---- CHECKPOINT B: after DB user lookup ----
         logger.info(f"[GOOGLE LOGIN] CHECKPOINT B-2: user lookup complete. found={user is not None} id={user.id if user else None}")
@@ -685,11 +698,25 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
         if user:
             # ---- CHECKPOINT C-1: user update path ----
             logger.info(f"[GOOGLE LOGIN] CHECKPOINT C-1: updating existing user id={user.id}")
-            # Link Google ID if not linked, update verification state
+            # Link Google ID, update verification state, and fully reactivate account
             user.google_id = google_sub
+            user.email = email  # Restore real email if it was prefixed with "deleted_"
             user.email_verified = True
             user.provider = "google"
             user.is_deleted = False  # re-activate soft-deleted user on successful login
+            user.is_active = True    # ensure user is marked active upon successful login
+            user.failed_login_attempts = 0
+            user.lockout_until = None
+            
+            # Clean up soft-deleted username prefix if present
+            if user.username and "deleted_" in user.username:
+                base_username = email.split("@")[0]
+                existing_username = db.query(User).filter(User.username == base_username, User.id != user.id).first()
+                if existing_username:
+                    user.username = f"{base_username}_{secrets.token_hex(4)}"
+                else:
+                    user.username = base_username
+
             if picture and not user.profile_photo_url:
                 user.profile_photo_url = picture
                 user.profile_picture = picture
