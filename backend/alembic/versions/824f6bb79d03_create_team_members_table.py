@@ -35,7 +35,9 @@ def upgrade() -> None:
 
     # Populate team_members for all existing teams
     connection = op.get_bind()
-    teams = connection.execute(sa.text("SELECT id, created_by, created_at FROM teams")).fetchall()
+    teams = connection.execute(sa.text(
+        "SELECT id, created_by, created_at FROM teams WHERE created_by IN (SELECT id FROM users)"
+    )).fetchall()
     for team in teams:
         member_id = uuid.uuid4()
         connection.execute(sa.text(
