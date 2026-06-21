@@ -12,8 +12,8 @@ from app.core.storage import upload_image, delete_image
 from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User
-from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad
-from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate, BulkAddPlayersRequest
+from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad, TeamMember
+from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate, BulkAddPlayersRequest, TeamMemberResponse, MyTeamsResponse, AddMemberRequest, ApproveMemberRequest
 
 router = APIRouter()
 
@@ -47,10 +47,39 @@ def create_team(
         created_by=current_user.id
     )
     db.add(db_team)
+    db.flush()
+
+    # Automatically add creator as captain in team_members
+    creator_member = TeamMember(
+        team_id=db_team.id,
+        user_id=current_user.id,
+        role="captain",
+        status="active"
+    )
+    db.add(creator_member)
     db.commit()
     db.refresh(db_team)
         
     return db_team
+
+@router.get("/my-teams", response_model=List[MyTeamsResponse])
+def get_my_teams(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Fetch all teams where user is a member (either captain or player)
+    memberships = db.query(TeamMember).filter(TeamMember.user_id == current_user.id).all()
+    
+    res = []
+    for m in memberships:
+        team = db.query(Team).filter(Team.id == m.team_id).first()
+        if team:
+            res.append(MyTeamsResponse(
+                team=team,
+                role=m.role,
+                status=m.status
+            ))
+    return res
 
 @router.get("/", response_model=List[TeamResponse])
 def list_teams(
@@ -387,3 +416,231 @@ def upload_team_logo(
     db.commit()
     db.refresh(team)
     return {"url": url, "logo_url": url}
+
+
+# --- Team Membership Endpoints ---
+
+@router.get("/{id}/members", response_model=List[TeamMemberResponse])
+def get_team_members(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+        
+    # Check if user is a member of the team to view members (Player or Captain)
+    # Player/Captain permission: "View members"
+    is_member = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.status == "active"
+    ).first()
+    
+    if not is_member and team.created_by != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to view members of this team")
+
+    members = db.query(TeamMember, User).join(User, TeamMember.user_id == User.id).filter(
+        TeamMember.team_id == id
+    ).all()
+
+    res = []
+    for member, user in members:
+        res.append(TeamMemberResponse(
+            id=member.id,
+            team_id=member.team_id,
+            user_id=member.user_id,
+            user_email=user.email,
+            user_full_name=user.full_name or user.username or "User",
+            role=member.role,
+            status=member.status,
+            joined_at=member.joined_at
+        ))
+    return res
+
+
+@router.post("/{id}/members", response_model=TeamMemberResponse)
+def add_member_to_team(
+    id: UUID,
+    req: AddMemberRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+        
+    # Captain permissions: "Add member"
+    is_captain = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).first()
+    
+    if not is_captain and team.created_by != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only the captain can add members")
+
+    # Find user by email
+    user_to_add = db.query(User).filter(User.email == req.email).first()
+    if not user_to_add:
+        raise HTTPException(status_code=404, detail="User with this email not found")
+
+    # Check if already a member or pending
+    existing = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == user_to_add.id
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="User is already a member or request is pending")
+
+    member = TeamMember(
+        team_id=id,
+        user_id=user_to_add.id,
+        role="player",
+        status="active"
+    )
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+    
+    return TeamMemberResponse(
+        id=member.id,
+        team_id=member.team_id,
+        user_id=member.user_id,
+        user_email=user_to_add.email,
+        user_full_name=user_to_add.full_name or user_to_add.username or "User",
+        role=member.role,
+        status=member.status,
+        joined_at=member.joined_at
+    )
+
+
+@router.delete("/{id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_member_from_team(
+    id: UUID,
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+        
+    # Captain permissions: "Remove member"
+    is_captain = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).first()
+    
+    if not is_captain and team.created_by != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only the captain can remove members")
+
+    # Cannot remove creator/owner
+    if user_id == team.created_by:
+        raise HTTPException(status_code=400, detail="The team creator/owner cannot be removed")
+
+    member = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == user_id
+    ).first()
+    
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    db.delete(member)
+    db.commit()
+    return None
+
+
+@router.post("/{id}/join-request", response_model=TeamMemberResponse)
+def create_join_request(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+        
+    # Check if already a member or pending
+    existing = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="You are already a member or have a pending request")
+
+    member = TeamMember(
+        team_id=id,
+        user_id=current_user.id,
+        role="player",
+        status="pending"
+    )
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+    
+    return TeamMemberResponse(
+        id=member.id,
+        team_id=member.team_id,
+        user_id=member.user_id,
+        user_email=current_user.email,
+        user_full_name=current_user.full_name or current_user.username or "User",
+        role=member.role,
+        status=member.status,
+        joined_at=member.joined_at
+    )
+
+
+@router.post("/{id}/approve-request", response_model=TeamMemberResponse)
+def approve_join_request(
+    id: UUID,
+    req: ApproveMemberRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+        
+    # Captain permissions: "Approve join requests"
+    is_captain = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).first()
+    
+    if not is_captain and team.created_by != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only the captain can approve requests")
+
+    member = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == req.user_id,
+        TeamMember.status == "pending"
+    ).first()
+    
+    if not member:
+        raise HTTPException(status_code=404, detail="Pending request not found")
+
+    member.status = "active"
+    db.commit()
+    db.refresh(member)
+    
+    user_approved = db.query(User).filter(User.id == req.user_id).first()
+    return TeamMemberResponse(
+        id=member.id,
+        team_id=member.team_id,
+        user_id=member.user_id,
+        user_email=user_approved.email,
+        user_full_name=user_approved.full_name or user_approved.username or "User",
+        role=member.role,
+        status=member.status,
+        joined_at=member.joined_at
+    )

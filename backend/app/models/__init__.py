@@ -4,6 +4,7 @@ from app.models.cricket import (
     Player,
     Team,
     TeamPlayer,
+    TeamMember,
     Tournament,
     TournamentTeam,
     Match,
@@ -21,8 +22,8 @@ __all__ = [
     "Report",
     "Player",
     "Team",
-
     "TeamPlayer",
+    "TeamMember",
     "Tournament",
     "TournamentTeam",
     "Match",

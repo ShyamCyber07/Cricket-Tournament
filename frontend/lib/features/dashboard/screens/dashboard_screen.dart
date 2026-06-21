@@ -8,6 +8,7 @@ import 'package:cricket_scorer/features/auth/bloc/auth_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cricket_scorer/features/matches/screens/match_setup_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_management_screen.dart';
+import 'package:cricket_scorer/features/dashboard/screens/my_teams_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/player_management_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/scoring_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
@@ -920,7 +921,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           title: "Teams",
           color: AppColors.primary,
           onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const TeamManagementScreen()));
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const MyTeamsScreen()));
           },
         ),
         _buildActionCard(

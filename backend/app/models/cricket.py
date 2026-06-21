@@ -14,6 +14,20 @@ class TeamPlayer(Base):
     player_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="CASCADE"), primary_key=True, unique=True)
     joined_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
+class TeamMember(Base):
+    __tablename__ = "team_members"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    team_id = Column(UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String, default="player", nullable=False)  # captain/player
+    joined_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    status = Column(String, default="active", nullable=False)  # active/pending
+
+    # Relationships
+    team = relationship("Team", back_populates="members")
+    user = relationship("User")
+
 class TournamentTeam(Base):
     __tablename__ = "tournament_teams"
 
@@ -79,6 +93,7 @@ class Team(Base):
     creator = relationship("User", back_populates="created_teams")
     players = relationship("Player", secondary="team_players", back_populates="teams")
     tournaments = relationship("Tournament", secondary="tournament_teams", back_populates="teams")
+    members = relationship("TeamMember", back_populates="team", cascade="all, delete-orphan")
 
 class Tournament(Base):
     __tablename__ = "tournaments"

@@ -1,0 +1,415 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:cricket_scorer/core/theme.dart';
+import 'package:cricket_scorer/core/api_service.dart';
+
+class TeamDetailsScreen extends StatefulWidget {
+  final String teamId;
+  final String teamName;
+  final String userRole; // 'captain' or 'player'
+
+  const TeamDetailsScreen({
+    super.key,
+    required this.teamId,
+    required this.teamName,
+    required this.userRole,
+  });
+
+  @override
+  State<TeamDetailsScreen> createState() => _TeamDetailsScreenState();
+}
+
+class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTickerProviderStateMixin {
+  final ApiService _apiService = ApiService();
+  late TabController _tabController;
+  List<dynamic> _members = [];
+  List<dynamic> _matches = [];
+  bool _isLoading = true;
+
+  final _addMemberController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadDetails();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _addMemberController.dispose();
+    super.dispose();
+  }
+
+  bool get _isCaptain => widget.userRole.toLowerCase() == 'captain';
+
+  Future<void> _loadDetails() async {
+    setState(() => _isLoading = true);
+    try {
+      final membersRes = await _apiService.getTeamMembers(widget.teamId);
+      final matchesRes = await _apiService.getMatches();
+
+      final List<dynamic> allMembers = membersRes.data ?? [];
+      final List<dynamic> allMatches = matchesRes.data ?? [];
+
+      // Filter matches involving this team
+      final List<dynamic> filteredMatches = allMatches.where((m) {
+        return m['team1_id']?.toString() == widget.teamId ||
+               m['team2_id']?.toString() == widget.teamId;
+      }).toList();
+
+      setState(() {
+        _members = allMembers;
+        _matches = filteredMatches;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar("Error loading details: $e", AppColors.error);
+    }
+  }
+
+  void _showSnackBar(String msg, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  Future<void> _approveJoin(String userId) async {
+    try {
+      await _apiService.approveJoinRequest(widget.teamId, userId);
+      _showSnackBar("Join request approved!", AppColors.primary);
+      _loadDetails();
+    } catch (e) {
+      _showSnackBar("Failed to approve request: $e", AppColors.error);
+    }
+  }
+
+  Future<void> _addMember() async {
+    if (!_formKey.currentState!.validate()) return;
+    final email = _addMemberController.text.trim();
+    Navigator.pop(context); // close dialog
+    setState(() => _isLoading = true);
+
+    try {
+      await _apiService.addTeamMember(widget.teamId, email);
+      _showSnackBar("Member added successfully!", AppColors.primary);
+      _addMemberController.clear();
+      _loadDetails();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar("Failed to add member: $e", AppColors.error);
+    }
+  }
+
+  Future<void> _removeMember(String userId) async {
+    try {
+      await _apiService.removeTeamMember(widget.teamId, userId);
+      _showSnackBar("Member removed successfully!", AppColors.primary);
+      _loadDetails();
+    } catch (e) {
+      _showSnackBar("Failed to remove member: $e", AppColors.error);
+    }
+  }
+
+  void _showAddMemberDialog() {
+    _addMemberController.clear();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text("Add Team Member", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          content: Form(
+            key: _formKey,
+            child: TextFormField(
+              controller: _addMemberController,
+              keyboardType: TextInputType.emailAddress,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: "User Email Address",
+                prefixIcon: Icon(Icons.email_outlined, color: AppColors.primary),
+              ),
+              validator: (val) {
+                if (val == null || val.trim().isEmpty) {
+                  return "Please enter an email address";
+                }
+                if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(val.trim())) {
+                  return "Please enter a valid email address";
+                }
+                return null;
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: _addMember,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.black,
+              ),
+              child: Text("Add", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMembersTab() {
+    // Separate active members from pending ones
+    final List<dynamic> activeList = [];
+    final List<dynamic> pendingList = [];
+
+    for (final m in _members) {
+      if (m['status']?.toString().toLowerCase() == 'active') {
+        activeList.add(m);
+      } else {
+        pendingList.add(m);
+      }
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (_isCaptain && pendingList.isNotEmpty) ...[
+          Text(
+            "Pending Join Requests (${pendingList.length})",
+            style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary),
+          ),
+          const SizedBox(height: 8),
+          ...pendingList.map((req) {
+            return Card(
+              color: AppColors.secondary.withOpacity(0.08),
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                title: Text(req['user_full_name'] ?? 'Unknown User', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                subtitle: Text(req['user_email'] ?? '', style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12)),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                      onPressed: () => _approveJoin(req['user_id'].toString()),
+                      child: Text("Approve", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 11)),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 24),
+        ],
+
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              "Active Members (${activeList.length})",
+              style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+            if (_isCaptain)
+              TextButton.icon(
+                icon: const Icon(Icons.person_add_alt_1, size: 16),
+                label: const Text("Add Member"),
+                onPressed: _showAddMemberDialog,
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (activeList.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24.0),
+              child: Text(
+                "No active members.",
+                style: GoogleFonts.outfit(color: AppColors.textSecondary),
+              ),
+            ),
+          )
+        else
+          ...activeList.map((m) {
+            final isCap = m['role']?.toString().toLowerCase() == 'captain';
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: isCap ? AppColors.accent.withOpacity(0.15) : AppColors.primary.withOpacity(0.15),
+                  child: Text(
+                    (m['user_full_name']?[0] ?? '?').toString().toUpperCase(),
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      color: isCap ? AppColors.accent : AppColors.primary,
+                    ),
+                  ),
+                ),
+                title: Row(
+                  children: [
+                    Text(
+                      m['user_full_name'] ?? 'Unknown User',
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                    ),
+                    if (isCap) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: AppColors.accent, width: 0.5),
+                        ),
+                        child: Text(
+                          "CAPT",
+                          style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.bold, color: AppColors.accent),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                subtitle: Text(m['user_email'] ?? '', style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11)),
+                trailing: (_isCaptain && !isCap)
+                    ? IconButton(
+                        icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (context) {
+                              return AlertDialog(
+                                backgroundColor: AppColors.surface,
+                                title: Text("Remove Member", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                                content: Text("Are you sure you want to remove ${m['user_full_name']} from the team?"),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                                  ),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      _removeMember(m['user_id'].toString());
+                                    },
+                                    child: const Text("Remove"),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                      )
+                    : null,
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _buildMatchesTab() {
+    if (_matches.isEmpty) {
+      return Center(
+        child: Text(
+          "No matches played or scheduled for this team.",
+          style: GoogleFonts.outfit(color: AppColors.textSecondary),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: _matches.length,
+      padding: const EdgeInsets.all(16),
+      itemBuilder: (context, index) {
+        final match = _matches[index];
+        final venue = match['venue'] ?? 'Main Ground';
+        final status = match['status']?.toString().toUpperCase() ?? 'SCHEDULED';
+        final isLive = status == 'LIVE';
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            title: Text(
+              "${match['team1_name']} vs ${match['team2_name']}",
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Text(
+                  "Venue: $venue",
+                  style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  "Type: ${match['match_type']} | Limit: ${match['over_limit']} Overs",
+                  style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11),
+                ),
+              ],
+            ),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isLive ? AppColors.error.withOpacity(0.12) : AppColors.primary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                status,
+                style: GoogleFonts.outfit(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: isLive ? AppColors.error : AppColors.primary,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.teamName),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadDetails,
+          )
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: AppColors.primary,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.textSecondary,
+          tabs: const [
+            Tab(text: "Members"),
+            Tab(text: "Matches"),
+          ],
+        ),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildMembersTab(),
+                _buildMatchesTab(),
+              ],
+            ),
+    );
+  }
+}

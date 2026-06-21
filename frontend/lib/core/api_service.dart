@@ -486,6 +486,36 @@ class ApiService {
     return await _dio.get('/teams/$teamId/stats');
   }
 
+  Future<Response> getMyTeams() async {
+    return await _dio.get('/teams/my-teams');
+  }
+
+  Future<Response> getTeamMembers(String teamId) async {
+    return await _dio.get('/teams/$teamId/members');
+  }
+
+  Future<Response> addTeamMember(String teamId, String email) async {
+    return await _dio.post(
+      '/teams/$teamId/members',
+      data: {'email': email},
+    );
+  }
+
+  Future<Response> removeTeamMember(String teamId, String userId) async {
+    return await _dio.delete('/teams/$teamId/members/$userId');
+  }
+
+  Future<Response> joinRequest(String teamId) async {
+    return await _dio.post('/teams/$teamId/join-request');
+  }
+
+  Future<Response> approveJoinRequest(String teamId, String userId) async {
+    return await _dio.post(
+      '/teams/$teamId/approve-request',
+      data: {'user_id': userId},
+    );
+  }
+
   // MATCHES
   Future<Response> createMatch({
     required String venue,

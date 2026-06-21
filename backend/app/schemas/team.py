@@ -38,3 +38,28 @@ class TeamStatsResponse(BaseModel):
 
 class BulkAddPlayersRequest(BaseModel):
     player_ids: List[UUID]
+
+class TeamMemberResponse(BaseModel):
+    id: UUID
+    team_id: UUID
+    user_id: UUID
+    user_email: str
+    user_full_name: Optional[str] = None
+    role: str
+    status: str
+    joined_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class MyTeamsResponse(BaseModel):
+    team: TeamResponse
+    role: str
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+class AddMemberRequest(BaseModel):
+    email: str
+
+class ApproveMemberRequest(BaseModel):
+    user_id: UUID
