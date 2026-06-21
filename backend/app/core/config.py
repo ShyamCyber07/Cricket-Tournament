@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # Google OAuth
     GOOGLE_CLIENT_ID: str | None = os.getenv("GOOGLE_CLIENT_ID", None)
 
+    # Cloudinary Persistent Storage URL
+    CLOUDINARY_URL: str = os.getenv("CLOUDINARY_URL", "")
+
     # Environment
     APP_ENV: str = os.getenv("APP_ENV", "development")
 

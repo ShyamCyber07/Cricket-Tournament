@@ -303,7 +303,8 @@ def test_profile_completion(client, db):
     # Check player profile was updated/created
     db.refresh(user)
     assert user.profile_completed is True
-    assert user.players is not None
+    from app.models.cricket import Player
+    assert db.query(Player).filter(Player.user_id == user.id).first() is not None
 
 def test_refresh_token_lifecycle(client, db):
     # Seed user

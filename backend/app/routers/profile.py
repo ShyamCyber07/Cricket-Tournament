@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from uuid import UUID
 
+from app.core.storage import upload_image, delete_image
+
 from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User, UserActivity, UserAchievement
@@ -408,13 +410,18 @@ def upload_profile_photo(
         raise HTTPException(status_code=400, detail="Invalid file type. Only image files are allowed.")
     
     filename = f"{current_user.id}_{uuid.uuid4().hex}.{ext}"
-    os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
-    filepath = os.path.join("static", "uploads", filename)
     
-    with open(filepath, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        content = file.file.read()
         
-    url = f"/static/uploads/{filename}"
+        # Delete old photo if it exists
+        if current_user.profile_photo_url:
+            delete_image(current_user.profile_photo_url)
+            
+        url = upload_image(content, filename, folder="profiles")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to upload image: {str(e)}")
+        
     current_user.profile_photo_url = url
     db.add(current_user)
     

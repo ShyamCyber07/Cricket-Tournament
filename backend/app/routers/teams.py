@@ -7,6 +7,8 @@ import os
 from PIL import Image
 import io
 
+from app.core.storage import upload_image, delete_image
+
 from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User
@@ -276,6 +278,8 @@ def delete_team(
             detail=f"Cannot delete team because it has scheduled or active matches: {active_match.team1.name} vs {active_match.team2.name}."
         )
 
+    if team.logo_url:
+        delete_image(team.logo_url)
     db.delete(team)
     db.commit()
     return None
@@ -365,18 +369,19 @@ def upload_team_logo(
         raise HTTPException(status_code=400, detail="Invalid file type. Only image files are allowed.")
 
     filename = f"team_{team.id}_{uuid.uuid4().hex}.jpg"
-    os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
-    filepath = os.path.join("static", "uploads", filename)
 
     try:
         content = file.file.read()
         processed_content = crop_and_resize_image(content)
-        with open(filepath, "wb") as buffer:
-            buffer.write(processed_content)
+        
+        # Delete old logo if it exists
+        if team.logo_url:
+            delete_image(team.logo_url)
+            
+        url = upload_image(processed_content, filename, folder="teams")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to process image: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to process or upload image: {str(e)}")
 
-    url = f"/static/uploads/{filename}"
     team.logo_url = url
     db.add(team)
     db.commit()
