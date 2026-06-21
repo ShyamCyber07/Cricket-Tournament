@@ -255,6 +255,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    import time
+    start_time = time.time()
+    response = await call_next(request)
+    duration = time.time() - start_time
+    logger.info(f"{request.method} {request.url.path} {response.status_code}")
+    return response
+
 # Ensure static directories exist and mount static files
 os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
 
