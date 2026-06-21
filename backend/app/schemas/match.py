@@ -35,7 +35,7 @@ class MatchResponse(MatchBase):
     current_bowler_id: Optional[UUID] = None
     created_by: Optional[UUID] = None
     assigned_scorer_id: Optional[UUID] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

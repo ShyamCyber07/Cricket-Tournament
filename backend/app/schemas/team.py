@@ -19,7 +19,7 @@ class TeamResponse(TeamBase):
     id: UUID
     captain_id: Optional[UUID] = None
     created_by: UUID
-    created_at: datetime
+    created_at: Optional[datetime] = None
     players: List[PlayerResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

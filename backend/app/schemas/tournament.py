@@ -19,7 +19,7 @@ class TournamentResponse(TournamentBase):
     organizer_id: UUID
     status: str
     winner_id: Optional[UUID] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

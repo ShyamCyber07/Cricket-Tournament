@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User, Report, UserActivity
-from app.models.cricket import Team, Player, Tournament, Match, TournamentTeam, MatchSquad
+from app.models.cricket import Team, Player, Tournament, Match, TournamentTeam, MatchSquad, TeamPlayer
 from app.schemas.user import UserResponse
 from app.schemas.report import ReportCreate, ReportResponse
 
@@ -655,7 +655,7 @@ def get_all_matches(
     query = db.query(Match)
     if search:
         search_term = f"%{search}%"
-        query = query.filter(Match.title.ilike(search_term))
+        query = query.filter(Match.venue.ilike(search_term))
     if status_filter:
         query = query.filter(Match.status == status_filter)
 
@@ -673,14 +673,17 @@ def get_all_matches(
             team2 = db.query(Team).filter(Team.id == m.team2_id).first()
             team2_name = team2.name if team2 else None
 
+        winner_name = m.winner.name if (m.status == "completed" and m.winner) else None
+        result_text = f"Won by {winner_name}" if winner_name else m.status
+
         result.append({
             "id": str(m.id),
-            "title": m.title,
+            "title": f"{team1_name or 'Team 1'} vs {team2_name or 'Team 2'}",
             "team1_name": team1_name,
             "team2_name": team2_name,
             "status": m.status,
-            "result": m.result,
-            "organizer_id": str(m.organizer_id) if m.organizer_id else None,
+            "result": result_text,
+            "organizer_id": str(m.created_by) if m.created_by else None,
             "created_at": m.created_at.isoformat() if m.created_at else None
         })
 
@@ -700,21 +703,24 @@ def get_match_details(
     team1 = db.query(Team).filter(Team.id == match.team1_id).first() if match.team1_id else None
     team2 = db.query(Team).filter(Team.id == match.team2_id).first() if match.team2_id else None
 
+    winner_name = match.winner.name if (match.status == "completed" and match.winner) else None
+    result_text = f"Won by {winner_name}" if winner_name else match.status
+
     return {
         "id": str(match.id),
-        "title": match.title,
+        "title": f"{team1.name if team1 else 'Team 1'} vs {team2.name if team2 else 'Team 2'}",
         "team1_id": str(match.team1_id) if match.team1_id else None,
         "team1_name": team1.name if team1 else None,
         "team2_id": str(match.team2_id) if match.team2_id else None,
         "team2_name": team2.name if team2 else None,
         "status": match.status,
-        "toss_winner": match.toss_winner,
+        "toss_winner": match.toss_winner.name if (match.toss_winner_id and match.toss_winner) else None,
         "toss_decision": match.toss_decision,
-        "result": match.result,
+        "result": result_text,
         "winner_id": str(match.winner_id) if match.winner_id else None,
-        "overs": match.overs,
-        "umpire_id": str(match.umpire_id) if match.umpire_id else None,
-        "organizer_id": str(match.organizer_id) if match.organizer_id else None,
+        "overs": match.over_limit,
+        "umpire_id": None,
+        "organizer_id": str(match.created_by) if match.created_by else None,
         "created_at": match.created_at.isoformat() if match.created_at else None
     }
 
@@ -731,12 +737,8 @@ def update_match(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    if title:
-        match.title = title
     if status:
         match.status = status
-    if result:
-        match.result = result
 
     db.commit()
     db.refresh(match)
@@ -759,8 +761,6 @@ def force_end_match(
 
     # Force end the match
     match.status = "completed"
-    if not match.result:
-        match.result = "Match ended by admin"
 
     db.commit()
     db.refresh(match)
