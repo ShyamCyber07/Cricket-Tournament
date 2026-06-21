@@ -186,7 +186,7 @@ def get_user_details(
     tournaments = db.query(Tournament).filter(Tournament.organizer_id == id).all()
 
     # Get user's matches (as organizer)
-    matches = db.query(Match).filter(Match.organizer_id == id).all()
+    matches = db.query(Match).filter(Match.created_by == id).all()
 
     return {
         "user": user,
@@ -204,7 +204,7 @@ def get_user_details(
         } for t in tournaments],
         "organized_matches": [{
             "id": str(m.id),
-            "title": m.title,
+            "title": f"{m.team1_name} vs {m.team2_name}",
             "status": m.status,
             "created_at": m.created_at.isoformat() if m.created_at else None
         } for m in matches]
