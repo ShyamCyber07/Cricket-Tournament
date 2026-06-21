@@ -33,7 +33,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqladmin import Admin
 from sqladmin.authentication import AuthenticationBackend
 from starlette.requests import Request
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import RedirectResponse, Response, FileResponse
 
 from app.core.config import settings
 from app.core.database import engine
@@ -257,7 +257,19 @@ app.add_middleware(
 
 # Ensure static directories exist and mount static files
 os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+
+class FallbackStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope) -> Response:
+        try:
+            return await super().get_response(path, scope)
+        except Exception as exc:
+            if "uploads" in path:
+                fallback_path = os.path.join(self.directory, "fallback_team.png")
+                if os.path.exists(fallback_path):
+                    return FileResponse(fallback_path)
+            raise exc
+
+app.mount("/static", FallbackStaticFiles(directory="static"), name="static")
 
 # Set up SQLAdmin with authentication
 class AdminAuthBackend(AuthenticationBackend):
