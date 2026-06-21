@@ -138,6 +138,17 @@ def get_admin_activity_logs(
         "created_at": log.created_at.isoformat() if log.created_at else None
     } for log in logs]
 
+# --- Admin System Logs (Secure) ---
+
+@router.get("/admin/system-logs", status_code=status.HTTP_200_OK)
+def get_system_logs(
+    current_user: User = Depends(require_admin)
+):
+    """Retrieve live in-memory logs (admin only)"""
+    from fastapi.responses import PlainTextResponse
+    from app.main import memory_handler
+    return PlainTextResponse(memory_handler.get_logs())
+
 # --- User Management ---
 
 @router.get("/admin/users", response_model=List[UserResponse])
