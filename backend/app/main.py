@@ -261,7 +261,15 @@ async def log_requests(request: Request, call_next):
     start_time = time.time()
     response = await call_next(request)
     duration = time.time() - start_time
-    logger.info(f"{request.method} {request.url.path} {response.status_code}")
+    log_line = f"{request.method} {request.url.path} {response.status_code}"
+    logger.info(log_line)
+    try:
+        import os
+        os.makedirs("static", exist_ok=True)
+        with open("static/requests.log", "a") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {log_line}\n")
+    except Exception:
+        pass
     return response
 
 # Ensure static directories exist and mount static files

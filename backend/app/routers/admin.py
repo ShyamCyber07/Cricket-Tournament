@@ -144,10 +144,23 @@ def get_admin_activity_logs(
 def get_system_logs(
     current_user: User = Depends(require_admin)
 ):
-    """Retrieve live in-memory logs (admin only)"""
+    """Retrieve live in-memory and request logs (admin only)"""
     from fastapi.responses import PlainTextResponse
     from app.main import memory_handler
-    return PlainTextResponse(memory_handler.get_logs())
+    import os
+    
+    logs = memory_handler.get_logs()
+    
+    req_logs = ""
+    if os.path.exists("static/requests.log"):
+        try:
+            with open("static/requests.log", "r") as f:
+                req_logs = f.read()
+        except Exception as e:
+            req_logs = f"Error reading requests.log: {e}"
+            
+    combined = f"--- STARTUP & CONSOLE LOGS ---\n{logs}\n\n--- HTTP REQUEST LOGS ---\n{req_logs}"
+    return PlainTextResponse(combined)
 
 # --- User Management ---
 
