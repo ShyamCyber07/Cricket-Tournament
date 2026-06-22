@@ -98,15 +98,23 @@ def test_team_membership_flows(client, db):
     assert res_approve.status_code == 200
     assert res_approve.json()["status"] == "active"
 
-    # 8. Captain adds Player 2 directly -> POST /teams/{id}/members
+    # 8. Captain adds Player 2 directly -> POST /teams/{id}/members (now creates invitation)
     res_add_p2 = client.post(
         f"/api/v1/teams/{team_id}/members",
         json={"email": "player2@cricup.com"},
         headers=headers_cap
     )
     assert res_add_p2.status_code == 200
-    assert res_add_p2.json()["status"] == "active"
+    assert res_add_p2.json()["status"] == "invited"
     assert res_add_p2.json()["role"] == "player"
+
+    # Player 2 accepts invitation
+    res_accept_p2 = client.post(
+        f"/api/v1/teams/{team_id}/invitations/accept",
+        headers=headers_p2
+    )
+    assert res_accept_p2.status_code == 200
+    assert res_accept_p2.json()["status"] == "active"
 
     # 9. GET /teams/{id}/members
     res_members = client.get(f"/api/v1/teams/{team_id}/members", headers=headers_cap)

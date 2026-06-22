@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
+import 'package:cricket_scorer/features/dashboard/screens/team_edit_screen.dart';
 
 class TeamDetailsScreen extends StatefulWidget {
   final String teamId;
@@ -22,6 +23,9 @@ class TeamDetailsScreen extends StatefulWidget {
 class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTickerProviderStateMixin {
   final ApiService _apiService = ApiService();
   late TabController _tabController;
+  dynamic _team;
+  String _teamDescription = "";
+  String? _teamLogoUrl;
   List<dynamic> _members = [];
   List<dynamic> _matches = [];
   bool _isLoading = true;
@@ -48,9 +52,11 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
   Future<void> _loadDetails() async {
     setState(() => _isLoading = true);
     try {
+      final teamRes = await _apiService.getTeam(widget.teamId);
       final membersRes = await _apiService.getTeamMembers(widget.teamId);
       final matchesRes = await _apiService.getMatches();
 
+      final dynamic teamData = teamRes.data;
       final List<dynamic> allMembers = membersRes.data ?? [];
       final List<dynamic> allMatches = matchesRes.data ?? [];
 
@@ -61,6 +67,9 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
       }).toList();
 
       setState(() {
+        _team = teamData;
+        _teamDescription = teamData['description'] ?? '';
+        _teamLogoUrl = teamData['logo_url'];
         _members = allMembers;
         _matches = filteredMatches;
         _isLoading = false;
@@ -85,6 +94,16 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
       _loadDetails();
     } catch (e) {
       _showSnackBar("Failed to approve request: $e", AppColors.error);
+    }
+  }
+
+  Future<void> _rejectJoin(String userId) async {
+    try {
+      await _apiService.rejectJoinRequest(widget.teamId, userId);
+      _showSnackBar("Join request rejected.", AppColors.textSecondary);
+      _loadDetails();
+    } catch (e) {
+      _showSnackBar("Failed to reject request: $e", AppColors.error);
     }
   }
 
@@ -113,6 +132,47 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     } catch (e) {
       _showSnackBar("Failed to remove member: $e", AppColors.error);
     }
+  }
+
+  Future<void> _deleteTeam() async {
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.deleteTeam(widget.teamId);
+      _showSnackBar("Team deleted successfully", AppColors.primary);
+      if (mounted) {
+        Navigator.pop(context, true); // Pop back to dashboard / my teams screen with refresh flag
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar("Failed to delete team: $e", AppColors.error);
+    }
+  }
+
+  void _confirmDelete() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text("Delete Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
+          content: Text("Are you sure you want to delete this team? This action is irreversible.", style: GoogleFonts.outfit()),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
+              onPressed: () {
+                Navigator.pop(context);
+                _deleteTeam();
+              },
+              child: Text("Delete", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showAddMemberDialog() {
@@ -195,6 +255,17 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.error),
+                        foregroundColor: AppColors.error,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                      onPressed: () => _rejectJoin(req['user_id'].toString()),
+                      child: Text("Reject", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 11)),
+                    ),
+                    const SizedBox(width: 8),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
@@ -388,7 +459,54 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadDetails,
-          )
+          ),
+          if (_isCaptain)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              color: AppColors.surface,
+              onSelected: (value) async {
+                if (value == 'edit') {
+                  final updated = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => TeamEditScreen(
+                        teamId: widget.teamId,
+                        currentName: widget.teamName,
+                        currentDescription: _teamDescription,
+                        currentLogoUrl: _teamLogoUrl,
+                      ),
+                    ),
+                  );
+                  if (updated == true) {
+                    _loadDetails();
+                  }
+                } else if (value == 'delete') {
+                  _confirmDelete();
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.edit_outlined, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Text("Edit Team", style: GoogleFonts.outfit(color: Colors.white)),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.delete_outline, color: AppColors.error),
+                      const SizedBox(width: 8),
+                      Text("Delete Team", style: GoogleFonts.outfit(color: AppColors.error)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
         ],
         bottom: TabBar(
           controller: _tabController,

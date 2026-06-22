@@ -12,7 +12,7 @@ from app.core.storage import upload_image, delete_image
 from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User
-from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad, TeamMember
+from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad, TeamMember, Notification
 from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate, BulkAddPlayersRequest, TeamMemberResponse, MyTeamsResponse, AddMemberRequest, ApproveMemberRequest
 
 router = APIRouter()
@@ -44,6 +44,7 @@ def create_team(
         name=team_in.name,
         logo_url=team_in.logo_url,
         captain_id=team_in.captain_id,
+        description=team_in.description,
         created_by=current_user.id
     )
     db.add(db_team)
@@ -80,6 +81,122 @@ def get_my_teams(
                 status=m.status
             ))
     return res
+
+@router.get("/my-invitations", response_model=List[MyTeamsResponse])
+def get_my_invitations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Fetch all invitations where user is invited
+    memberships = db.query(TeamMember).filter(
+        TeamMember.user_id == current_user.id,
+        TeamMember.status == "invited"
+    ).all()
+    
+    res = []
+    for m in memberships:
+        team = db.query(Team).filter(Team.id == m.team_id).first()
+        if team:
+            res.append(MyTeamsResponse(
+                team=team,
+                role=m.role,
+                status=m.status
+            ))
+    return res
+
+@router.post("/{id}/invitations/accept", response_model=TeamMemberResponse)
+def accept_invitation(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+        
+    member = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.status == "invited"
+    ).first()
+    
+    if not member:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+        
+    member.status = "active"
+    
+    # Notify all active captains of this team that the user accepted
+    import json
+    captains = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).all()
+    
+    for cap in captains:
+        notif = Notification(
+            user_id=cap.user_id,
+            title="Invitation Accepted",
+            message=f"{current_user.full_name or current_user.username} accepted your invitation to join {team.name}.",
+            type="invitation_accepted",
+            extra_data=json.dumps({"team_id": str(id)})
+        )
+        db.add(notif)
+        
+    db.commit()
+    db.refresh(member)
+    return TeamMemberResponse(
+        id=member.id,
+        team_id=member.team_id,
+        user_id=member.user_id,
+        user_email=current_user.email,
+        user_full_name=current_user.full_name or current_user.username or "User",
+        role=member.role,
+        status=member.status,
+        joined_at=member.joined_at
+    )
+
+@router.post("/{id}/invitations/reject", status_code=status.HTTP_204_NO_CONTENT)
+def reject_invitation(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+        
+    member = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.status == "invited"
+    ).first()
+    
+    if not member:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+        
+    db.delete(member)
+    
+    # Notify all active captains of this team that the user rejected
+    import json
+    captains = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).all()
+    
+    for cap in captains:
+        notif = Notification(
+            user_id=cap.user_id,
+            title="Invitation Rejected",
+            message=f"{current_user.full_name or current_user.username} rejected your invitation to join {team.name}.",
+            type="invitation_rejected",
+            extra_data=json.dumps({"team_id": str(id)})
+        )
+        db.add(notif)
+        
+    db.commit()
+    return None
 
 @router.get("/", response_model=List[TeamResponse])
 def list_teams(
@@ -236,8 +353,14 @@ def update_team(
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
-    # Check authorization (creator or admin)
-    if team.created_by != current_user.id and current_user.role != "admin":
+    # Check authorization (captain or admin)
+    is_captain = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).first()
+    if not is_captain and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to manage this team")
 
     # Update name if provided and verify uniqueness per user
@@ -250,6 +373,9 @@ def update_team(
         if existing:
             raise HTTPException(status_code=400, detail="You already have a team with this name")
         team.name = team_in.name
+
+    if team_in.description is not None:
+        team.description = team_in.description
 
     # Update captain if provided and check membership
     if team_in.captain_id is not None:
@@ -281,8 +407,14 @@ def delete_team(
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
-    # Check authorization
-    if team.created_by != current_user.id and current_user.role != "admin":
+    # Check authorization (captain or admin)
+    is_captain = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).first()
+    if not is_captain and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to manage this team")
 
     # Block deletion if team belongs to active tournament (status == ongoing)
@@ -390,7 +522,14 @@ def upload_team_logo(
     team = db.query(Team).filter(Team.id == id).first()
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
-    if team.created_by != current_user.id:
+    # Check authorization (captain or admin)
+    is_captain = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).first()
+    if not is_captain and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to manage this team")
 
     ext = file.filename.split(".")[-1].lower()
@@ -500,9 +639,21 @@ def add_member_to_team(
         team_id=id,
         user_id=user_to_add.id,
         role="player",
-        status="active"
+        status="invited"
     )
     db.add(member)
+    
+    # Create notification for the user
+    import json
+    notif = Notification(
+        user_id=user_to_add.id,
+        title="Team Invitation",
+        message=f"You have been invited to join team {team.name}",
+        type="invitation_received",
+        extra_data=json.dumps({"team_id": str(id)})
+    )
+    db.add(notif)
+    
     db.commit()
     db.refresh(member)
     
@@ -630,6 +781,18 @@ def approve_join_request(
         raise HTTPException(status_code=404, detail="Pending request not found")
 
     member.status = "active"
+    
+    # Create notification for approved user
+    import json
+    notif = Notification(
+        user_id=req.user_id,
+        title="Join Request Approved",
+        message=f"Your request to join team {team.name} has been approved!",
+        type="request_approved",
+        extra_data=json.dumps({"team_id": str(id)})
+    )
+    db.add(notif)
+    
     db.commit()
     db.refresh(member)
     
@@ -644,3 +807,50 @@ def approve_join_request(
         status=member.status,
         joined_at=member.joined_at
     )
+
+@router.post("/{id}/reject-request", status_code=status.HTTP_204_NO_CONTENT)
+def reject_join_request(
+    id: UUID,
+    req: ApproveMemberRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+        
+    # Captain permissions: "Reject join requests"
+    is_captain = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).first()
+    
+    if not is_captain and team.created_by != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only the captain can reject requests")
+
+    member = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == req.user_id,
+        TeamMember.status == "pending"
+    ).first()
+    
+    if not member:
+        raise HTTPException(status_code=404, detail="Pending request not found")
+
+    db.delete(member)
+    
+    # Create notification for rejected user
+    import json
+    notif = Notification(
+        user_id=req.user_id,
+        title="Join Request Rejected",
+        message=f"Your request to join team {team.name} has been rejected.",
+        type="request_rejected",
+        extra_data=json.dumps({"team_id": str(id)})
+    )
+    db.add(notif)
+    
+    db.commit()
+    return None

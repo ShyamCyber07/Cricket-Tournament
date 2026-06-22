@@ -42,7 +42,7 @@ from contextlib import asynccontextmanager
 from app.models import Base
 
 # Import routers
-from app.routers import auth, players, teams, matches, tournaments, profile
+from app.routers import auth, players, teams, matches, tournaments, profile, notifications
 from app.routers.admin import router as admin_router
 
 
@@ -388,6 +388,7 @@ def read_root():
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(players.router, prefix=f"{settings.API_V1_STR}/players", tags=["players"])
 app.include_router(teams.router, prefix=f"{settings.API_V1_STR}/teams", tags=["teams"])
+app.include_router(notifications.router, prefix=f"{settings.API_V1_STR}/notifications", tags=["notifications"])
 app.include_router(matches.router, prefix=f"{settings.API_V1_STR}/matches", tags=["matches"])
 app.include_router(tournaments.router, prefix=f"{settings.API_V1_STR}/tournaments", tags=["tournaments"])
 app.include_router(profile.router, prefix=f"{settings.API_V1_STR}/profile", tags=["profile"])

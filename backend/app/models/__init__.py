@@ -10,7 +10,8 @@ from app.models.cricket import (
     Match,
     MatchSquad,
     Innings,
-    Ball
+    Ball,
+    Notification
 )
 
 __all__ = [
@@ -29,5 +30,6 @@ __all__ = [
     "Match",
     "MatchSquad",
     "Innings",
-    "Ball"
+    "Ball",
+    "Notification"
 ]

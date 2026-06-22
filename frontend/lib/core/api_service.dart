@@ -468,12 +468,13 @@ class ApiService {
     );
   }
 
-  Future<Response> updateTeam(String id, String name, {String? captainId}) async {
+  Future<Response> updateTeam(String id, String name, {String? captainId, String? description}) async {
     return await _dio.put(
       '/teams/$id',
       data: {
         'name': name,
-        'captain_id': captainId,
+        if (captainId != null) 'captain_id': captainId,
+        if (description != null) 'description': description,
       },
     );
   }
@@ -514,6 +515,38 @@ class ApiService {
       '/teams/$teamId/approve-request',
       data: {'user_id': userId},
     );
+  }
+
+  Future<Response> rejectJoinRequest(String teamId, String userId) async {
+    return await _dio.post(
+      '/teams/$teamId/reject-request',
+      data: {'user_id': userId},
+    );
+  }
+
+  Future<Response> getMyInvitations() async {
+    return await _dio.get('/teams/my-invitations');
+  }
+
+  Future<Response> acceptInvitation(String teamId) async {
+    return await _dio.post('/teams/$teamId/invitations/accept');
+  }
+
+  Future<Response> rejectInvitation(String teamId) async {
+    return await _dio.post('/teams/$teamId/invitations/reject');
+  }
+
+  // NOTIFICATIONS
+  Future<Response> getNotifications() async {
+    return await _dio.get('/notifications/');
+  }
+
+  Future<Response> markNotificationRead(String id) async {
+    return await _dio.post('/notifications/$id/read');
+  }
+
+  Future<Response> markAllNotificationsRead() async {
+    return await _dio.post('/notifications/read-all');
   }
 
   // MATCHES

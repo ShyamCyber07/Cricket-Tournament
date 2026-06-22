@@ -4,6 +4,7 @@ import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:cricket_scorer/core/app_config.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_details_screen.dart';
+import 'package:cricket_scorer/features/dashboard/screens/team_invitations_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 
@@ -381,6 +382,16 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
       appBar: AppBar(
         title: const Text("My Teams"),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.mail_outline_rounded),
+            tooltip: "Team Invitations",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const TeamInvitationsScreen()),
+              ).then((_) => _loadData());
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,

@@ -7,6 +7,7 @@ from app.schemas.player import PlayerResponse
 class TeamBase(BaseModel):
     name: str
     logo_url: Optional[str] = None
+    description: Optional[str] = None
 
 class TeamCreate(TeamBase):
     captain_id: Optional[UUID] = None
@@ -14,6 +15,7 @@ class TeamCreate(TeamBase):
 class TeamUpdate(BaseModel):
     name: Optional[str] = None
     captain_id: Optional[UUID] = None
+    description: Optional[str] = None
 
 class TeamResponse(TeamBase):
     id: UUID

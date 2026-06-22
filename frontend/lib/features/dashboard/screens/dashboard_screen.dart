@@ -15,6 +15,8 @@ import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
 import 'package:cricket_scorer/features/tournaments/screens/tournament_list_screen.dart';
 import 'package:cricket_scorer/features/profile/screens/profile_screen.dart';
 import 'package:cricket_scorer/core/app_config.dart';
+import 'package:cricket_scorer/features/dashboard/screens/notifications_screen.dart';
+import 'package:cricket_scorer/features/dashboard/screens/team_invitations_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -32,12 +34,15 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   late AnimationController _pulseController;
   late Map<String, dynamic> _currentUser;
 
+  int _unreadCount = 0;
+
   @override
   void initState() {
     super.initState();
     _currentUser = widget.user;
     _fetchMatches();
     _fetchUserProfile();
+    _fetchNotificationsCount();
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -94,6 +99,19 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
+  Future<void> _fetchNotificationsCount() async {
+    try {
+      final res = await _apiService.getNotifications();
+      final List<dynamic> list = res.data;
+      final unread = list.where((n) => n['is_read'] == false).length;
+      if (mounted) {
+        setState(() {
+          _unreadCount = unread;
+        });
+      }
+    } catch (_) {}
+  }
+
   Future<void> _fetchUserProfile() async {
     try {
       final res = await _apiService.getProfile();
@@ -111,6 +129,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     await Future.wait([
       _fetchMatches(),
       _fetchUserProfile(),
+      _fetchNotificationsCount(),
     ]);
   }
 
@@ -461,6 +480,46 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           ],
         ),
         actions: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_none_rounded, color: Colors.white70),
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                  );
+                  _refreshData();
+                },
+              ),
+              if (_unreadCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: const BoxDecoration(
+                      color: AppColors.error,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      '$_unreadCount',
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
             onPressed: _refreshData,

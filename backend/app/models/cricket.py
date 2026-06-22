@@ -86,6 +86,7 @@ class Team(Base):
     name = Column(String, index=True, nullable=False)  # Unique per user, not globally
     logo_url = Column(String, nullable=True)
     captain_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="SET NULL"), nullable=True)
+    description = Column(String, nullable=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -94,6 +95,21 @@ class Team(Base):
     players = relationship("Player", secondary="team_players", back_populates="teams")
     tournaments = relationship("Tournament", secondary="tournament_teams", back_populates="teams")
     members = relationship("TeamMember", back_populates="team", cascade="all, delete-orphan")
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    type = Column(String, nullable=False)  # invitation_received, request_approved, request_rejected, etc.
+    extra_data = Column(String, nullable=True)  # Optional JSON string
+    is_read = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    user = relationship("User")
 
 class Tournament(Base):
     __tablename__ = "tournaments"
