@@ -134,6 +134,16 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     }
   }
 
+  Future<void> _revokeInvitation(String userId) async {
+    try {
+      await _apiService.removeTeamMember(widget.teamId, userId);
+      _showSnackBar("Invitation revoked.", AppColors.textSecondary);
+      _loadDetails();
+    } catch (e) {
+      _showSnackBar("Failed to revoke invitation: $e", AppColors.error);
+    }
+  }
+
   Future<void> _deleteTeam() async {
     setState(() => _isLoading = true);
     try {
@@ -224,15 +234,19 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
   }
 
   Widget _buildMembersTab() {
-    // Separate active members from pending ones
+    // Separate active members, pending ones, and invited ones
     final List<dynamic> activeList = [];
     final List<dynamic> pendingList = [];
+    final List<dynamic> invitedList = [];
 
     for (final m in _members) {
-      if (m['status']?.toString().toLowerCase() == 'active') {
+      final status = m['status']?.toString().toLowerCase();
+      if (status == 'active') {
         activeList.add(m);
-      } else {
+      } else if (status == 'pending') {
         pendingList.add(m);
+      } else if (status == 'invited') {
+        invitedList.add(m);
       }
     }
 
@@ -277,6 +291,35 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                       child: Text("Approve", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 11)),
                     ),
                   ],
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 24),
+        ],
+
+        if (_isCaptain && invitedList.isNotEmpty) ...[
+          Text(
+            "Sent Invitations (${invitedList.length})",
+            style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.secondary),
+          ),
+          const SizedBox(height: 8),
+          ...invitedList.map((inv) {
+            return Card(
+              color: AppColors.primary.withOpacity(0.08),
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                title: Text(inv['user_full_name'] ?? 'Unknown User', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                subtitle: Text(inv['user_email'] ?? '', style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12)),
+                trailing: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.error),
+                    foregroundColor: AppColors.error,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                  onPressed: () => _revokeInvitation(inv['user_id'].toString()),
+                  child: Text("Revoke", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 11)),
                 ),
               ),
             );

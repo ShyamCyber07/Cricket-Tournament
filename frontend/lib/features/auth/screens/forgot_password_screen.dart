@@ -18,6 +18,7 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -26,7 +27,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   void _submitForgotPassword() {
+    if (_isSubmitting) return;
     if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isSubmitting = true;
+      });
       context.read<AuthBloc>().add(
             ForgotPasswordRequested(email: _emailController.text.trim()),
           );
@@ -48,6 +53,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       extendBodyBehindAppBar: true,
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
+          if (state is! AuthLoading) {
+            setState(() {
+              _isSubmitting = false;
+            });
+          }
           if (state is AuthForgotPasswordOtpSent) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -240,7 +250,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                   // Submit button with Gradient
                                   BlocBuilder<AuthBloc, AuthState>(
                                     builder: (context, state) {
-                                      if (state is AuthLoading) {
+                                      final localLoading = _isSubmitting || state is AuthLoading;
+                                      if (localLoading) {
                                         return const Center(
                                           child: CircularProgressIndicator(color: AppColors.secondary),
                                         );

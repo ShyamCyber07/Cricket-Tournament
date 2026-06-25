@@ -22,6 +22,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _displayNameController = TextEditingController();
   final _countryController = TextEditingController();
   final _favoriteTeamController = TextEditingController();
+  bool _isSubmitting = false;
 
   String? _selectedAvatar;
   String _selectedRole = "all_rounder";
@@ -57,7 +58,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   }
 
   void _submitProfile() {
+    if (_isSubmitting) return;
     if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isSubmitting = true;
+      });
       context.read<AuthBloc>().add(
         CompleteProfileRequested(
           fullName: _fullNameController.text.trim(),
@@ -79,6 +84,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     return Scaffold(
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
+          if (state is! AuthLoading) {
+            setState(() {
+              _isSubmitting = false;
+            });
+          }
           if (state is AuthAuthenticated) {
             Navigator.popUntil(context, (route) => route.isFirst);
           }
@@ -438,7 +448,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                                   // Save and Continue button
                                   BlocBuilder<AuthBloc, AuthState>(
                                     builder: (context, state) {
-                                      if (state is AuthLoading) {
+                                      final localLoading = _isSubmitting || state is AuthLoading;
+                                      if (localLoading) {
                                         return const Center(
                                           child: CircularProgressIndicator(color: AppColors.primary),
                                         );

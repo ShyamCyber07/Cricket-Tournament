@@ -192,12 +192,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       print("[DIAGNOSTICS]   Message: ${e.message}");
       print("[DIAGNOSTICS] StackTrace:\n$stack");
       
+      await ApiService.clearToken();
       final msg = _getErrorMessage(e, "Google login failed.");
       emit(AuthError(message: msg));
       emit(AuthUnauthenticated());
     } catch (e, stack) {
       print("[DIAGNOSTICS] Google Login Backend unexpected error: $e");
       print("[DIAGNOSTICS] StackTrace:\n$stack");
+      await ApiService.clearToken();
       emit(AuthError(message: e.toString()));
       emit(AuthUnauthenticated());
     }

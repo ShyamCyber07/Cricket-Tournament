@@ -23,6 +23,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _isSubmitting = false;
 
   // Live validation flags
   bool _hasMinLength = false;
@@ -77,6 +78,11 @@ class _SignupScreenState extends State<SignupScreen> {
       extendBodyBehindAppBar: true,
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
+          if (state is! AuthLoading) {
+            setState(() {
+              _isSubmitting = false;
+            });
+          }
           if (state is AuthNeedsVerification) {
             Navigator.popUntil(context, (route) => route.isFirst);
           }
@@ -340,7 +346,8 @@ class _SignupScreenState extends State<SignupScreen> {
                                   // Sign Up Submit button with Gradient overlay
                                   BlocBuilder<AuthBloc, AuthState>(
                                     builder: (context, state) {
-                                      if (state is AuthLoading) {
+                                      final localLoading = _isSubmitting || state is AuthLoading;
+                                      if (localLoading) {
                                         return const Center(
                                           child: CircularProgressIndicator(color: AppColors.secondary),
                                         );
@@ -360,6 +367,9 @@ class _SignupScreenState extends State<SignupScreen> {
                                         child: ElevatedButton(
                                           onPressed: () {
                                             if (_formKey.currentState!.validate()) {
+                                              setState(() {
+                                                _isSubmitting = true;
+                                              });
                                               print("SIGNUP BUTTON PRESSED");
                                               context.read<AuthBloc>().add(
                                                 SignupRequested(

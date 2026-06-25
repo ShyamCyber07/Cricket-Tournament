@@ -287,6 +287,7 @@ def resend_otp(req: ResendOTPRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    logger.error(f"[LOGIN DEBUG] Received username: {form_data.username!r} and password: {form_data.password!r}")
     email = form_data.username.strip().lower() if form_data.username else ""
     user = db.query(User).filter(func.lower(func.trim(User.email)) == func.lower(email)).first()
     if not user:

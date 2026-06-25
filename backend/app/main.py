@@ -109,6 +109,9 @@ async def lifespan(app: FastAPI):
         print(f"Startup schema-check error: {e}", flush=True)
         logger.error(f"Startup schema-check error: {e}", exc_info=True)
 
+    # Dispose engine to release connections before running alembic migration
+    engine.dispose()
+
     # Run Alembic migrations programmatically on startup
     import alembic.config
     import alembic.command
@@ -120,11 +123,14 @@ async def lifespan(app: FastAPI):
             ini_path = os.path.join(os.path.dirname(__file__), "..", "alembic.ini")
 
         if os.path.exists(ini_path):
-            logger.info(f"Running database migrations from config: {ini_path}")
-            cfg = Config(ini_path)
-            cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
-            alembic.command.upgrade(cfg, "head")
-            logger.info("Database migrations upgraded to head successfully.")
+            if settings.DATABASE_URL.startswith("sqlite"):
+                logger.info("SQLite database detected. Skipping programmatic startup migrations to prevent file locks.")
+            else:
+                logger.info(f"Running database migrations from config: {ini_path}")
+                cfg = Config(ini_path)
+                cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+                alembic.command.upgrade(cfg, "head")
+                logger.info("Database migrations upgraded to head successfully.")
         else:
             logger.warning(f"alembic.ini not found at {ini_path}, skipping startup migrations.")
     except Exception as e:

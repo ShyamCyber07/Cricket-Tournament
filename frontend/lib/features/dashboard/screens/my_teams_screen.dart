@@ -21,6 +21,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
   List<dynamic> _myTeams = [];
   List<dynamic> _exploreTeams = [];
   bool _isLoading = true;
+  final Set<String> _submittingRequests = {};
 
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
@@ -128,12 +129,22 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
   }
 
   Future<void> _sendJoinRequest(String teamId) async {
+    if (_submittingRequests.contains(teamId)) return;
+    setState(() {
+      _submittingRequests.add(teamId);
+    });
     try {
       await _apiService.joinRequest(teamId);
       _showSnackBar("Join request sent successfully!", AppColors.primary);
       _loadData();
     } catch (e) {
       _showSnackBar("Failed to send join request: $e", AppColors.error);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submittingRequests.remove(teamId);
+        });
+      }
     }
   }
 
@@ -266,6 +277,21 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
         final role = membership['role'].toString().toUpperCase();
         final status = membership['status'].toString().toUpperCase();
         final isPending = status == 'PENDING';
+        final isInvited = status == 'INVITED';
+        final isActive = status == 'ACTIVE';
+
+        Color badgeColor;
+        Color badgeBgColor;
+        if (isActive) {
+          badgeColor = Colors.green;
+          badgeBgColor = Colors.green.withOpacity(0.12);
+        } else if (isPending) {
+          badgeColor = Colors.orange;
+          badgeBgColor = Colors.orange.withOpacity(0.12);
+        } else {
+          badgeColor = Colors.indigoAccent;
+          badgeBgColor = Colors.indigoAccent.withOpacity(0.12);
+        }
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
@@ -294,7 +320,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
                   margin: const EdgeInsets.only(top: 4),
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: isPending ? Colors.orange.withOpacity(0.12) : Colors.green.withOpacity(0.12),
+                    color: badgeBgColor,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -302,28 +328,88 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
                     style: GoogleFonts.outfit(
                       fontSize: 9, 
                       fontWeight: FontWeight.bold, 
-                      color: isPending ? Colors.orange : Colors.green
+                      color: badgeColor
                     ),
                   ),
                 ),
               ],
             ),
             trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-            onTap: isPending
-                ? null
-                : () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => TeamDetailsScreen(
-                          teamId: team['id'].toString(),
-                          teamName: team['name'].toString(),
-                          userRole: membership['role'].toString(),
-                        ),
+            onTap: () async {
+              if (isActive) {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TeamDetailsScreen(
+                      teamId: team['id'].toString(),
+                      teamName: team['name'].toString(),
+                      userRole: membership['role'].toString(),
+                    ),
+                  ),
+                );
+                _loadData();
+              } else if (isPending) {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    backgroundColor: AppColors.surface,
+                    title: Text("Request Pending", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
+                    content: Text("Your request to join ${team['name']} is pending captain approval.", style: GoogleFonts.outfit()),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text("OK"),
+                      )
+                    ],
+                  ),
+                );
+              } else if (isInvited) {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    backgroundColor: AppColors.surface,
+                    title: Text("Team Invitation", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
+                    content: Text("You have been invited to join ${team['name']}.", style: GoogleFonts.outfit()),
+                    actions: [
+                      TextButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          setState(() => _isLoading = true);
+                          try {
+                            await _apiService.rejectInvitation(team['id'].toString());
+                            _showSnackBar("Invitation rejected.", AppColors.textSecondary);
+                            _loadData();
+                          } catch (e) {
+                            setState(() => _isLoading = false);
+                            _showSnackBar("Failed to reject: $e", AppColors.error);
+                          }
+                        },
+                        child: Text("Reject", style: GoogleFonts.outfit(color: AppColors.error)),
                       ),
-                    );
-                    _loadData();
-                  },
+                      ElevatedButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          setState(() => _isLoading = true);
+                          try {
+                            await _apiService.acceptInvitation(team['id'].toString());
+                            _showSnackBar("Successfully joined ${team['name']}!", AppColors.primary);
+                            _loadData();
+                          } catch (e) {
+                            setState(() => _isLoading = false);
+                            _showSnackBar("Failed to accept: $e", AppColors.error);
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.black,
+                        ),
+                        child: Text("Accept", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            },
           ),
         );
       },
@@ -364,11 +450,22 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              onPressed: () => _sendJoinRequest(team['id'].toString()),
-              child: Text(
-                "Join",
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
-              ),
+              onPressed: _submittingRequests.contains(team['id'].toString())
+                  ? null
+                  : () => _sendJoinRequest(team['id'].toString()),
+              child: _submittingRequests.contains(team['id'].toString())
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      "Join",
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
             ),
           ),
         );
@@ -409,6 +506,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
         ),
       ),
       floatingActionButton: FloatingActionButton(
+        tooltip: "Add Team FAB",
         onPressed: _openCreateTeamDialog,
         backgroundColor: AppColors.primary,
         child: const Icon(Icons.add, color: Colors.white),

@@ -27,6 +27,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   String _password = "";
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -60,7 +61,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   }
 
   void _submitResetPassword() {
+    if (_isSubmitting) return;
     if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isSubmitting = true;
+      });
       context.read<AuthBloc>().add(
             ResetPasswordRequested(
               email: widget.email,
@@ -111,6 +116,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       extendBodyBehindAppBar: true,
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
+          if (state is! AuthLoading) {
+            setState(() {
+              _isSubmitting = false;
+            });
+          }
           if (state is AuthPasswordResetSuccess) {
             Navigator.pushReplacement(
               context,
@@ -347,7 +357,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                                   // Update Button with Gradient
                                   BlocBuilder<AuthBloc, AuthState>(
                                     builder: (context, state) {
-                                      if (state is AuthLoading) {
+                                      final localLoading = _isSubmitting || state is AuthLoading;
+                                      if (localLoading) {
                                         return const Center(
                                           child: CircularProgressIndicator(color: AppColors.secondary),
                                         );

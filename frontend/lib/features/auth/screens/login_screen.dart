@@ -24,6 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -35,10 +36,17 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final authState = context.watch<AuthBloc>().state;
+    final isLoading = _isSubmitting || authState is AuthLoading;
     
     return Scaffold(
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
+          if (state is! AuthLoading) {
+            setState(() {
+              _isSubmitting = false;
+            });
+          }
           if (state is AuthError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -275,7 +283,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   // Login Button with Premium Gradient
                                   BlocBuilder<AuthBloc, AuthState>(
                                     builder: (context, state) {
-                                      if (state is AuthLoading) {
+                                      final localLoading = _isSubmitting || state is AuthLoading;
+                                      if (localLoading) {
                                         return const Center(
                                           child: CircularProgressIndicator(color: AppColors.primary),
                                         );
@@ -295,6 +304,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                         child: ElevatedButton(
                                           onPressed: () {
                                             if (_formKey.currentState!.validate()) {
+                                              setState(() {
+                                                _isSubmitting = true;
+                                              });
                                               context.read<AuthBloc>().add(
                                                 LoginRequested(
                                                   email: _emailController.text.trim(),
@@ -344,7 +356,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 20),
                         OutlinedButton.icon(
-                          onPressed: () {
+                          onPressed: isLoading ? null : () {
                             _handleGoogleSignIn();
                           },
                           icon: Image.network(
@@ -407,6 +419,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleGoogleSignIn() async {
+    if (_isSubmitting) return;
+    setState(() {
+      _isSubmitting = true;
+    });
     const String targetClientId = "270888644885-il2mmaaeehom7amrhglgtckcs3gu1j8c.apps.googleusercontent.com";
     print("[DIAGNOSTICS] Starting Google Sign-In flow via GoogleSignIn()");
     print("[DIAGNOSTICS] Configured serverClientId: '$targetClientId'");
@@ -417,6 +433,11 @@ class _LoginScreenState extends State<LoginScreen> {
       final googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
         print("[DIAGNOSTICS] Google Sign-In returned null (user cancelled the dialog).");
+        if (mounted) {
+          setState(() {
+            _isSubmitting = false;
+          });
+        }
         return;
       }
       print("[DIAGNOSTICS] Google account selected: Email = ${googleUser.email}, Display Name = ${googleUser.displayName}, ID = ${googleUser.id}");
@@ -463,6 +484,9 @@ class _LoginScreenState extends State<LoginScreen> {
       print("[DIAGNOSTICS] PlatformException encountered: Code: ${platErr.code}, Message: ${platErr.message}, Details: ${platErr.details}");
       print("[DIAGNOSTICS] PlatformException StackTrace:\n$platStack");
       if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Google authentication failed (PlatformException: ${platErr.code}): ${platErr.message}"),
@@ -475,6 +499,9 @@ class _LoginScreenState extends State<LoginScreen> {
       print("[DIAGNOSTICS] Error during Google Sign-In flow: $e");
       print("[DIAGNOSTICS] Error StackTrace:\n$stack");
       if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Google authentication failed: $e"),
