@@ -7,14 +7,30 @@ from sqlalchemy import func, or_, and_
 from uuid import UUID
 import uuid
 
+from pydantic import BaseModel
+
 logger = logging.getLogger(__name__)
 
 from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User, Report, UserActivity
-from app.models.cricket import Team, Player, Tournament, Match, TournamentTeam, MatchSquad, TeamPlayer
+from app.models.cricket import Team, Player, Tournament, Match, TournamentTeam, MatchSquad, TeamPlayer, TeamMember
 from app.schemas.user import UserResponse
 from app.schemas.report import ReportCreate, ReportResponse
+
+class AdminTeamMemberResponse(BaseModel):
+    id: UUID
+    team_id: UUID
+    team_name: str
+    user_id: UUID
+    user_email: str
+    user_full_name: Optional[str] = None
+    role: str
+    status: str
+    joined_at: datetime
+
+class BulkDeleteRequest(BaseModel):
+    ids: List[UUID]
 
 router = APIRouter()
 
@@ -108,6 +124,7 @@ def get_analytics(
             "total_users": total_users,
             "total_teams": db.query(Team).count(),
             "total_players": db.query(Player).count(),
+            "total_team_members": db.query(TeamMember).count(),
             "total_tournaments": db.query(Tournament).count(),
             "total_matches": db.query(Match).count(),
             "live_matches": live_matches,
@@ -851,4 +868,141 @@ def resolve_report(
 
     log_admin_action(db, current_user.id, f"resolve_report_{action}", "report", id)
     return report
+
+
+# --- Team Members Management ---
+
+@router.get("/admin/team-members", response_model=List[AdminTeamMemberResponse], status_code=status.HTTP_200_OK)
+def get_admin_team_members(
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    query = db.query(TeamMember, Team, User)\
+        .join(Team, TeamMember.team_id == Team.id)\
+        .join(User, TeamMember.user_id == User.id)
+    
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Team.name.ilike(search_term),
+                User.email.ilike(search_term),
+                User.username.ilike(search_term)
+            )
+        )
+    
+    results = query.all()
+    res = []
+    for member, team, user in results:
+        res.append(AdminTeamMemberResponse(
+            id=member.id,
+            team_id=member.team_id,
+            team_name=team.name,
+            user_id=member.user_id,
+            user_email=user.email,
+            user_full_name=user.full_name or user.username or "User",
+            role=member.role,
+            status=member.status,
+            joined_at=member.joined_at
+        ))
+    return res
+
+@router.delete("/admin/team-members/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_admin_team_member(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    member = db.query(TeamMember).filter(TeamMember.id == id).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Team membership not found")
+    
+    db.delete(member)
+    db.commit()
+    
+    log_admin_action(db, current_user.id, "delete", "team_member", id)
+    return None
+
+
+# --- Bulk Deletion Endpoints ---
+
+@router.post("/admin/users/bulk-delete", status_code=status.HTTP_204_NO_CONTENT)
+def bulk_delete_users(
+    req: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    valid_ids = [uid for uid in req.ids if uid != current_user.id]
+    if not valid_ids:
+        return None
+        
+    try:
+        users = db.query(User).filter(User.id.in_(valid_ids), User.is_deleted == False).all()
+        for user in users:
+            user.is_deleted = True
+            user.is_active = False
+            log_admin_action(db, current_user.id, "delete", "user", user.id)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Bulk delete users failed: {str(e)}")
+    return None
+
+@router.post("/admin/teams/bulk-delete", status_code=status.HTTP_204_NO_CONTENT)
+def bulk_delete_teams(
+    req: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    if not req.ids:
+        return None
+    try:
+        teams = db.query(Team).filter(Team.id.in_(req.ids)).all()
+        for team in teams:
+            db.delete(team)
+            log_admin_action(db, current_user.id, "delete", "team", team.id)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Bulk delete teams failed: {str(e)}")
+    return None
+
+@router.post("/admin/matches/bulk-delete", status_code=status.HTTP_204_NO_CONTENT)
+def bulk_delete_matches(
+    req: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    if not req.ids:
+        return None
+    try:
+        matches = db.query(Match).filter(Match.id.in_(req.ids)).all()
+        for match in matches:
+            db.delete(match)
+            log_admin_action(db, current_user.id, "delete", "match", match.id)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Bulk delete matches failed: {str(e)}")
+    return None
+
+@router.post("/admin/tournaments/bulk-delete", status_code=status.HTTP_204_NO_CONTENT)
+def bulk_delete_tournaments(
+    req: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    if not req.ids:
+        return None
+    try:
+        tournaments = db.query(Tournament).filter(Tournament.id.in_(req.ids)).all()
+        for tournament in tournaments:
+            db.delete(tournament)
+            log_admin_action(db, current_user.id, "delete", "tournament", tournament.id)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Bulk delete tournaments failed: {str(e)}")
+    return None
 

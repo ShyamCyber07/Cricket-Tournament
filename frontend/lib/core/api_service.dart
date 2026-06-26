@@ -857,6 +857,32 @@ class ApiService {
     return await _dio.delete('/admin/matches/$matchId');
   }
 
+  // Admin Team Members Management
+  Future<Response> adminGetTeamMembers({String? search}) async {
+    return await _dio.get('/admin/team-members', queryParameters: search != null ? {'search': search} : null);
+  }
+
+  Future<Response> adminDeleteTeamMember(String id) async {
+    return await _dio.delete('/admin/team-members/$id');
+  }
+
+  // Admin Bulk Deletion
+  Future<Response> adminBulkDeleteUsers(List<String> ids) async {
+    return await _dio.post('/admin/users/bulk-delete', data: {'ids': ids});
+  }
+
+  Future<Response> adminBulkDeleteTeams(List<String> ids) async {
+    return await _dio.post('/admin/teams/bulk-delete', data: {'ids': ids});
+  }
+
+  Future<Response> adminBulkDeleteMatches(List<String> ids) async {
+    return await _dio.post('/admin/matches/bulk-delete', data: {'ids': ids});
+  }
+
+  Future<Response> adminBulkDeleteTournaments(List<String> ids) async {
+    return await _dio.post('/admin/tournaments/bulk-delete', data: {'ids': ids});
+  }
+
   Future<Response> testConnection() async {
     final uri = Uri.parse(AppConfig.baseUrl);
     final hostUrl = "${uri.scheme}://${uri.host}:${uri.port}/";

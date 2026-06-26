@@ -17,6 +17,14 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
   final ApiService _apiService = ApiService();
   List<dynamic> _tournaments = [];
   bool _isLoading = true;
+  final _searchController = TextEditingController();
+  String _searchQuery = "";
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   String _resolvePhotoUrl(String? path) {
     if (path == null || path.isEmpty) return "";
@@ -108,6 +116,11 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final filteredTournaments = _tournaments.where((tour) {
+      final name = (tour['name'] ?? "").toString().toLowerCase();
+      return name.contains(_searchQuery.toLowerCase());
+    }).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -175,126 +188,177 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
                     ),
                   ),
                 )
-              : RefreshIndicator(
-                  onRefresh: _fetchTournaments,
-                  color: AppColors.primary,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _tournaments.length,
-                    itemBuilder: (context, index) {
-                      final tour = _tournaments[index];
-                      final status = tour['status'] ?? 'registration';
-                      
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        child: InkWell(
-                          onTap: () async {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => TournamentDetailsScreen(
-                                  tournamentId: tour['id'],
-                                  tournamentName: tour['name'],
-                                ),
-                              ),
-                            );
-                            _fetchTournaments();
-                          },
-                          borderRadius: BorderRadius.circular(16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: _getStatusColor(status).withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: _getStatusColor(status),
-                                          width: 1,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        status.toUpperCase(),
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: _getStatusColor(status),
-                                        ),
-                                      ),
-                                    ),
-                                    Text(
-                                      tour['format'] ?? '',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.accent,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    _buildTournamentLogo(tour['banner_url'], tour['name'] ?? 'Tournament'),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Text(
-                                        tour['name'] ?? 'Unnamed Tournament',
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.calendar_today_outlined,
-                                      size: 14,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      "${tour['start_date']} to ${tour['end_date']}",
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    const Icon(
-                                      Icons.groups_outlined,
-                                      size: 16,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      "Limit: ${tour['num_teams']} Teams",
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: TextField(
+                        controller: _searchController,
+                        style: GoogleFonts.outfit(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: "Search tournaments by name...",
+                          hintStyle: GoogleFonts.outfit(color: Colors.white38),
+                          prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, color: Colors.white38),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() {
+                                      _searchQuery = "";
+                                    });
+                                  },
+                                )
+                              : null,
+                          filled: true,
+                          fillColor: Colors.white.withOpacity(0.03),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: const BorderSide(color: AppColors.primary),
                           ),
                         ),
-                      );
-                    },
-                  ),
+                        onChanged: (val) {
+                          setState(() {
+                            _searchQuery = val.trim();
+                          });
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      child: filteredTournaments.isEmpty
+                          ? Center(
+                              child: Text(
+                                "No tournaments found matching your search.",
+                                style: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              ),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: _fetchTournaments,
+                              color: AppColors.primary,
+                              child: ListView.builder(
+                                padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                                itemCount: filteredTournaments.length,
+                                itemBuilder: (context, index) {
+                                  final tour = filteredTournaments[index];
+                                  final status = tour['status'] ?? 'registration';
+                                  
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 16),
+                                    child: InkWell(
+                                      onTap: () async {
+                                        await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => TournamentDetailsScreen(
+                                              tournamentId: tour['id'],
+                                              tournamentName: tour['name'],
+                                            ),
+                                          ),
+                                        );
+                                        _fetchTournaments();
+                                      },
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 4,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: _getStatusColor(status).withOpacity(0.15),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    border: Border.all(
+                                                      color: _getStatusColor(status),
+                                                      width: 1,
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    status.toUpperCase(),
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: _getStatusColor(status),
+                                                    ),
+                                                  ),
+                                                ),
+                                                Text(
+                                                  tour['format'] ?? '',
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.accent,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            Row(
+                                              children: [
+                                                _buildTournamentLogo(tour['banner_url'], tour['name'] ?? 'Tournament'),
+                                                const SizedBox(width: 14),
+                                                Expanded(
+                                                  child: Text(
+                                                    tour['name'] ?? 'Unnamed Tournament',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 18,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.calendar_today_outlined,
+                                                  size: 14,
+                                                  color: AppColors.textSecondary,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  "${tour['start_date']} to ${tour['end_date']}",
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 12,
+                                                    color: AppColors.textSecondary,
+                                                  ),
+                                                ),
+                                                const Spacer(),
+                                                const Icon(
+                                                  Icons.groups_outlined,
+                                                  size: 16,
+                                                  color: AppColors.textSecondary,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  "Limit: ${tour['num_teams']} Teams",
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 12,
+                                                    color: AppColors.textSecondary,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                    ),
+                  ],
                 ),
       floatingActionButton: FloatingActionButton(
         tooltip: "Add Tournament FAB",

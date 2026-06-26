@@ -25,6 +25,8 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
 
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _exploreSearchController = TextEditingController();
+  String _exploreSearchQuery = "";
   File? _selectedLogoFile;
 
   @override
@@ -38,6 +40,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
   void dispose() {
     _tabController.dispose();
     _nameController.dispose();
+    _exploreSearchController.dispose();
     super.dispose();
   }
 
@@ -417,59 +420,104 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
   }
 
   Widget _buildExploreTeamsList() {
-    if (_exploreTeams.isEmpty) {
-      return Center(
-        child: Text(
-          "No new teams available to join.",
-          style: GoogleFonts.outfit(color: AppColors.textSecondary),
-        ),
-      );
-    }
+    final filteredExploreTeams = _exploreTeams.where((t) {
+      final name = (t['name'] ?? "").toString().toLowerCase();
+      return name.contains(_exploreSearchQuery.toLowerCase());
+    }).toList();
 
-    return ListView.builder(
-      itemCount: _exploreTeams.length,
-      padding: const EdgeInsets.all(16),
-      itemBuilder: (context, index) {
-        final team = _exploreTeams[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: ListTile(
-            leading: _buildTeamLogo(team['logo_url'], team['name']),
-            title: Text(
-              team['name'],
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text(
-              "Tap to join this team",
-              style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11),
-            ),
-            trailing: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.secondary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: TextField(
+            controller: _exploreSearchController,
+            style: GoogleFonts.outfit(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: "Search teams by name...",
+              hintStyle: GoogleFonts.outfit(color: Colors.white38),
+              prefixIcon: const Icon(Icons.search, color: Colors.white38),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.clear, color: Colors.white38),
+                onPressed: () {
+                  _exploreSearchController.clear();
+                  setState(() {
+                    _exploreSearchQuery = "";
+                  });
+                },
               ),
-              onPressed: _submittingRequests.contains(team['id'].toString())
-                  ? null
-                  : () => _sendJoinRequest(team['id'].toString()),
-              child: _submittingRequests.contains(team['id'].toString())
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Text(
-                      "Join",
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
-                    ),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.03),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: AppColors.primary),
+              ),
             ),
+            onChanged: (val) {
+              setState(() {
+                _exploreSearchQuery = val.trim();
+              });
+            },
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: filteredExploreTeams.isEmpty
+              ? Center(
+                  child: Text(
+                    "No teams found matching your search.",
+                    style: GoogleFonts.outfit(color: AppColors.textSecondary),
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: filteredExploreTeams.length,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemBuilder: (context, index) {
+                    final team = filteredExploreTeams[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        leading: _buildTeamLogo(team['logo_url'], team['name']),
+                        title: Text(
+                          team['name'],
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          "Tap to join this team",
+                          style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11),
+                        ),
+                        trailing: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.secondary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: _submittingRequests.contains(team['id'].toString())
+                              ? null
+                              : () => _sendJoinRequest(team['id'].toString()),
+                          child: _submittingRequests.contains(team['id'].toString())
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Text(
+                                  "Join",
+                                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
+                                ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 

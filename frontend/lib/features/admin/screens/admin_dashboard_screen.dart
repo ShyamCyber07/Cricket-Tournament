@@ -30,16 +30,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
 
   // Content lists
   List<dynamic> _teams = [];
-  List<dynamic> _players = [];
+  List<dynamic> _teamMembers = [];
   List<dynamic> _tournaments = [];
   List<dynamic> _matches = [];
 
+  // Bulk selection sets
+  final Set<String> _selectedUsers = {};
+  final Set<String> _selectedTournaments = {};
+  final Set<String> _selectedMatches = {};
+  final Set<String> _selectedTeams = {};
+
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _dataSearchController = TextEditingController();
+  String _dataSearchQuery = "";
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        setState(() {
+          _selectedUsers.clear();
+          _selectedTournaments.clear();
+          _selectedMatches.clear();
+          _selectedTeams.clear();
+        });
+      }
+    });
     _loadAllData();
   }
 
@@ -47,6 +65,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
   void dispose() {
     _tabController.dispose();
     _searchController.dispose();
+    _dataSearchController.dispose();
     super.dispose();
   }
 
@@ -121,13 +140,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
       final teamsRes = await _apiService.adminGetTeams();
       final tournamentsRes = await _apiService.adminGetTournaments();
       final matchesRes = await _apiService.adminGetMatches();
-      final playersRes = await _apiService.adminGetPlayers();
+      final teamMembersRes = await _apiService.adminGetTeamMembers();
 
       setState(() {
         _teams = teamsRes.data ?? [];
         _tournaments = tournamentsRes.data ?? [];
         _matches = matchesRes.data ?? [];
-        _players = playersRes.data ?? [];
+        _teamMembers = teamMembersRes.data ?? [];
         _isLoadingContent = false;
       });
     } catch (e) {
@@ -271,16 +290,100 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
     }
   }
 
-  Future<void> _deletePlayer(String id) async {
-    final confirm = await _showConfirmDialog("Delete Player", "Permanently delete this player?");
+  Future<void> _deleteTeamMember(String id) async {
+    final confirm = await _showConfirmDialog("Remove Team Member", "Permanently remove this team member?");
     if (confirm) {
       try {
-        await _apiService.deletePlayer(id);
-        _showSuccess("Player deleted successfully");
+        await _apiService.adminDeleteTeamMember(id);
+        _showSuccess("Team member removed successfully");
         _loadContent();
         _loadAnalytics();
       } catch (e) {
-        _showError("Failed to delete player: $e");
+        _showError("Failed to remove team member: $e");
+      }
+    }
+  }
+
+  Future<void> _bulkDeleteUsers() async {
+    if (_selectedUsers.isEmpty) return;
+    final confirm = await _showConfirmDialog(
+      "Bulk Delete Users",
+      "Are you sure you want to delete ${_selectedUsers.length} selected users? This action cannot be undone."
+    );
+    if (confirm) {
+      setState(() => _isLoadingUsers = true);
+      try {
+        await _apiService.adminBulkDeleteUsers(_selectedUsers.toList());
+        _showSuccess("Selected users deleted successfully");
+        _selectedUsers.clear();
+        await _loadUsers(query: _searchController.text.isNotEmpty ? _searchController.text : null);
+        await _loadAnalytics();
+      } catch (e) {
+        setState(() => _isLoadingUsers = false);
+        _showError("Failed to delete users: $e");
+      }
+    }
+  }
+
+  Future<void> _bulkDeleteTournaments() async {
+    if (_selectedTournaments.isEmpty) return;
+    final confirm = await _showConfirmDialog(
+      "Bulk Delete Tournaments",
+      "Are you sure you want to delete ${_selectedTournaments.length} selected tournaments? This action cannot be undone."
+    );
+    if (confirm) {
+      setState(() => _isLoadingContent = true);
+      try {
+        await _apiService.adminBulkDeleteTournaments(_selectedTournaments.toList());
+        _showSuccess("Selected tournaments deleted successfully");
+        _selectedTournaments.clear();
+        await _loadContent();
+        await _loadAnalytics();
+      } catch (e) {
+        setState(() => _isLoadingContent = false);
+        _showError("Failed to delete tournaments: $e");
+      }
+    }
+  }
+
+  Future<void> _bulkDeleteMatches() async {
+    if (_selectedMatches.isEmpty) return;
+    final confirm = await _showConfirmDialog(
+      "Bulk Delete Matches",
+      "Are you sure you want to delete ${_selectedMatches.length} selected matches? This action cannot be undone."
+    );
+    if (confirm) {
+      setState(() => _isLoadingContent = true);
+      try {
+        await _apiService.adminBulkDeleteMatches(_selectedMatches.toList());
+        _showSuccess("Selected matches deleted successfully");
+        _selectedMatches.clear();
+        await _loadContent();
+        await _loadAnalytics();
+      } catch (e) {
+        setState(() => _isLoadingContent = false);
+        _showError("Failed to delete matches: $e");
+      }
+    }
+  }
+
+  Future<void> _bulkDeleteTeams() async {
+    if (_selectedTeams.isEmpty) return;
+    final confirm = await _showConfirmDialog(
+      "Bulk Delete Teams",
+      "Are you sure you want to delete ${_selectedTeams.length} selected teams? This action cannot be undone."
+    );
+    if (confirm) {
+      setState(() => _isLoadingContent = true);
+      try {
+        await _apiService.adminBulkDeleteTeams(_selectedTeams.toList());
+        _showSuccess("Selected teams deleted successfully");
+        _selectedTeams.clear();
+        await _loadContent();
+        await _loadAnalytics();
+      } catch (e) {
+        setState(() => _isLoadingContent = false);
+        _showError("Failed to delete teams: $e");
       }
     }
   }
@@ -326,7 +429,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
     final items = [
       {"label": "Total Users", "value": "${_analytics['total_users'] ?? 0}", "color": AppColors.primary, "icon": Icons.people},
       {"label": "Total Teams", "value": "${_analytics['total_teams'] ?? 0}", "color": AppColors.secondary, "icon": Icons.groups},
-      {"label": "Total Players", "value": "${_analytics['total_players'] ?? 0}", "color": AppColors.accent, "icon": Icons.person},
+      {"label": "Team Members", "value": "${_analytics['total_team_members'] ?? 0}", "color": AppColors.accent, "icon": Icons.person},
       {"label": "Total Tournaments", "value": "${_analytics['total_tournaments'] ?? 0}", "color": Colors.amber, "icon": Icons.emoji_events},
       {"label": "Total Matches", "value": "${_analytics['total_matches'] ?? 0}", "color": Colors.teal, "icon": Icons.sports_cricket},
     ];
@@ -400,6 +503,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
             },
           ),
         ),
+        if (!_isLoadingUsers && _users.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Row(
+              children: [
+                Checkbox(
+                  value: _users.every((u) => _selectedUsers.contains(u['id'])),
+                  activeColor: AppColors.primary,
+                  onChanged: (val) {
+                    setState(() {
+                      if (val == true) {
+                        _selectedUsers.addAll(_users.map((u) => u['id'] as String));
+                      } else {
+                        _selectedUsers.clear();
+                      }
+                    });
+                  },
+                ),
+                Text("Select All", style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13)),
+                const Spacer(),
+                if (_selectedUsers.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: _bulkDeleteUsers,
+                    icon: const Icon(Icons.delete, color: Colors.redAccent, size: 16),
+                    label: Text("Delete Selected (${_selectedUsers.length})",
+                        style: GoogleFonts.outfit(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ),
+              ],
+            ),
+          ),
         Expanded(
           child: _isLoadingUsers
               ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
@@ -412,11 +545,26 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
                         final u = _users[index];
                         final bool active = u['is_active'] ?? true;
                         final String role = u['role'] ?? 'user';
+                        final isSelected = _selectedUsers.contains(u['id']);
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           child: _buildGlassCard(
                             child: Row(
                               children: [
+                                Checkbox(
+                                  value: isSelected,
+                                  activeColor: AppColors.primary,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      if (val == true) {
+                                        _selectedUsers.add(u['id']);
+                                      } else {
+                                        _selectedUsers.remove(u['id']);
+                                      }
+                                    });
+                                  },
+                                ),
+                                const SizedBox(width: 8),
                                 CircleAvatar(
                                   backgroundColor: AppColors.primary.withOpacity(0.1),
                                   child: Text(
@@ -700,6 +848,42 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
       length: 4,
       child: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: TextField(
+              controller: _dataSearchController,
+              style: GoogleFonts.outfit(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: "Search tournaments, teams, matches, members...",
+                hintStyle: GoogleFonts.outfit(color: Colors.white38),
+                prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.clear, color: Colors.white38),
+                  onPressed: () {
+                    _dataSearchController.clear();
+                    setState(() {
+                      _dataSearchQuery = "";
+                    });
+                  },
+                ),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.03),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: AppColors.primary),
+                ),
+              ),
+              onChanged: (val) {
+                setState(() {
+                  _dataSearchQuery = val.trim().toLowerCase();
+                });
+              },
+            ),
+          ),
           TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
@@ -711,143 +895,342 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
               Tab(text: "Tournaments"),
               Tab(text: "Matches"),
               Tab(text: "Teams"),
-              Tab(text: "Players"),
+              Tab(text: "Team Members"),
             ],
           ),
           Expanded(
             child: TabBarView(
               children: [
                 // Tournaments View
-                _tournaments.isEmpty
-                    ? const Center(child: Text("No tournaments available"))
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _tournaments.length,
-                        itemBuilder: (context, index) {
-                          final t = _tournaments[index];
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            child: _buildGlassCard(
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(t['name'] ?? "", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                                        Text("Format: ${t['format']} • Status: ${t['status']}",
-                                            style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary)),
-                                      ],
-                                    ),
+                Builder(
+                  builder: (context) {
+                    final filteredTournaments = _tournaments.where((t) {
+                      final name = (t['name'] ?? "").toString().toLowerCase();
+                      return name.contains(_dataSearchQuery);
+                    }).toList();
+
+                    return Column(
+                      children: [
+                        if (filteredTournaments.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: filteredTournaments.isNotEmpty && filteredTournaments.every((t) => _selectedTournaments.contains(t['id'])),
+                                  activeColor: AppColors.primary,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      if (val == true) {
+                                        _selectedTournaments.addAll(filteredTournaments.map((t) => t['id'] as String));
+                                      } else {
+                                        for (var t in filteredTournaments) {
+                                          _selectedTournaments.remove(t['id']);
+                                        }
+                                      }
+                                    });
+                                  },
+                                ),
+                                Text("Select All", style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13)),
+                                const Spacer(),
+                                if (_selectedTournaments.isNotEmpty)
+                                  TextButton.icon(
+                                    onPressed: _bulkDeleteTournaments,
+                                    icon: const Icon(Icons.delete, color: Colors.redAccent, size: 16),
+                                    label: Text("Delete Selected (${_selectedTournaments.length})",
+                                        style: GoogleFonts.outfit(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13)),
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                                    onPressed: () => _deleteTournament(t['id']),
-                                  )
-                                ],
-                              ),
+                              ],
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                        Expanded(
+                          child: filteredTournaments.isEmpty
+                              ? const Center(child: Text("No tournaments available"))
+                              : ListView.builder(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  itemCount: filteredTournaments.length,
+                                  itemBuilder: (context, index) {
+                                    final t = filteredTournaments[index];
+                                    final isSelected = _selectedTournaments.contains(t['id']);
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      child: _buildGlassCard(
+                                        child: Row(
+                                          children: [
+                                            Checkbox(
+                                              value: isSelected,
+                                              activeColor: AppColors.primary,
+                                              onChanged: (val) {
+                                                setState(() {
+                                                  if (val == true) {
+                                                    _selectedTournaments.add(t['id']);
+                                                  } else {
+                                                    _selectedTournaments.remove(t['id']);
+                                                  }
+                                                });
+                                              },
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(t['name'] ?? "", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                                                  Text("Format: ${t['format']} • Status: ${t['status']}",
+                                                      style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary)),
+                                                ],
+                                              ),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                              onPressed: () => _deleteTournament(t['id']),
+                                            )
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
+                    );
+                  }
+                ),
                 // Matches View
-                _matches.isEmpty
-                    ? const Center(child: Text("No matches available"))
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _matches.length,
-                        itemBuilder: (context, index) {
-                          final m = _matches[index];
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            child: _buildGlassCard(
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text("${m['team1_name']} vs ${m['team2_name']}",
-                                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                                        Text("Venue: ${m['venue']} • Status: ${m['status']}",
-                                            style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary)),
-                                      ],
-                                    ),
+                Builder(
+                  builder: (context) {
+                    final filteredMatches = _matches.where((m) {
+                      final t1 = (m['team1_name'] ?? "").toString().toLowerCase();
+                      final t2 = (m['team2_name'] ?? "").toString().toLowerCase();
+                      return t1.contains(_dataSearchQuery) || t2.contains(_dataSearchQuery);
+                    }).toList();
+
+                    return Column(
+                      children: [
+                        if (filteredMatches.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: filteredMatches.isNotEmpty && filteredMatches.every((m) => _selectedMatches.contains(m['id'])),
+                                  activeColor: AppColors.primary,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      if (val == true) {
+                                        _selectedMatches.addAll(filteredMatches.map((m) => m['id'] as String));
+                                      } else {
+                                        for (var m in filteredMatches) {
+                                          _selectedMatches.remove(m['id']);
+                                        }
+                                      }
+                                    });
+                                  },
+                                ),
+                                Text("Select All", style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13)),
+                                const Spacer(),
+                                if (_selectedMatches.isNotEmpty)
+                                  TextButton.icon(
+                                    onPressed: _bulkDeleteMatches,
+                                    icon: const Icon(Icons.delete, color: Colors.redAccent, size: 16),
+                                    label: Text("Delete Selected (${_selectedMatches.length})",
+                                        style: GoogleFonts.outfit(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13)),
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                                    onPressed: () => _deleteMatch(m['id']),
-                                  )
-                                ],
-                              ),
+                              ],
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                        Expanded(
+                          child: filteredMatches.isEmpty
+                              ? const Center(child: Text("No matches available"))
+                              : ListView.builder(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  itemCount: filteredMatches.length,
+                                  itemBuilder: (context, index) {
+                                    final m = filteredMatches[index];
+                                    final isSelected = _selectedMatches.contains(m['id']);
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      child: _buildGlassCard(
+                                        child: Row(
+                                          children: [
+                                            Checkbox(
+                                              value: isSelected,
+                                              activeColor: AppColors.primary,
+                                              onChanged: (val) {
+                                                setState(() {
+                                                  if (val == true) {
+                                                    _selectedMatches.add(m['id']);
+                                                  } else {
+                                                    _selectedMatches.remove(m['id']);
+                                                  }
+                                                });
+                                              },
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text("${m['team1_name']} vs ${m['team2_name']}",
+                                                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                                                  Text("Venue: ${m['venue']} • Status: ${m['status']}",
+                                                      style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary)),
+                                                ],
+                                              ),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                              onPressed: () => _deleteMatch(m['id']),
+                                            )
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
+                    );
+                  }
+                ),
                 // Teams View
-                _teams.isEmpty
-                    ? const Center(child: Text("No teams available"))
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _teams.length,
-                        itemBuilder: (context, index) {
-                          final t = _teams[index];
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            child: _buildGlassCard(
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(t['name'] ?? "", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                                      ],
-                                    ),
+                Builder(
+                  builder: (context) {
+                    final filteredTeams = _teams.where((t) {
+                      final name = (t['name'] ?? "").toString().toLowerCase();
+                      return name.contains(_dataSearchQuery);
+                    }).toList();
+
+                    return Column(
+                      children: [
+                        if (filteredTeams.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: filteredTeams.isNotEmpty && filteredTeams.every((t) => _selectedTeams.contains(t['id'])),
+                                  activeColor: AppColors.primary,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      if (val == true) {
+                                        _selectedTeams.addAll(filteredTeams.map((t) => t['id'] as String));
+                                      } else {
+                                        for (var t in filteredTeams) {
+                                          _selectedTeams.remove(t['id']);
+                                        }
+                                      }
+                                    });
+                                  },
+                                ),
+                                Text("Select All", style: GoogleFonts.outfit(color: Colors.white70, fontSize: 13)),
+                                const Spacer(),
+                                if (_selectedTeams.isNotEmpty)
+                                  TextButton.icon(
+                                    onPressed: _bulkDeleteTeams,
+                                    icon: const Icon(Icons.delete, color: Colors.redAccent, size: 16),
+                                    label: Text("Delete Selected (${_selectedTeams.length})",
+                                        style: GoogleFonts.outfit(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13)),
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                                    onPressed: () => _deleteTeam(t['id']),
-                                  )
-                                ],
-                              ),
+                              ],
                             ),
-                          );
-                        },
-                      ),
-                // Players View
-                _players.isEmpty
-                    ? const Center(child: Text("No players available"))
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _players.length,
-                        itemBuilder: (context, index) {
-                          final p = _players[index];
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            child: _buildGlassCard(
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(p['name'] ?? "", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                                        Text("Role: ${p['role']} • Batting: ${p['batting_style']}",
-                                            style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary)),
-                                      ],
-                                    ),
+                          ),
+                        Expanded(
+                          child: filteredTeams.isEmpty
+                              ? const Center(child: Text("No teams available"))
+                              : ListView.builder(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  itemCount: filteredTeams.length,
+                                  itemBuilder: (context, index) {
+                                    final t = filteredTeams[index];
+                                    final isSelected = _selectedTeams.contains(t['id']);
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      child: _buildGlassCard(
+                                        child: Row(
+                                          children: [
+                                            Checkbox(
+                                              value: isSelected,
+                                              activeColor: AppColors.primary,
+                                              onChanged: (val) {
+                                                setState(() {
+                                                  if (val == true) {
+                                                    _selectedTeams.add(t['id']);
+                                                  } else {
+                                                    _selectedTeams.remove(t['id']);
+                                                  }
+                                                });
+                                              },
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(t['name'] ?? "", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                                                ],
+                                              ),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                              onPressed: () => _deleteTeam(t['id']),
+                                            )
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
+                    );
+                  }
+                ),
+                // Team Members View
+                Builder(
+                  builder: (context) {
+                    final filteredTeamMembers = _teamMembers.where((tm) {
+                      final team = (tm['team_name'] ?? "").toString().toLowerCase();
+                      final email = (tm['user_email'] ?? "").toString().toLowerCase();
+                      final name = (tm['user_full_name'] ?? "").toString().toLowerCase();
+                      return team.contains(_dataSearchQuery) || email.contains(_dataSearchQuery) || name.contains(_dataSearchQuery);
+                    }).toList();
+
+                    return filteredTeamMembers.isEmpty
+                        ? const Center(child: Text("No team members available"))
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: filteredTeamMembers.length,
+                            itemBuilder: (context, index) {
+                              final tm = filteredTeamMembers[index];
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                child: _buildGlassCard(
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(tm['user_full_name'] ?? tm['user_email'] ?? "Member",
+                                                style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                                            Text("Team: ${tm['team_name']} • Role: ${tm['role']} • Status: ${tm['status']}",
+                                                style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary)),
+                                          ],
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                        onPressed: () => _deleteTeamMember(tm['id']),
+                                      )
+                                    ],
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                                    onPressed: () => _deletePlayer(p['id']),
-                                  )
-                                ],
-                              ),
-                            ),
+                                ),
+                              );
+                            },
                           );
-                        },
-                      ),
+                  }
+                ),
               ],
             ),
           ),
