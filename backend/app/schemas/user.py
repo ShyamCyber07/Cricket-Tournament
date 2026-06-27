@@ -54,10 +54,10 @@ class UserResponse(UserBase):
     profile_picture: Optional[str] = None
     email_verified: bool
     profile_completed: bool
-    provider: str
+    provider: Optional[str] = "local"
     role: str = "user"
     is_active: bool = True
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
