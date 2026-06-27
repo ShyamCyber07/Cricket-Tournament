@@ -506,6 +506,13 @@ class ApiService {
     return await _dio.delete('/teams/$teamId/members/$userId');
   }
 
+  Future<Response> updateMemberRole(String teamId, String userId, String role) async {
+    return await _dio.put(
+      '/teams/$teamId/members/$userId/role',
+      data: {'role': role},
+    );
+  }
+
   Future<Response> joinRequest(String teamId) async {
     return await _dio.post('/teams/$teamId/join-request');
   }

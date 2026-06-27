@@ -1,0 +1,344 @@
+2026-06-25 17:01:07,091 - app.core.storage - WARNING - CLOUDINARY_URL not set. Falling back to local storage.
+2026-06-25 17:01:07,852 - uvicorn.error - INFO - Started server process [24124]
+2026-06-25 17:01:07,852 - uvicorn.error - INFO - Started server process [24124]
+2026-06-25 17:01:07,853 - uvicorn.error - INFO - Waiting for application startup.
+2026-06-25 17:01:07,853 - uvicorn.error - INFO - Waiting for application startup.
+2026-06-25 17:01:07,864 - app.main - INFO - APP_VERSION = unknown
+2026-06-25 17:01:07,864 - app.main - INFO - APP_VERSION = unknown
+2026-06-25 17:01:07,864 - app.main - INFO - DATABASE_DIALECT = sqlite
+2026-06-25 17:01:07,864 - app.main - INFO - DATABASE_DIALECT = sqlite
+2026-06-25 17:01:07,868 - app.main - INFO - ALEMBIC_VERSION = ea78bf102aaf
+2026-06-25 17:01:07,868 - app.main - INFO - ALEMBIC_VERSION = ea78bf102aaf
+2026-06-25 17:01:07,872 - app.main - INFO - SCHEMA_CHECK OK: users has all required columns
+2026-06-25 17:01:07,872 - app.main - INFO - SCHEMA_CHECK OK: users has all required columns
+2026-06-25 17:01:07,873 - app.main - INFO - SCHEMA_CHECK OK: refresh_tokens has all required columns
+2026-06-25 17:01:07,873 - app.main - INFO - SCHEMA_CHECK OK: refresh_tokens has all required columns
+2026-06-25 17:01:07,874 - app.main - INFO - SCHEMA_CHECK OK: players has all required columns
+2026-06-25 17:01:07,874 - app.main - INFO - SCHEMA_CHECK OK: players has all required columns
+2026-06-25 17:01:08,180 - app.main - INFO - SQLite database detected. Skipping programmatic startup migrations to prevent file locks.
+2026-06-25 17:01:08,180 - app.main - INFO - SQLite database detected. Skipping programmatic startup migrations to prevent file locks.
+2026-06-25 17:01:08,180 - app.main - INFO - Loaded environment variables: ALLUSERSPROFILE, ANTIGRAVITY_AGENT, ANTIGRAVITY_CSRF_TOKEN, ANTIGRAVITY_EDITOR_APP_ROOT, ANTIGRAVITY_LS_ADDRESS, ANTIGRAVITY_SOURCE_METADATA, ANTIGRAVITY_TRAJECTORY_ID, APPDATA, CHOCOLATEYINSTALL, CHOCOLATEYLASTPATHUPDATE, CHROME_CRASHPAD_PIPE_NAME, COMMONPROGRAMFILES, COMMONPROGRAMFILES(X86), COMMONPROGRAMW6432, COMPUTERNAME, COMSPEC, DRIVERDATA, EFC_20164_1262719628, EFC_20164_1592913036, EFC_20164_2283032206, EFC_20164_2775293581, EFC_20164_3789132940, EFC_20164_4126798990, ENABLE_DEBUG_ENDPOINTS, HOMEDRIVE, HOMEPATH, JAVA_HOME, LOCALAPPDATA, LOGONSERVER, NUMBER_OF_PROCESSORS, NVM_HOME, NVM_SYMLINK, ONEDRIVE, ONEDRIVECONSUMER, OS, PATH, PATHEXT, PROCESSOR_ARCHITECTURE, PROCESSOR_IDENTIFIER, PROCESSOR_LEVEL, PROCESSOR_REVISION, PROGRAMDATA, PROGRAMFILES, PROGRAMFILES(X86), PROGRAMW6432, PSMODULEPATH, PUBLIC, SESSIONNAME, SYSTEMDRIVE, SYSTEMROOT, TEMP, TMP, USERDOMAIN, USERDOMAIN_ROAMINGPROFILE, USERNAME, USERPROFILE, VSCODE_CODE_CACHE_PATH, VSCODE_CWD, VSCODE_IPC_HOOK, VSCODE_NLS_CONFIG, VSCODE_PID, WINDIR, ZES_ENABLE_SYSMAN
+2026-06-25 17:01:08,180 - app.main - INFO - Loaded environment variables: ALLUSERSPROFILE, ANTIGRAVITY_AGENT, ANTIGRAVITY_CSRF_TOKEN, ANTIGRAVITY_EDITOR_APP_ROOT, ANTIGRAVITY_LS_ADDRESS, ANTIGRAVITY_SOURCE_METADATA, ANTIGRAVITY_TRAJECTORY_ID, APPDATA, CHOCOLATEYINSTALL, CHOCOLATEYLASTPATHUPDATE, CHROME_CRASHPAD_PIPE_NAME, COMMONPROGRAMFILES, COMMONPROGRAMFILES(X86), COMMONPROGRAMW6432, COMPUTERNAME, COMSPEC, DRIVERDATA, EFC_20164_1262719628, EFC_20164_1592913036, EFC_20164_2283032206, EFC_20164_2775293581, EFC_20164_3789132940, EFC_20164_4126798990, ENABLE_DEBUG_ENDPOINTS, HOMEDRIVE, HOMEPATH, JAVA_HOME, LOCALAPPDATA, LOGONSERVER, NUMBER_OF_PROCESSORS, NVM_HOME, NVM_SYMLINK, ONEDRIVE, ONEDRIVECONSUMER, OS, PATH, PATHEXT, PROCESSOR_ARCHITECTURE, PROCESSOR_IDENTIFIER, PROCESSOR_LEVEL, PROCESSOR_REVISION, PROGRAMDATA, PROGRAMFILES, PROGRAMFILES(X86), PROGRAMW6432, PSMODULEPATH, PUBLIC, SESSIONNAME, SYSTEMDRIVE, SYSTEMROOT, TEMP, TMP, USERDOMAIN, USERDOMAIN_ROAMINGPROFILE, USERNAME, USERPROFILE, VSCODE_CODE_CACHE_PATH, VSCODE_CWD, VSCODE_IPC_HOOK, VSCODE_NLS_CONFIG, VSCODE_PID, WINDIR, ZES_ENABLE_SYSMAN
+2026-06-25 17:01:08,180 - app.main - INFO - BREVO_API_KEY_PREFIX=xsmtpsib-f
+2026-06-25 17:01:08,180 - app.main - INFO - BREVO_API_KEY_PREFIX=xsmtpsib-f
+2026-06-25 17:01:08,180 - app.main - INFO - BREVO_SMTP_PASSWORD_PREFIX=xsmtpsib-f
+2026-06-25 17:01:08,180 - app.main - INFO - BREVO_SMTP_PASSWORD_PREFIX=xsmtpsib-f
+2026-06-25 17:01:08,180 - app.main - INFO - RAW_BREVO_API_KEY_PREFIX=None
+2026-06-25 17:01:08,180 - app.main - INFO - RAW_BREVO_API_KEY_PREFIX=None
+2026-06-25 17:01:08,180 - app.main - INFO - RAW_BREVO_SMTP_PASSWORD_PREFIX=None
+2026-06-25 17:01:08,180 - app.main - INFO - RAW_BREVO_SMTP_PASSWORD_PREFIX=None
+2026-06-25 17:01:08,181 - app.backup - INFO - SQLite backup background task initialized.
+2026-06-25 17:01:08,187 - app.backup - INFO - SQLite backup created successfully at: C:\Users\praja\Desktop\Cricket\backend\backups\cricket_backup_20260625_170108.db
+2026-06-25 17:01:08,188 - app.backup - INFO - Removed old backup: C:\Users\praja\Desktop\Cricket\backend\backups\cricket_backup_20260624_213754.db
+2026-06-25 17:01:08,189 - uvicorn.error - INFO - Application startup complete.
+2026-06-25 17:01:08,189 - uvicorn.error - INFO - Application startup complete.
+2026-06-25 17:01:08,189 - uvicorn.error - INFO - Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+2026-06-25 17:01:08,189 - uvicorn.error - INFO - Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+2026-06-25 17:03:14,237 - app.routers.auth - ERROR - [LOGIN DEBUG] Received username: 'captain@cricup.com' and password: 'Password123'
+2026-06-25 17:03:14,237 - app.routers.auth - ERROR - [LOGIN DEBUG] Received username: 'captain@cricup.com' and password: 'Password123'
+2026-06-25 17:03:14,803 - app.main - INFO - POST /api/v1/auth/login 200
+2026-06-25 17:03:14,803 - app.main - INFO - POST /api/v1/auth/login 200
+2026-06-25 17:03:14,804 - uvicorn.access - INFO - 127.0.0.1:50577 - "POST /api/v1/auth/login HTTP/1.1" 200
+2026-06-25 17:03:14,928 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:03:14,928 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:03:14,929 - app.routers.auth - INFO - [GET_ME] user_id=0191a32d-a8fd-4295-84d6-e9072d4a583c email=captain@cricup.com role=player
+2026-06-25 17:03:14,929 - app.routers.auth - INFO - [GET_ME] user_id=0191a32d-a8fd-4295-84d6-e9072d4a583c email=captain@cricup.com role=player
+2026-06-25 17:03:14,936 - app.main - INFO - GET /api/v1/auth/me 200
+2026-06-25 17:03:14,936 - app.main - INFO - GET /api/v1/auth/me 200
+2026-06-25 17:03:14,937 - uvicorn.access - INFO - 127.0.0.1:50577 - "GET /api/v1/auth/me HTTP/1.1" 200
+2026-06-25 17:03:15,345 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:03:15,345 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:03:15,362 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:03:15,362 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:03:15,362 - app.main - INFO - GET /api/v1/matches/ 200
+2026-06-25 17:03:15,362 - app.main - INFO - GET /api/v1/matches/ 200
+2026-06-25 17:03:15,362 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:03:15,362 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:03:15,374 - uvicorn.access - INFO - 127.0.0.1:50578 - "GET /api/v1/matches/ HTTP/1.1" 200
+2026-06-25 17:03:15,381 - app.main - INFO - GET /api/v1/profile/ 200
+2026-06-25 17:03:15,381 - app.main - INFO - GET /api/v1/profile/ 200
+2026-06-25 17:03:15,383 - uvicorn.access - INFO - 127.0.0.1:50579 - "GET /api/v1/profile/ HTTP/1.1" 200
+2026-06-25 17:03:15,386 - app.main - INFO - GET /api/v1/notifications/ 200
+2026-06-25 17:03:15,386 - app.main - INFO - GET /api/v1/notifications/ 200
+2026-06-25 17:03:15,387 - uvicorn.access - INFO - 127.0.0.1:50580 - "GET /api/v1/notifications/ HTTP/1.1" 200
+2026-06-25 17:03:31,900 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:03:31,900 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:03:31,907 - app.main - INFO - GET /api/v1/teams/my-teams 200
+2026-06-25 17:03:31,907 - app.main - INFO - GET /api/v1/teams/my-teams 200
+2026-06-25 17:03:31,909 - uvicorn.access - INFO - 127.0.0.1:50602 - "GET /api/v1/teams/my-teams HTTP/1.1" 200
+2026-06-25 17:03:31,955 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:03:31,955 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:03:31,961 - app.main - INFO - GET /api/v1/teams/ 200
+2026-06-25 17:03:31,961 - app.main - INFO - GET /api/v1/teams/ 200
+2026-06-25 17:03:31,962 - uvicorn.access - INFO - 127.0.0.1:50602 - "GET /api/v1/teams/ HTTP/1.1" 200
+2026-06-25 17:04:08,916 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:04:08,916 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:04:08,945 - app.main - INFO - POST /api/v1/teams/ 201
+2026-06-25 17:04:08,945 - app.main - INFO - POST /api/v1/teams/ 201
+2026-06-25 17:04:08,945 - uvicorn.access - INFO - 127.0.0.1:58597 - "POST /api/v1/teams/ HTTP/1.1" 201
+2026-06-25 17:04:09,176 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:04:09,176 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:04:09,176 - app.main - INFO - GET /api/v1/teams/my-teams 200
+2026-06-25 17:04:09,176 - app.main - INFO - GET /api/v1/teams/my-teams 200
+2026-06-25 17:04:09,184 - uvicorn.access - INFO - 127.0.0.1:58597 - "GET /api/v1/teams/my-teams HTTP/1.1" 200
+2026-06-25 17:04:09,200 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:04:09,200 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:04:09,200 - app.main - INFO - GET /api/v1/teams/ 200
+2026-06-25 17:04:09,200 - app.main - INFO - GET /api/v1/teams/ 200
+2026-06-25 17:04:09,216 - uvicorn.access - INFO - 127.0.0.1:58597 - "GET /api/v1/teams/ HTTP/1.1" 200
+2026-06-25 17:04:22,950 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:04:22,950 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=0191a32d-a8fd-4295-84d6-e9072d4a583c
+        email=captain@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:04:22,964 - app.main - INFO - POST /api/v1/auth/logout 200
+2026-06-25 17:04:22,964 - app.main - INFO - POST /api/v1/auth/logout 200
+2026-06-25 17:04:22,967 - uvicorn.access - INFO - 127.0.0.1:58615 - "POST /api/v1/auth/logout HTTP/1.1" 200
+2026-06-25 17:05:11,257 - app.routers.auth - ERROR - [LOGIN DEBUG] Received username: 'player@cricup.com' and password: 'Password123'
+2026-06-25 17:05:11,257 - app.routers.auth - ERROR - [LOGIN DEBUG] Received username: 'player@cricup.com' and password: 'Password123'
+2026-06-25 17:05:11,752 - app.main - INFO - POST /api/v1/auth/login 200
+2026-06-25 17:05:11,752 - app.main - INFO - POST /api/v1/auth/login 200
+2026-06-25 17:05:11,753 - uvicorn.access - INFO - 127.0.0.1:58745 - "POST /api/v1/auth/login HTTP/1.1" 200
+2026-06-25 17:05:11,795 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=6137b953-4d2f-45ad-9fbb-31aaf6647e80
+        email=player@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:05:11,795 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=6137b953-4d2f-45ad-9fbb-31aaf6647e80
+        email=player@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:05:11,796 - app.routers.auth - INFO - [GET_ME] user_id=6137b953-4d2f-45ad-9fbb-31aaf6647e80 email=player@cricup.com role=player
+2026-06-25 17:05:11,796 - app.routers.auth - INFO - [GET_ME] user_id=6137b953-4d2f-45ad-9fbb-31aaf6647e80 email=player@cricup.com role=player
+2026-06-25 17:05:11,800 - app.main - INFO - GET /api/v1/auth/me 200
+2026-06-25 17:05:11,800 - app.main - INFO - GET /api/v1/auth/me 200
+2026-06-25 17:05:11,802 - uvicorn.access - INFO - 127.0.0.1:58745 - "GET /api/v1/auth/me HTTP/1.1" 200
+2026-06-25 17:05:12,022 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=6137b953-4d2f-45ad-9fbb-31aaf6647e80
+        email=player@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:05:12,022 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=6137b953-4d2f-45ad-9fbb-31aaf6647e80
+        email=player@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:05:12,029 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=6137b953-4d2f-45ad-9fbb-31aaf6647e80
+        email=player@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:05:12,029 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=6137b953-4d2f-45ad-9fbb-31aaf6647e80
+        email=player@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:05:12,033 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=6137b953-4d2f-45ad-9fbb-31aaf6647e80
+        email=player@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:05:12,033 - app.routers.auth - ERROR - 
+        AUTH DEBUG
+        id=6137b953-4d2f-45ad-9fbb-31aaf6647e80
+        email=player@cricup.com
+        role=player
+        is_active=True
+        is_deleted=False
+        lockout_until=None
+        
+2026-06-25 17:05:12,034 - app.main - INFO - GET /api/v1/matches/ 200
+2026-06-25 17:05:12,034 - app.main - INFO - GET /api/v1/matches/ 200
+2026-06-25 17:05:12,035 - uvicorn.access - INFO - 127.0.0.1:58746 - "GET /api/v1/matches/ HTTP/1.1" 200
+2026-06-25 17:05:12,039 - app.main - INFO - GET /api/v1/notifications/ 200
+2026-06-25 17:05:12,039 - app.main - INFO - GET /api/v1/notifications/ 200
+2026-06-25 17:05:12,040 - uvicorn.access - INFO - 127.0.0.1:58748 - "GET /api/v1/notifications/ HTTP/1.1" 200
+2026-06-25 17:05:12,041 - app.main - INFO - GET /api/v1/profile/ 200
+2026-06-25 17:05:12,041 - app.main - INFO - GET /api/v1/profile/ 200
+2026-06-25 17:05:12,043 - uvicorn.access - INFO - 127.0.0.1:58747 - "GET /api/v1/profile/ HTTP/1.1" 200

@@ -65,3 +65,6 @@ class AddMemberRequest(BaseModel):
 
 class ApproveMemberRequest(BaseModel):
     user_id: UUID
+
+class UpdateMemberRoleRequest(BaseModel):
+    role: str

@@ -33,10 +33,10 @@ def enter_text_in_field(field_index, text_val, wait_secs=1):
 def main():
     print("Starting final login sequence...")
     # Enter email
-    enter_text_in_field(0, "cricketer@example.com")
+    enter_text_in_field(0, "cricupservice@gmail.com")
     
     # Enter password
-    enter_text_in_field(1, "StrongPassword123!")
+    enter_text_in_field(1, "Password123!")
     
     # Dismiss keyboard
     print("Dismissing keyboard...")

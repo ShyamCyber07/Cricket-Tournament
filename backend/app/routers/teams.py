@@ -13,7 +13,7 @@ from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User
 from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad, TeamMember, Notification
-from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate, BulkAddPlayersRequest, TeamMemberResponse, MyTeamsResponse, AddMemberRequest, ApproveMemberRequest
+from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate, BulkAddPlayersRequest, TeamMemberResponse, MyTeamsResponse, AddMemberRequest, ApproveMemberRequest, UpdateMemberRoleRequest
 
 router = APIRouter()
 
@@ -404,6 +404,24 @@ def update_team(
             team.captain_id = team_in.captain_id
 
     db.add(team)
+    
+    # Notify active members
+    active_members = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.status == "active"
+    ).all()
+    import json
+    for m in active_members:
+        if m.user_id != current_user.id:
+            notif = Notification(
+                user_id=m.user_id,
+                title="Team Profile Updated",
+                message=f"Team {team.name}'s details have been updated.",
+                type="team_updated",
+                extra_data=json.dumps({"team_id": str(id)})
+            )
+            db.add(notif)
+            
     db.commit()
     db.refresh(team)
     return team
@@ -450,6 +468,23 @@ def delete_team(
             status_code=400,
             detail=f"Cannot delete team because it has scheduled or active matches: {active_match.team1.name} vs {active_match.team2.name}."
         )
+
+    # Notify active members before deletion
+    active_members = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.status == "active"
+    ).all()
+    import json
+    for m in active_members:
+        if m.user_id != current_user.id:
+            notif = Notification(
+                user_id=m.user_id,
+                title="Team Deleted",
+                message=f"Team {team.name} has been deleted by the captain.",
+                type="team_deleted",
+                extra_data=json.dumps({"team_id": str(id)})
+            )
+            db.add(notif)
 
     if team.logo_url:
         delete_image(team.logo_url)
@@ -700,7 +735,8 @@ def remove_member_from_team(
         TeamMember.status == "active"
     ).first()
     
-    if not is_captain and team.created_by != current_user.id and current_user.role != "admin":
+    is_self = (current_user.id == user_id)
+    if not is_captain and team.created_by != current_user.id and current_user.role != "admin" and not is_self:
         raise HTTPException(status_code=403, detail="Only the captain can remove members")
 
     # Cannot remove creator/owner
@@ -714,6 +750,52 @@ def remove_member_from_team(
     
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
+
+    import json
+    if is_self:
+        if member.status == "pending":
+            # Join request cancelled -> notify captains
+            captains = db.query(TeamMember).filter(
+                TeamMember.team_id == id,
+                TeamMember.role == "captain",
+                TeamMember.status == "active"
+            ).all()
+            for cap in captains:
+                notif = Notification(
+                    user_id=cap.user_id,
+                    title="Join Request Cancelled",
+                    message=f"{current_user.full_name or current_user.username} cancelled their request to join {team.name}.",
+                    type="join_request_cancelled",
+                    extra_data=json.dumps({"team_id": str(id)})
+                )
+                db.add(notif)
+        elif member.status == "active":
+            # Member left team -> notify captains
+            captains = db.query(TeamMember).filter(
+                TeamMember.team_id == id,
+                TeamMember.role == "captain",
+                TeamMember.status == "active"
+            ).all()
+            for cap in captains:
+                notif = Notification(
+                    user_id=cap.user_id,
+                    title="Member Left Team",
+                    message=f"{current_user.full_name or current_user.username} left {team.name}.",
+                    type="member_left",
+                    extra_data=json.dumps({"team_id": str(id)})
+                )
+                db.add(notif)
+    else:
+        # Captain removed member -> notify the removed user if they were active or invited
+        if member.status in ["active", "invited"]:
+            notif = Notification(
+                user_id=user_id,
+                title="Removed from Team",
+                message=f"You have been removed from team {team.name}.",
+                type="member_removed",
+                extra_data=json.dumps({"team_id": str(id)})
+            )
+            db.add(notif)
 
     db.delete(member)
     db.commit()
@@ -746,6 +828,24 @@ def create_join_request(
         status="pending"
     )
     db.add(member)
+    
+    # Notify all active captains of this team
+    import json
+    captains = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).all()
+    for cap in captains:
+        notif = Notification(
+            user_id=cap.user_id,
+            title="New Join Request",
+            message=f"{current_user.full_name or current_user.username} has requested to join {team.name}.",
+            type="join_request_sent",
+            extra_data=json.dumps({"team_id": str(id), "user_id": str(current_user.id)})
+        )
+        db.add(notif)
+        
     db.commit()
     db.refresh(member)
     
@@ -866,3 +966,190 @@ def reject_join_request(
     
     db.commit()
     return None
+
+@router.put("/{id}/members/{user_id}/role", response_model=TeamMemberResponse)
+def update_member_role(
+    id: UUID,
+    user_id: UUID,
+    req: UpdateMemberRoleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    # Authorize: Only the captain (or admin) can change roles
+    is_captain = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).first()
+
+    if not is_captain and team.created_by != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only the captain can modify roles")
+
+    # Find the target member
+    member = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == user_id,
+        TeamMember.status == "active"
+    ).first()
+
+    if not member:
+        raise HTTPException(status_code=404, detail="Active team member not found")
+
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    old_role = member.role
+    new_role = req.role.strip().lower()
+
+    if new_role not in ["captain", "vice_captain", "player"]:
+        raise HTTPException(status_code=400, detail="Invalid role. Must be 'captain', 'vice_captain', or 'player'")
+
+    if old_role == new_role:
+        return TeamMemberResponse(
+            id=member.id,
+            team_id=member.team_id,
+            user_id=member.user_id,
+            user_email=target_user.email,
+            user_full_name=target_user.full_name or target_user.username or "User",
+            role=member.role,
+            status=member.status,
+            joined_at=member.joined_at
+        )
+
+    import json
+
+    # 1. Update to CAPTAIN
+    if new_role == "captain":
+        member.role = "captain"
+        
+        # Demote current captain (current_user)
+        current_captain_member = db.query(TeamMember).filter(
+            TeamMember.team_id == id,
+            TeamMember.user_id == current_user.id,
+            TeamMember.role == "captain"
+        ).first()
+        if current_captain_member:
+            current_captain_member.role = "player"
+
+        # Also update Team model's captain_id
+        from app.models.cricket import Player
+        new_captain_player = db.query(Player).filter(Player.user_id == user_id).first()
+        if new_captain_player:
+            team.captain_id = new_captain_player.id
+
+        # Notify new captain
+        notif_new_cap = Notification(
+            user_id=user_id,
+            title="Promoted to Captain",
+            message=f"You have been appointed as the Captain of team {team.name}.",
+            type="captain_changed",
+            extra_data=json.dumps({"team_id": str(id)})
+        )
+        db.add(notif_new_cap)
+
+        # Notify previous captain
+        notif_prev_cap = Notification(
+            user_id=current_user.id,
+            title="Captaincy Transferred",
+            message=f"You transferred captaincy of {team.name} to {target_user.full_name or target_user.username}.",
+            type="captain_changed",
+            extra_data=json.dumps({"team_id": str(id)})
+        )
+        db.add(notif_prev_cap)
+
+        # Notify other active members
+        active_members = db.query(TeamMember).filter(
+            TeamMember.team_id == id,
+            TeamMember.status == "active"
+        ).all()
+        for m in active_members:
+            if m.user_id != user_id and m.user_id != current_user.id:
+                notif = Notification(
+                    user_id=m.user_id,
+                    title="New Captain Appointed",
+                    message=f"{target_user.full_name or target_user.username} is now the Captain of {team.name}.",
+                    type="captain_changed",
+                    extra_data=json.dumps({"team_id": str(id)})
+                )
+                db.add(notif)
+
+    # 2. Update to VICE_CAPTAIN
+    elif new_role == "vice_captain":
+        member.role = "vice_captain"
+
+        # Notify promoted user
+        notif_vc = Notification(
+            user_id=user_id,
+            title="Vice Captain Assigned",
+            message=f"You have been assigned as Vice Captain of team {team.name}.",
+            type="vice_captain_assigned",
+            extra_data=json.dumps({"team_id": str(id)})
+        )
+        db.add(notif_vc)
+
+        # Notify other active members
+        active_members = db.query(TeamMember).filter(
+            TeamMember.team_id == id,
+            TeamMember.status == "active"
+        ).all()
+        for m in active_members:
+            if m.user_id != user_id:
+                notif = Notification(
+                    user_id=m.user_id,
+                    title="Vice Captain Appointed",
+                    message=f"{target_user.full_name or target_user.username} is now the Vice Captain of team {team.name}.",
+                    type="vice_captain_assigned",
+                    extra_data=json.dumps({"team_id": str(id)})
+                )
+                db.add(notif)
+
+    # 3. Update to PLAYER
+    elif new_role == "player":
+        member.role = "player"
+
+        if old_role == "vice_captain":
+            # Notify demoted user
+            notif_demote = Notification(
+                user_id=user_id,
+                title="Vice Captain Removed",
+                message=f"You are no longer the Vice Captain of team {team.name}.",
+                type="vice_captain_removed",
+                extra_data=json.dumps({"team_id": str(id)})
+            )
+            db.add(notif_demote)
+
+            # Notify other active members
+            active_members = db.query(TeamMember).filter(
+                TeamMember.team_id == id,
+                TeamMember.status == "active"
+            ).all()
+            for m in active_members:
+                if m.user_id != user_id:
+                    notif = Notification(
+                        user_id=m.user_id,
+                        title="Vice Captain Removed",
+                        message=f"{target_user.full_name or target_user.username} has been removed as Vice Captain of {team.name}.",
+                        type="vice_captain_removed",
+                        extra_data=json.dumps({"team_id": str(id)})
+                    )
+                    db.add(notif)
+
+    db.commit()
+    db.refresh(member)
+
+    return TeamMemberResponse(
+        id=member.id,
+        team_id=member.team_id,
+        user_id=member.user_id,
+        user_email=target_user.email,
+        user_full_name=target_user.full_name or target_user.username or "User",
+        role=member.role,
+        status=member.status,
+        joined_at=member.joined_at
+    )

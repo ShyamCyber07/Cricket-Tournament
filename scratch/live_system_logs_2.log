@@ -1,0 +1,26 @@
+--- STARTUP & CONSOLE LOGS ---
+2026-06-21 13:04:36,654 - app.core.storage - WARNING - CLOUDINARY_URL not set. Falling back to local storage.
+2026-06-21 13:04:36,878 - uvicorn.error - INFO - Started server process [1]
+2026-06-21 13:04:36,878 - uvicorn.error - INFO - Started server process [1]
+2026-06-21 13:04:36,878 - uvicorn.error - INFO - Waiting for application startup.
+2026-06-21 13:04:36,878 - uvicorn.error - INFO - Waiting for application startup.
+2026-06-21 13:04:36,880 - app.main - INFO - APP_VERSION = faeae21e699a9142507898d11f0648c2ec140280
+2026-06-21 13:04:36,880 - app.main - INFO - APP_VERSION = faeae21e699a9142507898d11f0648c2ec140280
+2026-06-21 13:04:36,880 - app.main - INFO - DATABASE_DIALECT = postgresql
+2026-06-21 13:04:36,880 - app.main - INFO - DATABASE_DIALECT = postgresql
+2026-06-21 13:04:36,916 - app.main - INFO - ALEMBIC_VERSION = add_is_deleted_to_users
+2026-06-21 13:04:36,916 - app.main - INFO - ALEMBIC_VERSION = add_is_deleted_to_users
+2026-06-21 13:04:36,936 - app.main - INFO - SCHEMA_CHECK OK: users has all required columns
+2026-06-21 13:04:36,936 - app.main - INFO - SCHEMA_CHECK OK: users has all required columns
+2026-06-21 13:04:36,940 - app.main - INFO - SCHEMA_CHECK OK: refresh_tokens has all required columns
+2026-06-21 13:04:36,940 - app.main - INFO - SCHEMA_CHECK OK: refresh_tokens has all required columns
+2026-06-21 13:04:36,942 - app.main - INFO - SCHEMA_CHECK OK: players has all required columns
+2026-06-21 13:04:36,942 - app.main - INFO - SCHEMA_CHECK OK: players has all required columns
+2026-06-21 13:04:36,980 - app.main - INFO - Running database migrations from config: alembic.ini
+2026-06-21 13:04:36,980 - app.main - INFO - Running database migrations from config: alembic.ini
+
+--- HTTP REQUEST LOGS ---
+2026-06-21 13:05:45 - GET /api/v1/admin/system-logs 200
+2026-06-21 13:13:13 - GET /api/v1/docs 200
+2026-06-21 13:13:16 - GET /api/v1/openapi.json 200
+2026-06-21 13:14:27 - GET /api/v1/admin/system-logs 200

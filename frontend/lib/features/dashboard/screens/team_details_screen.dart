@@ -47,7 +47,13 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     super.dispose();
   }
 
-  bool get _isCaptain => widget.userRole.toLowerCase() == 'captain';
+  String? _currentUserId;
+  String? _myMemberRole;
+  String? _myMemberStatus;
+
+  bool get _isCaptain => _myMemberRole?.toLowerCase() == 'captain' || widget.userRole.toLowerCase() == 'captain';
+  bool get _isVC => _myMemberRole?.toLowerCase() == 'vice_captain';
+  bool get _isActiveMember => _myMemberStatus?.toLowerCase() == 'active';
 
   Future<void> _loadDetails() async {
     setState(() => _isLoading = true);
@@ -66,12 +72,34 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                m['team2_id']?.toString() == widget.teamId;
       }).toList();
 
+      String? currentUserId;
+      try {
+        final profileRes = await _apiService.getProfile();
+        currentUserId = profileRes.data['id']?.toString();
+      } catch (_) {}
+
+      dynamic myMemberObj;
+      if (currentUserId != null) {
+        myMemberObj = allMembers.firstWhere(
+          (m) => m['user_id']?.toString() == currentUserId,
+          orElse: () => null,
+        );
+      }
+
       setState(() {
         _team = teamData;
         _teamDescription = teamData['description'] ?? '';
         _teamLogoUrl = teamData['logo_url'];
         _members = allMembers;
         _matches = filteredMatches;
+        _currentUserId = currentUserId;
+        if (myMemberObj != null) {
+          _myMemberRole = myMemberObj['role'];
+          _myMemberStatus = myMemberObj['status'];
+        } else {
+          _myMemberRole = null;
+          _myMemberStatus = null;
+        }
         _isLoading = false;
       });
     } catch (e) {
@@ -142,6 +170,107 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     } catch (e) {
       _showSnackBar("Failed to revoke invitation: $e", AppColors.error);
     }
+  }
+
+  Future<void> _updateRole(String userId, String role) async {
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.updateMemberRole(widget.teamId, userId, role);
+      _showSnackBar("Member role updated successfully!", AppColors.primary);
+      _loadDetails();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar("Failed to update role: $e", AppColors.error);
+    }
+  }
+
+  void _showMakeCaptainDialog(String userId, String name) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text("Transfer Captaincy", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          content: Text("Are you sure you want to make $name the Captain? This will demote you to player."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.black),
+              onPressed: () {
+                Navigator.pop(context);
+                _updateRole(userId, 'captain');
+              },
+              child: const Text("Confirm"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showRemoveMemberDialog(String userId, String name) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text("Remove Member", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          content: Text("Are you sure you want to remove $name from the team?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              onPressed: () {
+                Navigator.pop(context);
+                _removeMember(userId);
+              },
+              child: const Text("Remove"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _confirmLeave() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text("Leave Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          content: Text("Are you sure you want to leave ${widget.teamName}?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              onPressed: () async {
+                Navigator.pop(context);
+                setState(() => _isLoading = true);
+                try {
+                  await _apiService.removeTeamMember(widget.teamId, _currentUserId!);
+                  _showSnackBar("You have left the team.", AppColors.primary);
+                  Navigator.pop(context, true);
+                } catch (e) {
+                  setState(() => _isLoading = false);
+                  _showSnackBar("Failed to leave team: $e", AppColors.error);
+                }
+              },
+              child: const Text("Leave"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _deleteTeam() async {
@@ -356,16 +485,19 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
         else
           ...activeList.map((m) {
             final isCap = m['role']?.toString().toLowerCase() == 'captain';
+            final isVC = m['role']?.toString().toLowerCase() == 'vice_captain';
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: isCap ? AppColors.accent.withOpacity(0.15) : AppColors.primary.withOpacity(0.15),
+                  backgroundColor: isCap 
+                      ? AppColors.accent.withOpacity(0.15) 
+                      : (isVC ? AppColors.primary.withOpacity(0.15) : Colors.white.withOpacity(0.05)),
                   child: Text(
                     (m['user_full_name']?[0] ?? '?').toString().toUpperCase(),
                     style: GoogleFonts.outfit(
                       fontWeight: FontWeight.bold,
-                      color: isCap ? AppColors.accent : AppColors.primary,
+                      color: isCap ? AppColors.accent : (isVC ? AppColors.primary : Colors.white70),
                     ),
                   ),
                 ),
@@ -389,39 +521,83 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                           style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.bold, color: AppColors.accent),
                         ),
                       ),
+                    ] else if (isVC) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: AppColors.primary, width: 0.5),
+                        ),
+                        child: Text(
+                          "VC",
+                          style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.bold, color: AppColors.primary),
+                        ),
+                      ),
                     ],
                   ],
                 ),
                 subtitle: Text(m['user_email'] ?? '', style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11)),
                 trailing: (_isCaptain && !isCap)
-                    ? IconButton(
-                        icon: const Icon(Icons.delete_outline, color: AppColors.error),
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) {
-                              return AlertDialog(
-                                backgroundColor: AppColors.surface,
-                                title: Text("Remove Member", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                                content: Text("Are you sure you want to remove ${m['user_full_name']} from the team?"),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-                                  ),
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      _removeMember(m['user_id'].toString());
-                                    },
-                                    child: const Text("Remove"),
-                                  ),
-                                ],
-                              );
-                            },
-                          );
+                    ? PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, color: Colors.white70, size: 20),
+                        color: AppColors.surface,
+                        onSelected: (val) {
+                          if (val == 'promote_vc') {
+                            _updateRole(m['user_id'].toString(), 'vice_captain');
+                          } else if (val == 'demote_vc') {
+                            _updateRole(m['user_id'].toString(), 'player');
+                          } else if (val == 'make_captain') {
+                            _showMakeCaptainDialog(m['user_id'].toString(), m['user_full_name'] ?? 'User');
+                          } else if (val == 'remove') {
+                            _showRemoveMemberDialog(m['user_id'].toString(), m['user_full_name'] ?? 'User');
+                          }
                         },
+                        itemBuilder: (context) => [
+                          if (!isVC)
+                            PopupMenuItem(
+                              value: 'promote_vc',
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.arrow_upward_rounded, color: AppColors.primary, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text("Assign Vice Captain", style: GoogleFonts.outfit(color: Colors.white)),
+                                ],
+                              ),
+                            )
+                          else
+                            PopupMenuItem(
+                              value: 'demote_vc',
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.arrow_downward_rounded, color: Colors.white70, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text("Remove Vice Captain", style: GoogleFonts.outfit(color: Colors.white)),
+                                ],
+                              ),
+                            ),
+                          PopupMenuItem(
+                            value: 'make_captain',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.star_rounded, color: AppColors.accent, size: 18),
+                                const SizedBox(width: 8),
+                                Text("Make Captain", style: GoogleFonts.outfit(color: Colors.white)),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'remove',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.delete_outline, color: AppColors.error, size: 18),
+                                const SizedBox(width: 8),
+                                Text("Remove Member", style: GoogleFonts.outfit(color: AppColors.error)),
+                              ],
+                            ),
+                          ),
+                        ],
                       )
                     : null,
               ),
@@ -503,7 +679,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
             icon: const Icon(Icons.refresh),
             onPressed: _loadDetails,
           ),
-          if (_isCaptain)
+          if (_isCaptain || (_isActiveMember && !_isCaptain))
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
               color: AppColors.surface,
@@ -525,29 +701,44 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                   }
                 } else if (value == 'delete') {
                   _confirmDelete();
+                } else if (value == 'leave') {
+                  _confirmLeave();
                 }
               },
               itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'edit',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.edit_outlined, color: Colors.white),
-                      const SizedBox(width: 8),
-                      Text("Edit Team", style: GoogleFonts.outfit(color: Colors.white)),
-                    ],
+                if (_isCaptain) ...[
+                  PopupMenuItem(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.edit_outlined, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Text("Edit Team", style: GoogleFonts.outfit(color: Colors.white)),
+                      ],
+                    ),
                   ),
-                ),
-                PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.delete_outline, color: AppColors.error),
-                      const SizedBox(width: 8),
-                      Text("Delete Team", style: GoogleFonts.outfit(color: AppColors.error)),
-                    ],
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.delete_outline, color: AppColors.error),
+                        const SizedBox(width: 8),
+                        Text("Delete Team", style: GoogleFonts.outfit(color: AppColors.error)),
+                      ],
+                    ),
                   ),
-                ),
+                ] else if (_isActiveMember && !_isCaptain) ...[
+                  PopupMenuItem(
+                    value: 'leave',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.exit_to_app_rounded, color: AppColors.error),
+                        const SizedBox(width: 8),
+                        Text("Leave Team", style: GoogleFonts.outfit(color: AppColors.error)),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
         ],
