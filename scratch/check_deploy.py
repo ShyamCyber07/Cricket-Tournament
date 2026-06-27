@@ -7,7 +7,7 @@ import sys
 
 url_login = "https://cricket-tournament-production.up.railway.app/api/v1/auth/login"
 url_logs = "https://cricket-tournament-production.up.railway.app/api/v1/admin/system-logs"
-target_sha = "dcd42bf"
+target_sha = "b11634d"
 
 print(f"Target commit SHA prefix: {target_sha}")
 

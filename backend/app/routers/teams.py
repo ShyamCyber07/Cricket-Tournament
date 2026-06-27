@@ -739,10 +739,6 @@ def remove_member_from_team(
     if not is_captain and team.created_by != current_user.id and current_user.role != "admin" and not is_self:
         raise HTTPException(status_code=403, detail="Only the captain can remove members")
 
-    # Cannot remove creator/owner
-    if user_id == team.created_by:
-        raise HTTPException(status_code=400, detail="The team creator/owner cannot be removed")
-
     member = db.query(TeamMember).filter(
         TeamMember.team_id == id,
         TeamMember.user_id == user_id
@@ -750,6 +746,10 @@ def remove_member_from_team(
     
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
+
+    # Cannot remove active captain
+    if member.role == "captain":
+        raise HTTPException(status_code=400, detail="The active team captain cannot be removed. Transfer captaincy first.")
 
     import json
     if is_self:
