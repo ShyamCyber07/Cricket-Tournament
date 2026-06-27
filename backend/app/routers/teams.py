@@ -203,7 +203,10 @@ def list_teams(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return db.query(Team).all()
+    if current_user.role == "admin":
+        return db.query(Team).all()
+    else:
+        return db.query(Team).filter(Team.created_by == current_user.id).all()
 
 @router.get("/{id}", response_model=TeamResponse)
 def get_team(id: UUID, db: Session = Depends(get_db)):
