@@ -205,8 +205,17 @@ def list_teams(
 ):
     if current_user.role == "admin":
         return db.query(Team).all()
-    else:
-        return db.query(Team).filter(Team.created_by == current_user.id).all()
+        
+    # Get team IDs where current_user is an active member
+    active_member_team_ids = db.query(TeamMember.team_id).filter(
+        TeamMember.user_id == current_user.id,
+        TeamMember.status == "active"
+    )
+    
+    # Return teams created by user OR where they are an active member
+    return db.query(Team).filter(
+        (Team.created_by == current_user.id) | (Team.id.in_(active_member_team_ids))
+    ).all()
 
 @router.get("/{id}", response_model=TeamResponse)
 def get_team(id: UUID, db: Session = Depends(get_db)):
