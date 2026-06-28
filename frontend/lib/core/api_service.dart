@@ -922,6 +922,52 @@ class ApiService {
     return await _dio.get('/teams/$teamId/activities');
   }
 
+  Future<Response> getExploreTournaments({String? search}) async {
+    return await _dio.get(
+      '/tournaments/explore',
+      queryParameters: search != null ? {'search': search} : null,
+    );
+  }
+
+  Future<Response> publishTournament(String tournamentId) async {
+    return await _dio.post('/tournaments/$tournamentId/publish');
+  }
+
+  Future<Response> openTournamentRegistration(String tournamentId) async {
+    return await _dio.post('/tournaments/$tournamentId/open-registration');
+  }
+
+  Future<Response> closeTournamentRegistration(String tournamentId) async {
+    return await _dio.post('/tournaments/$tournamentId/close-registration');
+  }
+
+  Future<Response> sendTournamentRequest(String tournamentId, String teamId) async {
+    return await _dio.post(
+      '/tournaments/$tournamentId/requests',
+      queryParameters: {'team_id': teamId},
+    );
+  }
+
+  Future<Response> cancelTournamentRequest(String tournamentId, String requestId) async {
+    return await _dio.delete('/tournaments/$tournamentId/requests/$requestId');
+  }
+
+  Future<Response> getTournamentRequests(String tournamentId) async {
+    return await _dio.get('/tournaments/$tournamentId/requests');
+  }
+
+  Future<Response> approveTournamentRequest(String tournamentId, String requestId) async {
+    return await _dio.post('/tournaments/$tournamentId/requests/$requestId/approve');
+  }
+
+  Future<Response> rejectTournamentRequest(String tournamentId, String requestId) async {
+    return await _dio.post('/tournaments/$tournamentId/requests/$requestId/reject');
+  }
+
+  Future<Response> getTournamentActivities(String tournamentId) async {
+    return await _dio.get('/tournaments/$tournamentId/activities');
+  }
+
   Future<Response> testConnection() async {
     final uri = Uri.parse(AppConfig.baseUrl);
     final hostUrl = "${uri.scheme}://${uri.host}:${uri.port}/";

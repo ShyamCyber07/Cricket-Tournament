@@ -31,6 +31,9 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
   Map<String, dynamic> _dashboardData = {};
   List<dynamic> _allTeams = []; // All teams in the system for registration dropdown
   Map<String, dynamic>? _currentUser;
+  List<dynamic> _requests = [];
+  List<dynamic> _myTeams = [];
+  List<dynamic> _activities = [];
 
   @override
   void initState() {
@@ -234,6 +237,43 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                     color: AppColors.textSecondary,
                   ),
                 ),
+                if (isOrganizer) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      if (summary['status']?.toString() == 'draft')
+                        ElevatedButton.icon(
+                          onPressed: _publishTournament,
+                          icon: const Icon(Icons.publish, size: 14, color: Colors.white),
+                          label: Text("Publish", style: GoogleFonts.outfit(fontSize: 12, color: Colors.white)),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            backgroundColor: Colors.blue,
+                          ),
+                        ),
+                      if (summary['status']?.toString() == 'published')
+                        ElevatedButton.icon(
+                          onPressed: _openRegistration,
+                          icon: const Icon(Icons.play_arrow, size: 14, color: Colors.white),
+                          label: Text("Open Registration", style: GoogleFonts.outfit(fontSize: 12, color: Colors.white)),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            backgroundColor: AppColors.secondary,
+                          ),
+                        ),
+                      if (summary['status']?.toString() == 'registration_open' || summary['status']?.toString() == 'registration')
+                        ElevatedButton.icon(
+                          onPressed: _closeRegistration,
+                          icon: const Icon(Icons.block, size: 14, color: Colors.white),
+                          label: Text("Close Registration", style: GoogleFonts.outfit(fontSize: 12, color: Colors.white)),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            backgroundColor: Colors.red,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -247,9 +287,37 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
     try {
       final dashRes = await _apiService.getTournamentDashboard(widget.tournamentId);
       final teamsRes = await _apiService.getTeams();
+      
+      List<dynamic> reqs = [];
+      try {
+        final reqsRes = await _apiService.getTournamentRequests(widget.tournamentId);
+        reqs = reqsRes.data ?? [];
+      } catch (e) {
+        debugPrint("Error loading tournament requests: $e");
+      }
+
+      List<dynamic> myTeamsList = [];
+      try {
+        final myTeamsRes = await _apiService.getMyTeams();
+        myTeamsList = myTeamsRes.data ?? [];
+      } catch (e) {
+        debugPrint("Error loading user teams: $e");
+      }
+
+      List<dynamic> actsList = [];
+      try {
+        final actsRes = await _apiService.getTournamentActivities(widget.tournamentId);
+        actsList = actsRes.data ?? [];
+      } catch (e) {
+        debugPrint("Error loading tournament activities: $e");
+      }
+
       setState(() {
         _dashboardData = dashRes.data;
         _allTeams = teamsRes.data;
+        _requests = reqs;
+        _myTeams = myTeamsList;
+        _activities = actsList;
         _isLoading = false;
       });
     } catch (e) {
@@ -290,6 +358,104 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
         SnackBar(content: Text("Deregistration failed: $e"), backgroundColor: AppColors.error),
       );
     }
+  }
+
+  Future<void> _publishTournament() async {
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.publishTournament(widget.tournamentId);
+      _showSnackBar("Tournament published successfully!", AppColors.primary);
+      _fetchData();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar("Failed to publish tournament: $e", AppColors.error);
+    }
+  }
+
+  Future<void> _openRegistration() async {
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.openTournamentRegistration(widget.tournamentId);
+      _showSnackBar("Registration is now open!", AppColors.primary);
+      _fetchData();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar("Failed to open registration: $e", AppColors.error);
+    }
+  }
+
+  Future<void> _closeRegistration() async {
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.closeTournamentRegistration(widget.tournamentId);
+      _showSnackBar("Registration is now closed!", AppColors.primary);
+      _fetchData();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar("Failed to close registration: $e", AppColors.error);
+    }
+  }
+
+  Future<void> _sendJoinRequest(String teamId) async {
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.sendTournamentRequest(widget.tournamentId, teamId);
+      _showSnackBar("Join request sent successfully!", AppColors.primary);
+      _fetchData();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      String errMsg = e.toString();
+      if (e is DioException && e.response?.data?['detail'] != null) {
+        errMsg = e.response!.data['detail'].toString();
+      }
+      _showSnackBar("Failed to send request: $errMsg", AppColors.error);
+    }
+  }
+
+  Future<void> _cancelRequest(String requestId) async {
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.cancelTournamentRequest(widget.tournamentId, requestId);
+      _showSnackBar("Request withdrawn successfully!", AppColors.primary);
+      _fetchData();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar("Failed to withdraw request: $e", AppColors.error);
+    }
+  }
+
+  Future<void> _approveRequest(String requestId) async {
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.approveTournamentRequest(widget.tournamentId, requestId);
+      _showSnackBar("Team registration approved!", AppColors.primary);
+      _fetchData();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      String errMsg = e.toString();
+      if (e is DioException && e.response?.data?['detail'] != null) {
+        errMsg = e.response!.data['detail'].toString();
+      }
+      _showSnackBar("Failed to approve: $errMsg", AppColors.error);
+    }
+  }
+
+  Future<void> _rejectRequest(String requestId) async {
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.rejectTournamentRequest(widget.tournamentId, requestId);
+      _showSnackBar("Team registration rejected", AppColors.secondary);
+      _fetchData();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar("Failed to reject request: $e", AppColors.error);
+    }
+  }
+
+  void _showSnackBar(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating),
+    );
   }
 
   Future<void> _showGenerateFixturesDialog() async {
@@ -1211,80 +1377,355 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
   Widget _buildTeamsTab(String status, Map<String, dynamic> summary) {
     final pointsTable = _dashboardData['points_table'] as List<dynamic>? ?? [];
     final limit = summary['num_teams'] ?? 4;
-    final isReg = status.toLowerCase() == 'registration';
+    final isRegOpen = status.toLowerCase() == 'registration_open' || status.toLowerCase() == 'registration';
+    final organizerId = summary['organizer_id']?.toString();
+    final isOrganizer = _currentUser != null && _currentUser!['id'].toString() == organizerId;
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "Registered Teams (${pointsTable.length} / $limit)",
-                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              if (isReg)
-                ElevatedButton.icon(
-                  onPressed: _showAddTeamDialog,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text("Register"),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+    // Check if current user has any captain roles
+    final captainMemberships = _myTeams.where((m) => m['role'].toString().toLowerCase() == 'captain').toList();
+    final isCaptain = captainMemberships.isNotEmpty;
+
+    return RefreshIndicator(
+      onRefresh: _fetchData,
+      color: AppColors.primary,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. Registered Teams List
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Registered Teams (${pointsTable.length} / $limit)",
+                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (pointsTable.isEmpty)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    "No teams registered yet.",
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(color: AppColors.textSecondary),
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: pointsTable.isEmpty
-                ? Center(
-                    child: Text(
-                      "No teams registered yet.",
-                      style: GoogleFonts.outfit(color: AppColors.textSecondary),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: pointsTable.length,
+                itemBuilder: (context, index) {
+                  final team = pointsTable[index];
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ListTile(
+                      leading: _buildTeamLogo(team['logo_url'], team['team_name'] ?? 'Team'),
+                      title: Text(
+                        team['team_name'] ?? '',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      trailing: (isOrganizer && isRegOpen)
+                          ? IconButton(
+                              icon: const Icon(Icons.remove_circle_outline, color: AppColors.error),
+                              onPressed: () => _deregisterTeam(team['team_id']),
+                            )
+                          : const Icon(Icons.check_circle_outline, color: AppColors.primary),
                     ),
-                  )
-                : ListView.builder(
-                    itemCount: pointsTable.length,
-                    itemBuilder: (context, index) {
-                      final team = pointsTable[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: ListTile(
-                          leading: _buildTeamLogo(team['logo_url'], team['team_name'] ?? 'Team'),
-                          title: Text(
-                            team['team_name'] ?? '',
-                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                          ),
-                          trailing: isReg
-                              ? IconButton(
-                                  icon: const Icon(Icons.remove_circle_outline, color: AppColors.error),
-                                  onPressed: () => _deregisterTeam(team['team_id']),
-                                )
-                              : const Icon(Icons.check_circle_outline, color: AppColors.primary),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          if (isReg && pointsTable.length >= limit) ...[
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _showGenerateFixturesDialog,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                  );
+                },
               ),
-              child: Text(
-                "Lock Teams & Generate Fixtures",
-                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
+
+            const SizedBox(height: 24),
+
+            // 2. Organizer pending requests view
+            if (isOrganizer) ...[
+              Text(
+                "Pending Registration Requests",
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
               ),
+              const SizedBox(height: 12),
+              _buildOrganizerRequestsList(),
+            ],
+
+            // 3. Captain join request view
+            if (!isOrganizer && isCaptain && isRegOpen) ...[
+              Text(
+                "Register Your Team",
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 12),
+              _buildCaptainRegistrationPanel(captainMemberships),
+            ],
+
+            // 4. Player view-only status
+            if (!isOrganizer && !isCaptain) ...[
+              Text(
+                "Your Teams Registration Status",
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 12),
+              _buildPlayerStatusPanel(),
+            ],
+            
+            const SizedBox(height: 24),
+            
+            // 5. Activity Log Section
+            Text(
+              "Tournament Activities",
+              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
             ),
+            const SizedBox(height: 12),
+            _buildActivitiesList(),
+
+            if (isOrganizer && isRegOpen && pointsTable.length >= limit) ...[
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _showGenerateFixturesDialog,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: Text(
+                  "Lock Teams & Generate Fixtures",
+                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildOrganizerRequestsList() {
+    final pending = _requests.where((r) => r['status'].toString().toLowerCase() == 'pending').toList();
+    if (pending.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            "No pending registration requests.",
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(color: AppColors.textSecondary),
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: pending.length,
+      itemBuilder: (context, index) {
+        final req = pending[index];
+        final team = req['team'] ?? {};
+        final teamName = team['name'] ?? 'Unnamed Team';
+        return Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          child: ListTile(
+            leading: _buildTeamLogo(team['logo_url'], teamName),
+            title: Text(
+              teamName,
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.check_circle_outline, color: AppColors.primary),
+                  onPressed: () => _approveRequest(req['id'].toString()),
+                  tooltip: "Approve",
+                ),
+                IconButton(
+                  icon: const Icon(Icons.cancel_outlined, color: AppColors.error),
+                  onPressed: () => _rejectRequest(req['id'].toString()),
+                  tooltip: "Reject",
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCaptainRegistrationPanel(List<dynamic> captainMemberships) {
+    List<Widget> list = [];
+    final registeredIds = (_dashboardData['points_table'] as List<dynamic>? ?? []).map((t) => t['team_id'].toString()).toSet();
+    
+    for (final m in captainMemberships) {
+      final team = m['team'] ?? {};
+      final teamId = team['id']?.toString();
+      final teamName = team['name'] ?? 'Unnamed Team';
+
+      if (registeredIds.contains(teamId)) {
+        list.add(
+          ListTile(
+            leading: _buildTeamLogo(team['logo_url'], teamName),
+            title: Text(teamName, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
+            subtitle: Text("Status: REGISTERED", style: GoogleFonts.outfit(color: AppColors.primary, fontSize: 12)),
+          ),
+        );
+        continue;
+      }
+
+      final teamReq = _requests.firstWhere(
+        (r) => r['team_id'].toString() == teamId && r['status'].toString().toLowerCase() != 'withdrawn',
+        orElse: () => null,
+      );
+
+      if (teamReq != null) {
+        final reqStatus = teamReq['status'].toString().toUpperCase();
+        final reqId = teamReq['id'].toString();
+        list.add(
+          ListTile(
+            leading: _buildTeamLogo(team['logo_url'], teamName),
+            title: Text(teamName, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
+            subtitle: Text("Status: $reqStatus", style: GoogleFonts.outfit(color: reqStatus == 'PENDING' ? Colors.orange : Colors.red, fontSize: 12)),
+            trailing: reqStatus == 'PENDING'
+                ? TextButton(
+                    onPressed: () => _cancelRequest(reqId),
+                    child: Text("Withdraw", style: GoogleFonts.outfit(color: AppColors.error)),
+                  )
+                : (reqStatus == 'REJECTED'
+                    ? ElevatedButton(
+                        onPressed: () => _sendJoinRequest(teamId!),
+                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(horizontal: 10)),
+                        child: Text("Re-apply", style: GoogleFonts.outfit(fontSize: 11, color: Colors.black)),
+                      )
+                    : null),
+          ),
+        );
+      } else {
+        list.add(
+          ListTile(
+            leading: _buildTeamLogo(team['logo_url'], teamName),
+            title: Text(teamName, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
+            subtitle: Text("Not registered", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12)),
+            trailing: ElevatedButton(
+              onPressed: () => _sendJoinRequest(teamId!),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+              child: Text("Join Request", style: GoogleFonts.outfit(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold)),
+            ),
+          ),
+        );
+      }
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          children: list,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlayerStatusPanel() {
+    if (_myTeams.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            "You are not a member of any team.",
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(color: AppColors.textSecondary),
+          ),
+        ),
+      );
+    }
+
+    final registeredIds = (_dashboardData['points_table'] as List<dynamic>? ?? []).map((t) => t['team_id'].toString()).toSet();
+    List<Widget> list = [];
+
+    for (final m in _myTeams) {
+      final team = m['team'] ?? {};
+      final teamId = team['id']?.toString();
+      final teamName = team['name'] ?? 'Unnamed Team';
+
+      if (registeredIds.contains(teamId)) {
+        list.add(
+          ListTile(
+            leading: _buildTeamLogo(team['logo_url'], teamName),
+            title: Text(teamName, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
+            subtitle: Text("Status: REGISTERED", style: GoogleFonts.outfit(color: AppColors.primary, fontSize: 12)),
+          ),
+        );
+        continue;
+      }
+
+      final teamReq = _requests.firstWhere(
+        (r) => r['team_id'].toString() == teamId && r['status'].toString().toLowerCase() != 'withdrawn',
+        orElse: () => null,
+      );
+
+      final statusStr = teamReq != null ? teamReq['status'].toString().toUpperCase() : "NOT JOINED";
+      list.add(
+        ListTile(
+          leading: _buildTeamLogo(team['logo_url'], teamName),
+          title: Text(teamName, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
+          subtitle: Text("Status: $statusStr", style: GoogleFonts.outfit(color: statusStr == 'PENDING' ? Colors.orange : (statusStr == 'REJECTED' ? Colors.red : AppColors.textSecondary), fontSize: 12)),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          children: list,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActivitiesList() {
+    if (_activities.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            "No activities logged yet.",
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(color: AppColors.textSecondary),
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _activities.length > 5 ? 5 : _activities.length,
+      itemBuilder: (context, index) {
+        final act = _activities[index];
+        final formattedTime = act['created_at'] != null 
+            ? act['created_at'].toString().split('T')[0] 
+            : '';
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          color: Colors.white.withOpacity(0.02),
+          child: ListTile(
+            dense: true,
+            leading: const Icon(Icons.history, color: AppColors.accent, size: 18),
+            title: Text(
+              act['details'] ?? act['action'] ?? '',
+              style: GoogleFonts.outfit(color: Colors.white, fontSize: 13),
+            ),
+            trailing: Text(
+              formattedTime,
+              style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11),
+            ),
+          ),
+        );
+      },
     );
   }
 

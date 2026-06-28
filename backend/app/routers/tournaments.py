@@ -15,10 +15,14 @@ from app.core.storage import upload_image, delete_image
 from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User
-from app.models.cricket import Tournament, Team, TournamentTeam, Match, Innings, TeamPlayer, Player, Ball, MatchSquad
+from app.models.cricket import (
+    Tournament, Team, TournamentTeam, Match, Innings, TeamPlayer, Player, Ball, MatchSquad,
+    TournamentRequest, TournamentActivity, TeamMember
+)
 from app.schemas.tournament import (
     TournamentCreate, TournamentResponse, PointsTableEntry, 
-    LeaderboardResponse, PlayerLeaderboardEntry, TournamentUpdate
+    LeaderboardResponse, PlayerLeaderboardEntry, TournamentUpdate,
+    TournamentRequestResponse, TournamentActivityResponse
 )
 
 router = APIRouter()
@@ -143,7 +147,7 @@ def create_tournament(
         end_date=tour_in.end_date,
         format=tour_in.format,
         num_teams=tour_in.num_teams,
-        status="registration",
+        status="draft",
         banner_url=tour_in.banner_url,
         organizer_id=current_user.id,
         created_at=datetime.now(timezone.utc)
@@ -151,11 +155,34 @@ def create_tournament(
     db.add(db_tour)
     db.commit()
     db.refresh(db_tour)
+    
+    # Log activity
+    db_act = TournamentActivity(
+        tournament_id=db_tour.id,
+        user_id=current_user.id,
+        action="created",
+        details="Tournament created as draft"
+    )
+    db.add(db_act)
+    db.commit()
     return db_tour
 
 @router.get("/", response_model=List[TournamentResponse])
 def list_tournaments(db: Session = Depends(get_db)):
     return db.query(Tournament).all()
+
+@router.get("/explore", response_model=List[TournamentResponse])
+def explore_tournaments(
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    query = db.query(Tournament).filter(
+        Tournament.status.in_(["published", "registration_open", "registration"])
+    )
+    if search:
+        query = query.filter(Tournament.name.ilike(f"%{search}%"))
+    return query.all()
 
 @router.get("/{id}", response_model=TournamentResponse)
 def get_tournament(id: UUID, db: Session = Depends(get_db)):
@@ -178,7 +205,7 @@ def register_team_to_tournament(
     if tour.organizer_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the organizer can add teams")
 
-    if tour.status != "registration":
+    if tour.status not in ["registration", "registration_open", "draft", "published"]:
         raise HTTPException(status_code=400, detail="Cannot add teams after tournament has started")
         
     # Check if team limits reached
@@ -222,7 +249,7 @@ def remove_team_from_tournament(
     if tour.organizer_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the organizer can modify teams")
 
-    if tour.status != "registration":
+    if tour.status not in ["registration", "registration_open", "draft", "published"]:
         raise HTTPException(status_code=400, detail="Cannot modify teams after tournament has started")
 
     exists = db.query(TournamentTeam).filter(
@@ -730,4 +757,301 @@ def delete_tournament(
     db.delete(tour)
     db.commit()
     return None
+
+@router.post("/{id}/publish", response_model=TournamentResponse)
+def publish_tournament(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tour = db.query(Tournament).filter(Tournament.id == id).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    if tour.organizer_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to publish this tournament")
+    
+    tour.status = "published"
+    db.add(tour)
+    
+    # Log activity
+    db_act = TournamentActivity(
+        tournament_id=id,
+        user_id=current_user.id,
+        action="published",
+        details="Tournament published successfully"
+    )
+    db.add(db_act)
+    db.commit()
+    db.refresh(tour)
+    return tour
+
+@router.post("/{id}/open-registration", response_model=TournamentResponse)
+def open_registration(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tour = db.query(Tournament).filter(Tournament.id == id).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    if tour.organizer_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to manage this tournament")
+    
+    tour.status = "registration_open"
+    db.add(tour)
+    
+    # Log activity
+    db_act = TournamentActivity(
+        tournament_id=id,
+        user_id=current_user.id,
+        action="registration_open",
+        details="Registration is now open"
+    )
+    db.add(db_act)
+    db.commit()
+    db.refresh(tour)
+    return tour
+
+@router.post("/{id}/close-registration", response_model=TournamentResponse)
+def close_registration(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tour = db.query(Tournament).filter(Tournament.id == id).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    if tour.organizer_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to manage this tournament")
+    
+    tour.status = "registration_closed"
+    db.add(tour)
+    
+    # Log activity
+    db_act = TournamentActivity(
+        tournament_id=id,
+        user_id=current_user.id,
+        action="registration_closed",
+        details="Registration is now closed"
+    )
+    db.add(db_act)
+    db.commit()
+    db.refresh(tour)
+    return tour
+
+@router.post("/{id}/requests", response_model=TournamentRequestResponse)
+def join_request(
+    id: UUID,
+    team_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tour = db.query(Tournament).filter(Tournament.id == id).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+        
+    if tour.status not in ["registration_open", "registration"]:
+        raise HTTPException(status_code=400, detail="Tournament registration is not open")
+        
+    # Check that current user is the captain of the team
+    membership = db.query(TeamMember).filter(
+        TeamMember.team_id == team_id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.status == "active"
+    ).first()
+    if not membership or membership.role.lower() != "captain":
+        raise HTTPException(status_code=403, detail="Only the team captain can request to join a tournament")
+        
+    # Team must have at least 5 players (roster check)
+    player_count = db.query(TeamMember).filter(
+        TeamMember.team_id == team_id,
+        TeamMember.status == "active"
+    ).count()
+    if player_count < 5:
+        # Check team_players table in case players are stored as Player objects instead of TeamMember
+        tp_count = db.query(TeamPlayer).filter(TeamPlayer.team_id == team_id).count()
+        if max(player_count, tp_count) < 5:
+            raise HTTPException(status_code=400, detail="Team must have at least 5 registered players for tournament registration")
+            
+    # Check if team limits reached
+    registered_count = db.query(TournamentTeam).filter(TournamentTeam.tournament_id == id).count()
+    if registered_count >= tour.num_teams:
+        raise HTTPException(status_code=400, detail="Tournament team limit has been reached")
+
+    # Check if already has a pending or approved request
+    existing_req = db.query(TournamentRequest).filter(
+        TournamentRequest.tournament_id == id,
+        TournamentRequest.team_id == team_id,
+        TournamentRequest.status.in_(["pending", "approved"])
+    ).first()
+    if existing_req:
+        raise HTTPException(status_code=400, detail="A request for this team is already pending or approved")
+
+    db_req = TournamentRequest(
+        tournament_id=id,
+        team_id=team_id,
+        status="pending"
+    )
+    db.add(db_req)
+    
+    # Log activity
+    db_act = TournamentActivity(
+        tournament_id=id,
+        user_id=current_user.id,
+        action="join_requested",
+        details=f"Team {membership.team.name if membership.team else team_id} requested to join"
+    )
+    db.add(db_act)
+    db.commit()
+    db.refresh(db_req)
+    return db_req
+
+@router.delete("/{id}/requests/{request_id}", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_request(
+    id: UUID,
+    request_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    req = db.query(TournamentRequest).filter(TournamentRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+        
+    # Check that current user is the captain of the team
+    membership = db.query(TeamMember).filter(
+        TeamMember.team_id == req.team_id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.status == "active"
+    ).first()
+    if not membership or membership.role.lower() != "captain":
+        raise HTTPException(status_code=403, detail="Only the team captain can cancel requests")
+        
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail="Can only cancel pending requests")
+        
+    req.status = "withdrawn"
+    db.add(req)
+    
+    # Log activity
+    db_act = TournamentActivity(
+        tournament_id=id,
+        user_id=current_user.id,
+        action="withdrawn",
+        details="Team withdrawn registration request"
+    )
+    db.add(db_act)
+    db.commit()
+    return None
+
+@router.get("/{id}/requests", response_model=List[TournamentRequestResponse])
+def list_tournament_requests(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tour = db.query(Tournament).filter(Tournament.id == id).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+        
+    if tour.organizer_id == current_user.id or current_user.role == "admin":
+        return db.query(TournamentRequest).filter(TournamentRequest.tournament_id == id).all()
+        
+    captain_teams = db.query(TeamMember.team_id).filter(
+        TeamMember.user_id == current_user.id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).subquery()
+    
+    return db.query(TournamentRequest).filter(
+        TournamentRequest.tournament_id == id,
+        TournamentRequest.team_id.in_(captain_teams)
+    ).all()
+
+@router.post("/{id}/requests/{request_id}/approve", response_model=TournamentRequestResponse)
+def approve_request(
+    id: UUID,
+    request_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tour = db.query(Tournament).filter(Tournament.id == id).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+        
+    if tour.organizer_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only the organizer can approve requests")
+        
+    req = db.query(TournamentRequest).filter(TournamentRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+        
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail="Request is already processed")
+        
+    # Check if team limits reached
+    registered_count = db.query(TournamentTeam).filter(TournamentTeam.tournament_id == id).count()
+    if registered_count >= tour.num_teams:
+        raise HTTPException(status_code=400, detail="Tournament team limit has been reached")
+        
+    req.status = "approved"
+    db.add(req)
+    
+    assoc = TournamentTeam(tournament_id=id, team_id=req.team_id)
+    db.add(assoc)
+    
+    # Log activity
+    db_act = TournamentActivity(
+        tournament_id=id,
+        user_id=current_user.id,
+        action="approved",
+        details="Team registration approved"
+    )
+    db.add(db_act)
+    db.commit()
+    db.refresh(req)
+    return req
+
+@router.post("/{id}/requests/{request_id}/reject", response_model=TournamentRequestResponse)
+def reject_request(
+    id: UUID,
+    request_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tour = db.query(Tournament).filter(Tournament.id == id).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+        
+    if tour.organizer_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only the organizer can reject requests")
+        
+    req = db.query(TournamentRequest).filter(TournamentRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+        
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail="Request is already processed")
+        
+    req.status = "rejected"
+    db.add(req)
+    
+    # Log activity
+    db_act = TournamentActivity(
+        tournament_id=id,
+        user_id=current_user.id,
+        action="rejected",
+        details="Team registration rejected"
+    )
+    db.add(db_act)
+    db.commit()
+    db.refresh(req)
+    return req
+
+@router.get("/{id}/activities", response_model=List[TournamentActivityResponse])
+def list_tournament_activities(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return db.query(TournamentActivity).filter(TournamentActivity.tournament_id == id).order_by(TournamentActivity.created_at.desc()).all()
 

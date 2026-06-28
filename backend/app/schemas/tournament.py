@@ -60,3 +60,31 @@ class TournamentUpdate(BaseModel):
     status: Optional[str] = None
     winner_id: Optional[UUID] = None
 
+class TeamShortResponse(BaseModel):
+    id: UUID
+    name: str
+    logo_url: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class TournamentRequestResponse(BaseModel):
+    id: UUID
+    tournament_id: UUID
+    team_id: UUID
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    team: Optional[TeamShortResponse] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class TournamentActivityResponse(BaseModel):
+    id: UUID
+    tournament_id: UUID
+    user_id: UUID
+    action: str
+    details: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+

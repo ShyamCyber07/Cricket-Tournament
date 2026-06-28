@@ -282,3 +282,31 @@ class TeamActivity(Base):
     # Relationships
     team = relationship("Team")
     user = relationship("User")
+
+class TournamentRequest(Base):
+    __tablename__ = "tournament_requests"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tournament_id = Column(UUID(as_uuid=True), ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False)
+    team_id = Column(UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String, default="pending", nullable=False)  # pending, approved, rejected, withdrawn
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    tournament = relationship("Tournament", foreign_keys=[tournament_id])
+    team = relationship("Team", foreign_keys=[team_id])
+
+class TournamentActivity(Base):
+    __tablename__ = "tournament_activities"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tournament_id = Column(UUID(as_uuid=True), ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    action = Column(String, nullable=False)  # e.g., "created", "published", "join_requested", "approved", "rejected", "withdrawn"
+    details = Column(String, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    tournament = relationship("Tournament", foreign_keys=[tournament_id])
+    user = relationship("User", foreign_keys=[user_id])
