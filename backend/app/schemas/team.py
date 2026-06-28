@@ -50,8 +50,28 @@ class TeamMemberResponse(BaseModel):
     role: str
     status: str
     joined_at: datetime
+    is_playing_xi: bool = True
+    is_wicketkeeper: bool = False
+    jersey_number: Optional[int] = None
+    batting_order: Optional[int] = None
+    bowling_order: Optional[int] = None
+    is_available: bool = True
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SquadMemberConfig(BaseModel):
+    user_id: UUID
+    is_playing_xi: bool
+    is_wicketkeeper: bool
+    jersey_number: Optional[int] = None
+    batting_order: Optional[int] = None
+    bowling_order: Optional[int] = None
+    is_available: bool
+
+
+class UpdateSquadConfigRequest(BaseModel):
+    members: List[SquadMemberConfig]
 
 class MyTeamsResponse(BaseModel):
     team: TeamResponse

@@ -36,7 +36,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadDetails();
   }
 
@@ -382,7 +382,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        if (_isCaptain && pendingList.isNotEmpty) ...[
+        if ((_isCaptain || _isVC) && pendingList.isNotEmpty) ...[
           Text(
             "Pending Join Requests (${pendingList.length})",
             style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary),
@@ -427,7 +427,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
           const SizedBox(height: 24),
         ],
 
-        if (_isCaptain && invitedList.isNotEmpty) ...[
+        if ((_isCaptain || _isVC) && invitedList.isNotEmpty) ...[
           Text(
             "Sent Invitations (${invitedList.length})",
             style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.secondary),
@@ -463,7 +463,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
               "Active Members (${activeList.length})",
               style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
             ),
-            if (_isCaptain)
+            if (_isCaptain || _isVC)
               TextButton.icon(
                 icon: const Icon(Icons.person_add_alt_1, size: 16),
                 label: const Text("Add Member"),
@@ -539,67 +539,71 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                   ],
                 ),
                 subtitle: Text(m['user_email'] ?? '', style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11)),
-                trailing: (_isCaptain && !isCap)
-                    ? PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert, color: Colors.white70, size: 20),
-                        color: AppColors.surface,
-                        onSelected: (val) {
-                          if (val == 'promote_vc') {
-                            _updateRole(m['user_id'].toString(), 'vice_captain');
-                          } else if (val == 'demote_vc') {
-                            _updateRole(m['user_id'].toString(), 'player');
-                          } else if (val == 'make_captain') {
-                            _showMakeCaptainDialog(m['user_id'].toString(), m['user_full_name'] ?? 'User');
-                          } else if (val == 'remove') {
-                            _showRemoveMemberDialog(m['user_id'].toString(), m['user_full_name'] ?? 'User');
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          if (!isVC)
-                            PopupMenuItem(
-                              value: 'promote_vc',
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.arrow_upward_rounded, color: AppColors.primary, size: 18),
-                                  const SizedBox(width: 8),
-                                  Text("Assign Vice Captain", style: GoogleFonts.outfit(color: Colors.white)),
-                                ],
-                              ),
-                            )
-                          else
-                            PopupMenuItem(
-                              value: 'demote_vc',
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.arrow_downward_rounded, color: Colors.white70, size: 18),
-                                  const SizedBox(width: 8),
-                                  Text("Remove Vice Captain", style: GoogleFonts.outfit(color: Colors.white)),
-                                ],
-                              ),
-                            ),
+                trailing: (() {
+                  final bool canManageThisMember = (_isCaptain && !isCap) || (_isVC && !isCap && !isVC);
+                  if (!canManageThisMember) return null;
+                  return PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, color: Colors.white70, size: 20),
+                    color: AppColors.surface,
+                    onSelected: (val) {
+                      if (val == 'promote_vc') {
+                        _updateRole(m['user_id'].toString(), 'vice_captain');
+                      } else if (val == 'demote_vc') {
+                        _updateRole(m['user_id'].toString(), 'player');
+                      } else if (val == 'make_captain') {
+                        _showMakeCaptainDialog(m['user_id'].toString(), m['user_full_name'] ?? 'User');
+                      } else if (val == 'remove') {
+                        _showRemoveMemberDialog(m['user_id'].toString(), m['user_full_name'] ?? 'User');
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      if (_isCaptain) ...[
+                        if (!isVC)
                           PopupMenuItem(
-                            value: 'make_captain',
+                            value: 'promote_vc',
                             child: Row(
                               children: [
-                                const Icon(Icons.star_rounded, color: AppColors.accent, size: 18),
+                                const Icon(Icons.arrow_upward_rounded, color: AppColors.primary, size: 18),
                                 const SizedBox(width: 8),
-                                Text("Make Captain", style: GoogleFonts.outfit(color: Colors.white)),
+                                Text("Assign Vice Captain", style: GoogleFonts.outfit(color: Colors.white)),
+                              ],
+                            ),
+                          )
+                        else
+                          PopupMenuItem(
+                            value: 'demote_vc',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.arrow_downward_rounded, color: Colors.white70, size: 18),
+                                const SizedBox(width: 8),
+                                Text("Remove Vice Captain", style: GoogleFonts.outfit(color: Colors.white)),
                               ],
                             ),
                           ),
-                          PopupMenuItem(
-                            value: 'remove',
-                            child: Row(
-                              children: [
-                                const Icon(Icons.delete_outline, color: AppColors.error, size: 18),
-                                const SizedBox(width: 8),
-                                Text("Remove Member", style: GoogleFonts.outfit(color: AppColors.error)),
-                              ],
-                            ),
+                        PopupMenuItem(
+                          value: 'make_captain',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.star_rounded, color: AppColors.accent, size: 18),
+                              const SizedBox(width: 8),
+                              Text("Make Captain", style: GoogleFonts.outfit(color: Colors.white)),
+                            ],
                           ),
-                        ],
-                      )
-                    : null,
+                        ),
+                      ],
+                      PopupMenuItem(
+                        value: 'remove',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.delete_outline, color: AppColors.error, size: 18),
+                            const SizedBox(width: 8),
+                            Text("Remove Member", style: GoogleFonts.outfit(color: AppColors.error)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                })(),
               ),
             );
           }),
@@ -666,6 +670,301 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
           ),
         );
       },
+    );
+  }
+
+  void _showSquadConfigDialog(dynamic member) {
+    bool isPlayingXI = member['is_playing_xi'] ?? true;
+    bool isWicketkeeper = member['is_wicketkeeper'] ?? false;
+    bool isAvailable = member['is_available'] ?? true;
+    
+    final jerseyController = TextEditingController(text: member['jersey_number']?.toString() ?? '');
+    final battingController = TextEditingController(text: member['batting_order']?.toString() ?? '');
+    final bowlingController = TextEditingController(text: member['bowling_order']?.toString() ?? '');
+    
+    final configFormKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              title: Text("Configure Squad - ${member['user_full_name']}", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              content: Form(
+                key: configFormKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SwitchListTile(
+                        title: const Text("Playing XI", style: TextStyle(color: Colors.white)),
+                        subtitle: const Text("Include in starting XI", style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                        value: isPlayingXI,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) => setState(() => isPlayingXI = val),
+                      ),
+                      SwitchListTile(
+                        title: const Text("Wicket Keeper", style: TextStyle(color: Colors.white)),
+                        subtitle: const Text("Mark as Wicket Keeper", style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                        value: isWicketkeeper,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) => setState(() => isWicketkeeper = val),
+                      ),
+                      SwitchListTile(
+                        title: const Text("Available", style: TextStyle(color: Colors.white)),
+                        subtitle: const Text("Player availability status", style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                        value: isAvailable,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) => setState(() => isAvailable = val),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: jerseyController,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: "Jersey Number",
+                          prefixIcon: Icon(Icons.numbers, color: AppColors.primary),
+                        ),
+                        validator: (val) {
+                          if (val != null && val.trim().isNotEmpty) {
+                            final n = int.tryParse(val.trim());
+                            if (n == null || n < 0 || n > 999) {
+                              return "Enter number 0-999";
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: battingController,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: "Batting Position (e.g. 1, 2...)",
+                          prefixIcon: Icon(Icons.sports_cricket, color: AppColors.primary),
+                        ),
+                        validator: (val) {
+                          if (val != null && val.trim().isNotEmpty) {
+                            final n = int.tryParse(val.trim());
+                            if (n == null || n <= 0) {
+                              return "Enter positive integer";
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: bowlingController,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: "Bowling Position (e.g. 1, 2...)",
+                          prefixIcon: Icon(Icons.sports_baseball, color: AppColors.primary),
+                        ),
+                        validator: (val) {
+                          if (val != null && val.trim().isNotEmpty) {
+                            final n = int.tryParse(val.trim());
+                            if (n == null || n <= 0) {
+                              return "Enter positive integer";
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.black),
+                  onPressed: () async {
+                    if (!configFormKey.currentState!.validate()) return;
+                    
+                    final jerseyVal = jerseyController.text.trim();
+                    final battingVal = battingController.text.trim();
+                    final bowlingVal = bowlingController.text.trim();
+                    
+                    final payload = {
+                      "user_id": member['user_id'].toString(),
+                      "is_playing_xi": isPlayingXI,
+                      "is_wicketkeeper": isWicketkeeper,
+                      "jersey_number": jerseyVal.isNotEmpty ? int.parse(jerseyVal) : null,
+                      "batting_order": battingVal.isNotEmpty ? int.parse(battingVal) : null,
+                      "bowling_order": bowlingVal.isNotEmpty ? int.parse(bowlingVal) : null,
+                      "is_available": isAvailable,
+                    };
+                    
+                    Navigator.pop(context);
+                    this.setState(() => _isLoading = true);
+                    try {
+                      await _apiService.updateSquadConfig(widget.teamId, [payload]);
+                      _showSnackBar("Squad config updated successfully!", AppColors.primary);
+                      _loadDetails();
+                    } catch (e) {
+                      this.setState(() => _isLoading = false);
+                      _showSnackBar("Failed to update squad: $e", AppColors.error);
+                    }
+                  },
+                  child: Text("Save", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSquadTab() {
+    final List<dynamic> playingXI = [];
+    final List<dynamic> bench = [];
+    
+    for (final m in _members) {
+      if (m['status']?.toString().toLowerCase() != 'active') continue;
+      if (m['is_playing_xi'] == true) {
+        playingXI.add(m);
+      } else {
+        bench.add(m);
+      }
+    }
+    
+    // Sort Playing XI: batting_order asc (nulls last)
+    playingXI.sort((a, b) {
+      final boA = a['batting_order'];
+      final boB = b['batting_order'];
+      if (boA == null && boB == null) {
+        return (a['user_full_name'] ?? '').toString().compareTo((b['user_full_name'] ?? '').toString());
+      }
+      if (boA == null) return 1;
+      if (boB == null) return -1;
+      return boA.compareTo(boB);
+    });
+    
+    // Sort Bench: name asc
+    bench.sort((a, b) => (a['user_full_name'] ?? '').toString().compareTo((b['user_full_name'] ?? '').toString()));
+    
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              "Playing XI (${playingXI.length})",
+              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primary),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (playingXI.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12.0),
+            child: Text("No players in Playing XI.", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13)),
+          )
+        else
+          ...playingXI.map((m) => _buildSquadMemberCard(m)),
+          
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              "Bench Players (${bench.length})",
+              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.secondary),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (bench.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12.0),
+            child: Text("No players on Bench.", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13)),
+          )
+        else
+          ...bench.map((m) => _buildSquadMemberCard(m)),
+      ],
+    );
+  }
+
+  Widget _buildSquadMemberCard(dynamic m) {
+    final jersey = m['jersey_number'] != null ? "#${m['jersey_number']}" : "No Jersey";
+    final isWK = m['is_wicketkeeper'] == true;
+    final isAvail = m['is_available'] ?? true;
+    final bo = m['batting_order'];
+    final bwo = m['bowling_order'];
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: isWK ? AppColors.accent.withOpacity(0.15) : Colors.white.withOpacity(0.05),
+          child: Text(
+            (m['user_full_name']?[0] ?? '?').toString().toUpperCase(),
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: isWK ? AppColors.accent : Colors.white70),
+          ),
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                m['user_full_name'] ?? 'Unknown User',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+              ),
+            ),
+            if (isWK) ...[
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(color: AppColors.accent.withOpacity(0.15), borderRadius: BorderRadius.circular(4)),
+                child: Text("WK", style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.bold, color: AppColors.accent)),
+              ),
+            ],
+            if (!isAvail) ...[
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(color: AppColors.error.withOpacity(0.15), borderRadius: BorderRadius.circular(4)),
+                child: Text("UNAVAILABLE", style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.bold, color: AppColors.error)),
+              ),
+            ],
+          ],
+        ),
+        subtitle: Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            Text("Jersey: $jersey", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11)),
+            if (bo != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(3)),
+                child: Text("Bat Pos: #$bo", style: GoogleFonts.outfit(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.bold)),
+              ),
+            if (bwo != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(color: AppColors.secondary.withOpacity(0.1), borderRadius: BorderRadius.circular(3)),
+                child: Text("Bowl Pos: #$bwo", style: GoogleFonts.outfit(color: AppColors.secondary, fontSize: 9, fontWeight: FontWeight.bold)),
+              ),
+          ],
+        ),
+        trailing: _isCaptain
+            ? IconButton(
+                icon: const Icon(Icons.edit_outlined, color: AppColors.primary, size: 20),
+                onPressed: () => _showSquadConfigDialog(m),
+              )
+            : null,
+      ),
     );
   }
 
@@ -749,6 +1048,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
           unselectedLabelColor: AppColors.textSecondary,
           tabs: const [
             Tab(text: "Members"),
+            Tab(text: "Squad"),
             Tab(text: "Matches"),
           ],
         ),
@@ -759,6 +1059,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
               controller: _tabController,
               children: [
                 _buildMembersTab(),
+                _buildSquadTab(),
                 _buildMatchesTab(),
               ],
             ),

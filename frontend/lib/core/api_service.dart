@@ -890,6 +890,15 @@ class ApiService {
     return await _dio.post('/admin/tournaments/bulk-delete', data: {'ids': ids});
   }
 
+  Future<Response> updateSquadConfig(String teamId, List<Map<String, dynamic>> members) async {
+    return await _dio.put(
+      '/teams/$teamId/squad-config',
+      data: {
+        'members': members,
+      },
+    );
+  }
+
   Future<Response> testConnection() async {
     final uri = Uri.parse(AppConfig.baseUrl);
     final hostUrl = "${uri.scheme}://${uri.host}:${uri.port}/";

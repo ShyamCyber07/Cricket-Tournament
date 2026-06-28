@@ -23,6 +23,12 @@ class TeamMember(Base):
     role = Column(String, default="player", nullable=False)  # captain/player
     joined_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     status = Column(String, default="active", nullable=False)  # active/pending
+    is_playing_xi = Column(Boolean, default=True, nullable=False)
+    is_wicketkeeper = Column(Boolean, default=False, nullable=False)
+    jersey_number = Column(Integer, nullable=True)
+    batting_order = Column(Integer, nullable=True)
+    bowling_order = Column(Integer, nullable=True)
+    is_available = Column(Boolean, default=True, nullable=False)
 
     # Relationships
     team = relationship("Team", back_populates="members")

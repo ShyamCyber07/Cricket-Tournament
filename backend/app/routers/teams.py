@@ -13,9 +13,27 @@ from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User
 from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad, TeamMember, Notification
-from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate, BulkAddPlayersRequest, TeamMemberResponse, MyTeamsResponse, AddMemberRequest, ApproveMemberRequest, UpdateMemberRoleRequest
+from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate, BulkAddPlayersRequest, TeamMemberResponse, MyTeamsResponse, AddMemberRequest, ApproveMemberRequest, UpdateMemberRoleRequest, UpdateSquadConfigRequest
 
 router = APIRouter()
+
+def make_member_response(member: TeamMember, user: User) -> TeamMemberResponse:
+    return TeamMemberResponse(
+        id=member.id,
+        team_id=member.team_id,
+        user_id=member.user_id,
+        user_email=user.email,
+        user_full_name=user.full_name or user.username or "User",
+        role=member.role,
+        status=member.status,
+        joined_at=member.joined_at,
+        is_playing_xi=member.is_playing_xi,
+        is_wicketkeeper=member.is_wicketkeeper,
+        jersey_number=member.jersey_number,
+        batting_order=member.batting_order,
+        bowling_order=member.bowling_order,
+        is_available=member.is_available
+    )
 
 @router.post("/", response_model=TeamResponse, status_code=status.HTTP_201_CREATED)
 def create_team(
@@ -145,16 +163,7 @@ def accept_invitation(
         
     db.commit()
     db.refresh(member)
-    return TeamMemberResponse(
-        id=member.id,
-        team_id=member.team_id,
-        user_id=member.user_id,
-        user_email=current_user.email,
-        user_full_name=current_user.full_name or current_user.username or "User",
-        role=member.role,
-        status=member.status,
-        joined_at=member.joined_at
-    )
+    return make_member_response(member, current_user)
 
 @router.post("/{id}/invitations/reject", status_code=status.HTTP_204_NO_CONTENT)
 def reject_invitation(
@@ -633,16 +642,7 @@ def get_team_members(
 
     res = []
     for member, user in members:
-        res.append(TeamMemberResponse(
-            id=member.id,
-            team_id=member.team_id,
-            user_id=member.user_id,
-            user_email=user.email,
-            user_full_name=user.full_name or user.username or "User",
-            role=member.role,
-            status=member.status,
-            joined_at=member.joined_at
-        ))
+        res.append(make_member_response(member, user))
     return res
 
 
@@ -656,17 +656,22 @@ def add_member_to_team(
     team = db.query(Team).filter(Team.id == id).first()
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
-        
-    # Captain permissions: "Add member"
-    is_captain = db.query(TeamMember).filter(
+
+    # Captain and Vice Captain permissions: "Add member / Invite Player"
+    caller_member = db.query(TeamMember).filter(
         TeamMember.team_id == id,
         TeamMember.user_id == current_user.id,
-        TeamMember.role == "captain",
         TeamMember.status == "active"
     ).first()
-    
-    if not is_captain and team.created_by != current_user.id and current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only the captain can add members")
+
+    is_authorized = (
+        current_user.role == "admin" or
+        team.created_by == current_user.id or
+        (caller_member and caller_member.role in ["captain", "vice_captain"])
+    )
+
+    if not is_authorized:
+        raise HTTPException(status_code=403, detail="Only the captain or vice captain can add members")
 
     # Find user by email
     user_to_add = db.query(User).filter(User.email == req.email).first()
@@ -678,7 +683,7 @@ def add_member_to_team(
         TeamMember.team_id == id,
         TeamMember.user_id == user_to_add.id
     ).first()
-    
+
     if existing:
         raise HTTPException(status_code=400, detail="User is already a member or request is pending")
 
@@ -689,7 +694,7 @@ def add_member_to_team(
         status="invited"
     )
     db.add(member)
-    
+
     # Create notification for the user
     import json
     notif = Notification(
@@ -700,20 +705,11 @@ def add_member_to_team(
         extra_data=json.dumps({"team_id": str(id)})
     )
     db.add(notif)
-    
+
     db.commit()
     db.refresh(member)
-    
-    return TeamMemberResponse(
-        id=member.id,
-        team_id=member.team_id,
-        user_id=member.user_id,
-        user_email=user_to_add.email,
-        user_full_name=user_to_add.full_name or user_to_add.username or "User",
-        role=member.role,
-        status=member.status,
-        joined_at=member.joined_at
-    )
+
+    return make_member_response(member, user_to_add)
 
 
 @router.delete("/{id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -727,25 +723,35 @@ def remove_member_from_team(
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
         
-    # Captain permissions: "Remove member"
-    is_captain = db.query(TeamMember).filter(
-        TeamMember.team_id == id,
-        TeamMember.user_id == current_user.id,
-        TeamMember.role == "captain",
-        TeamMember.status == "active"
-    ).first()
-    
-    is_self = (current_user.id == user_id)
-    if not is_captain and team.created_by != current_user.id and current_user.role != "admin" and not is_self:
-        raise HTTPException(status_code=403, detail="Only the captain can remove members")
-
     member = db.query(TeamMember).filter(
         TeamMember.team_id == id,
         TeamMember.user_id == user_id
     ).first()
-    
+
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
+
+    is_self = (current_user.id == user_id)
+    if not is_self:
+        caller_member = db.query(TeamMember).filter(
+            TeamMember.team_id == id,
+            TeamMember.user_id == current_user.id,
+            TeamMember.status == "active"
+        ).first()
+
+        is_authorized = False
+        if current_user.role == "admin" or team.created_by == current_user.id:
+            is_authorized = True
+        elif caller_member:
+            if caller_member.role == "captain":
+                is_authorized = True
+            elif caller_member.role == "vice_captain":
+                # Vice Captain can only remove if target is "player"
+                if member.role == "player":
+                    is_authorized = True
+
+        if not is_authorized:
+            raise HTTPException(status_code=403, detail="Not authorized to remove this member")
 
     # Cannot remove active captain
     if member.role == "captain":
@@ -849,16 +855,7 @@ def create_join_request(
     db.commit()
     db.refresh(member)
     
-    return TeamMemberResponse(
-        id=member.id,
-        team_id=member.team_id,
-        user_id=member.user_id,
-        user_email=current_user.email,
-        user_full_name=current_user.full_name or current_user.username or "User",
-        role=member.role,
-        status=member.status,
-        joined_at=member.joined_at
-    )
+    return make_member_response(member, current_user)
 
 
 @router.post("/{id}/approve-request", response_model=TeamMemberResponse)
@@ -871,29 +868,34 @@ def approve_join_request(
     team = db.query(Team).filter(Team.id == id).first()
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
-        
-    # Captain permissions: "Approve join requests"
-    is_captain = db.query(TeamMember).filter(
+
+    # Captain and Vice Captain permissions: "Approve join requests"
+    caller_member = db.query(TeamMember).filter(
         TeamMember.team_id == id,
         TeamMember.user_id == current_user.id,
-        TeamMember.role == "captain",
         TeamMember.status == "active"
     ).first()
-    
-    if not is_captain and team.created_by != current_user.id and current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only the captain can approve requests")
+
+    is_authorized = (
+        current_user.role == "admin" or
+        team.created_by == current_user.id or
+        (caller_member and caller_member.role in ["captain", "vice_captain"])
+    )
+
+    if not is_authorized:
+        raise HTTPException(status_code=403, detail="Only the captain or vice captain can approve requests")
 
     member = db.query(TeamMember).filter(
         TeamMember.team_id == id,
         TeamMember.user_id == req.user_id,
         TeamMember.status == "pending"
     ).first()
-    
+
     if not member:
         raise HTTPException(status_code=404, detail="Pending request not found")
 
     member.status = "active"
-    
+
     # Create notification for approved user
     import json
     notif = Notification(
@@ -904,21 +906,12 @@ def approve_join_request(
         extra_data=json.dumps({"team_id": str(id)})
     )
     db.add(notif)
-    
+
     db.commit()
     db.refresh(member)
-    
+
     user_approved = db.query(User).filter(User.id == req.user_id).first()
-    return TeamMemberResponse(
-        id=member.id,
-        team_id=member.team_id,
-        user_id=member.user_id,
-        user_email=user_approved.email,
-        user_full_name=user_approved.full_name or user_approved.username or "User",
-        role=member.role,
-        status=member.status,
-        joined_at=member.joined_at
-    )
+    return make_member_response(member, user_approved)
 
 @router.post("/{id}/reject-request", status_code=status.HTTP_204_NO_CONTENT)
 def reject_join_request(
@@ -931,16 +924,21 @@ def reject_join_request(
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
         
-    # Captain permissions: "Reject join requests"
-    is_captain = db.query(TeamMember).filter(
+    # Captain and Vice Captain permissions: "Reject join requests"
+    caller_member = db.query(TeamMember).filter(
         TeamMember.team_id == id,
         TeamMember.user_id == current_user.id,
-        TeamMember.role == "captain",
         TeamMember.status == "active"
     ).first()
-    
-    if not is_captain and team.created_by != current_user.id and current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only the captain can reject requests")
+
+    is_authorized = (
+        current_user.role == "admin" or
+        team.created_by == current_user.id or
+        (caller_member and caller_member.role in ["captain", "vice_captain"])
+    )
+
+    if not is_authorized:
+        raise HTTPException(status_code=403, detail="Only the captain or vice captain can reject requests")
 
     member = db.query(TeamMember).filter(
         TeamMember.team_id == id,
@@ -1011,16 +1009,7 @@ def update_member_role(
         raise HTTPException(status_code=400, detail="Invalid role. Must be 'captain', 'vice_captain', or 'player'")
 
     if old_role == new_role:
-        return TeamMemberResponse(
-            id=member.id,
-            team_id=member.team_id,
-            user_id=member.user_id,
-            user_email=target_user.email,
-            user_full_name=target_user.full_name or target_user.username or "User",
-            role=member.role,
-            status=member.status,
-            joined_at=member.joined_at
-        )
+        return make_member_response(member, target_user)
 
     import json
 
@@ -1143,13 +1132,69 @@ def update_member_role(
     db.commit()
     db.refresh(member)
 
-    return TeamMemberResponse(
-        id=member.id,
-        team_id=member.team_id,
-        user_id=member.user_id,
-        user_email=target_user.email,
-        user_full_name=target_user.full_name or target_user.username or "User",
-        role=member.role,
-        status=member.status,
-        joined_at=member.joined_at
-    )
+    return make_member_response(member, target_user)
+
+
+@router.put("/{id}/squad-config", response_model=List[TeamMemberResponse])
+def update_team_squad_config(
+    id: UUID,
+    req: UpdateSquadConfigRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    # Only captain, creator, or admin can update squad configuration
+    is_captain = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).first()
+
+    if not is_captain and team.created_by != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only the captain can modify squad configuration")
+
+    response_members = []
+    
+    # Process updates for each member specified in the request
+    for mem_config in req.members:
+        member = db.query(TeamMember).filter(
+            TeamMember.team_id == id,
+            TeamMember.user_id == mem_config.user_id
+        ).first()
+        
+        if not member:
+            raise HTTPException(status_code=404, detail=f"Member not found for user ID: {mem_config.user_id}")
+            
+        # Update fields
+        member.is_playing_xi = mem_config.is_playing_xi
+        member.is_wicketkeeper = mem_config.is_wicketkeeper
+        if mem_config.is_wicketkeeper:
+            db.query(TeamMember).filter(
+                TeamMember.team_id == id,
+                TeamMember.user_id != mem_config.user_id
+            ).update({TeamMember.is_wicketkeeper: False})
+        member.jersey_number = mem_config.jersey_number
+        member.batting_order = mem_config.batting_order
+        member.bowling_order = mem_config.bowling_order
+        member.is_available = mem_config.is_available
+        
+        db.add(member)
+        
+        # Sync to Player table if user is linked to a Player
+        player = db.query(Player).filter(Player.user_id == mem_config.user_id).first()
+        if player and mem_config.jersey_number is not None:
+            player.jersey_number = mem_config.jersey_number
+            db.add(player)
+            
+        # Get target user to build response
+        target_user = db.query(User).filter(User.id == mem_config.user_id).first()
+        if target_user:
+            response_members.append(make_member_response(member, target_user))
+            
+    db.commit()
+    
+    return response_members
