@@ -4,14 +4,14 @@ import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:dio/dio.dart';
 
-class PlayerManagementScreen extends StatefulWidget {
-  const PlayerManagementScreen({super.key});
+class SquadManagementScreen extends StatefulWidget {
+  const SquadManagementScreen({super.key});
 
   @override
-  State<PlayerManagementScreen> createState() => _PlayerManagementScreenState();
+  State<SquadManagementScreen> createState() => _SquadManagementScreenState();
 }
 
-class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
+class _SquadManagementScreenState extends State<SquadManagementScreen> {
   final ApiService _apiService = ApiService();
   List<dynamic> _players = [];
   bool _isLoading = true;
@@ -73,13 +73,13 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
         _selectedBowling,
         jerseyNumber: jNum,
       );
-      _showSnackBar("Player created successfully!", AppColors.primary);
+      _showSnackBar("Squad member created successfully!", AppColors.primary);
       _nameController.clear();
       _jerseyController.clear();
       _fetchPlayers();
     } catch (e) {
       setState(() => _isLoading = false);
-      _showSnackBar("Failed to create player: $e", AppColors.error);
+      _showSnackBar("Failed to create squad member: $e", AppColors.error);
     }
   }
 
@@ -101,13 +101,13 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
         _selectedBowling,
         jerseyNumber: jNum,
       );
-      _showSnackBar("Player updated successfully!", AppColors.primary);
+      _showSnackBar("Squad member updated successfully!", AppColors.primary);
       _nameController.clear();
       _jerseyController.clear();
       _fetchPlayers();
     } catch (e) {
       setState(() => _isLoading = false);
-      _showSnackBar("Failed to update player: $e", AppColors.error);
+      _showSnackBar("Failed to update squad member: $e", AppColors.error);
     }
   }
 
@@ -115,7 +115,7 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
     setState(() => _isLoading = true);
     try {
       await _apiService.deletePlayer(id);
-      _showSnackBar("Player deleted successfully!", AppColors.primary);
+      _showSnackBar("Squad member deleted successfully!", AppColors.primary);
       _fetchPlayers();
     } catch (e) {
       setState(() => _isLoading = false);
@@ -123,7 +123,7 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
       if (e is DioException && e.response?.data?['detail'] != null) {
         errMsg = e.response!.data['detail'].toString();
       }
-      _showSnackBar("Failed to delete player: $errMsg", AppColors.error);
+      _showSnackBar("Failed to delete squad member: $errMsg", AppColors.error);
     }
   }
 
@@ -133,9 +133,9 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
       builder: (context) {
         return AlertDialog(
           backgroundColor: AppColors.surface,
-          title: Text("Delete Player", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          title: Text("Delete Squad Member", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
           content: Text(
-            "Are you sure you want to delete this player?",
+            "Are you sure you want to delete this squad member?",
             style: GoogleFonts.outfit(),
           ),
           actions: [
@@ -554,7 +554,7 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Player Management"),
+        title: const Text("Squad Management"),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -563,7 +563,7 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        tooltip: "Add Player FAB",
+        tooltip: "Add Squad Member FAB",
         onPressed: _openCreatePlayerSheet,
         backgroundColor: AppColors.primary,
         child: const Icon(Icons.add, color: Colors.white),
@@ -577,7 +577,7 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
               controller: _searchController,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: "Search player by name...",
+                hintText: "Search squad member by name...",
                 prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
@@ -602,7 +602,7 @@ class _PlayerManagementScreenState extends State<PlayerManagementScreen> {
                 : _players.isEmpty
                     ? Center(
                         child: Text(
-                          "No players found",
+                          "No squad members found",
                           style: GoogleFonts.outfit(color: AppColors.textSecondary),
                         ),
                       )

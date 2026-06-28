@@ -304,7 +304,7 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
         child: Padding(
           padding: const EdgeInsets.all(20.0),
           child: Text(
-            "No players in team. Please add players under Team Management first.",
+            "No members in squad. Please invite squad members under Squad Management first.",
             style: GoogleFonts.outfit(color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),

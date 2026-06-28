@@ -8,12 +8,14 @@ class TeamDetailsScreen extends StatefulWidget {
   final String teamId;
   final String teamName;
   final String userRole; // 'captain' or 'player'
+  final int initialTabIndex;
 
   const TeamDetailsScreen({
     super.key,
     required this.teamId,
     required this.teamName,
     required this.userRole,
+    this.initialTabIndex = 0,
   });
 
   @override
@@ -34,10 +36,24 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
   final _addMemberController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
+  final _settingsFormKey = GlobalKey<FormState>();
+  final _settingsNameController = TextEditingController();
+  final _settingsDescriptionController = TextEditingController();
+  final _settingsHomeGroundController = TextEditingController();
+  final _settingsCityController = TextEditingController();
+  final _settingsMottoController = TextEditingController();
+  final _settingsFoundedYearController = TextEditingController();
+  bool _isSavingSettings = false;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    final isCap = widget.userRole.toLowerCase() == 'captain';
+    _tabController = TabController(
+      length: isCap ? 5 : 4,
+      vsync: this,
+      initialIndex: widget.initialTabIndex < (isCap ? 5 : 4) ? widget.initialTabIndex : 0,
+    );
     _loadDetails();
   }
 
@@ -45,6 +61,12 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
   void dispose() {
     _tabController.dispose();
     _addMemberController.dispose();
+    _settingsNameController.dispose();
+    _settingsDescriptionController.dispose();
+    _settingsHomeGroundController.dispose();
+    _settingsCityController.dispose();
+    _settingsMottoController.dispose();
+    _settingsFoundedYearController.dispose();
     super.dispose();
   }
 
@@ -111,12 +133,592 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
           _myMemberRole = null;
           _myMemberStatus = null;
         }
+
+        // Populate settings controllers
+        _settingsNameController.text = teamData['name'] ?? '';
+        _settingsDescriptionController.text = teamData['description'] ?? '';
+        _settingsHomeGroundController.text = teamData['home_ground'] ?? '';
+        _settingsCityController.text = teamData['city'] ?? '';
+        _settingsMottoController.text = teamData['team_motto'] ?? '';
+        _settingsFoundedYearController.text = teamData['founded_year']?.toString() ?? '';
+
         _isLoading = false;
       });
+      // Recreate tab controller if length changed
+      final int expectedLength = _isCaptain ? 5 : 4;
+      if (_tabController.length != expectedLength) {
+        _updateTabController(expectedLength);
+      }
     } catch (e) {
       setState(() => _isLoading = false);
       _showSnackBar("Error loading details: $e", AppColors.error);
     }
+  }
+
+  void _updateTabController(int newLength) {
+    if (_tabController.length != newLength) {
+      final oldIndex = _tabController.index;
+      _tabController.dispose();
+      _tabController = TabController(
+        length: newLength,
+        vsync: this,
+        initialIndex: oldIndex < newLength ? oldIndex : 0,
+      );
+      setState(() {});
+    }
+  }
+
+  Future<void> _saveSettings() async {
+    if (!_settingsFormKey.currentState!.validate()) return;
+    setState(() => _isSavingSettings = true);
+    try {
+      final res = await _apiService.updateTeam(
+        widget.teamId,
+        _settingsNameController.text.trim(),
+        description: _settingsDescriptionController.text.trim(),
+        homeGround: _settingsHomeGroundController.text.trim(),
+        city: _settingsCityController.text.trim(),
+        teamMotto: _settingsMottoController.text.trim(),
+        foundedYear: int.tryParse(_settingsFoundedYearController.text.trim()),
+      );
+      if (res.statusCode == 200) {
+        _showSnackBar("Team settings updated successfully!", AppColors.primary);
+        await _loadDetails();
+      }
+    } catch (e) {
+      _showSnackBar("Error saving settings: $e", AppColors.error);
+    } finally {
+      setState(() => _isSavingSettings = false);
+    }
+  }
+
+  Widget _buildOverviewTab() {
+    final homeGround = _team?['home_ground']?.toString() ?? 'Not Set';
+    final city = _team?['city']?.toString() ?? 'Not Set';
+    final motto = _team?['team_motto']?.toString() ?? 'No Motto';
+    final foundedYear = _team?['founded_year']?.toString() ?? 'Not Set';
+    final desc = _team?['description']?.toString() ?? 'No description.';
+
+    return RefreshIndicator(
+      onRefresh: _loadDetails,
+      color: AppColors.primary,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            color: AppColors.primary.withOpacity(0.08),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  const Icon(Icons.star_outline_rounded, color: AppColors.primary, size: 28),
+                  const SizedBox(height: 8),
+                  Text(
+                    "\"$motto\"",
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(fontSize: 16, fontStyle: FontStyle.italic, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetaCard(Icons.location_on_outlined, "Home Ground", homeGround),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMetaCard(Icons.location_city_outlined, "City", city),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetaCard(Icons.calendar_today_outlined, "Founded", foundedYear),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Role", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                        const SizedBox(height: 4),
+                        Text(
+                          _myMemberRole?.toUpperCase() ?? "NOT MEMBER",
+                          style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            "About the Team",
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                desc,
+                style: GoogleFonts.outfit(color: AppColors.textSecondary, height: 1.4),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            "Recent Matches",
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          _buildMatchesSection(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetaCard(IconData icon, String title, String value) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 14, color: AppColors.textSecondary),
+                const SizedBox(width: 4),
+                Text(title, style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMatchesSection() {
+    if (_matches.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24.0),
+        child: Center(
+          child: Text(
+            "No matches played or scheduled for this team.",
+            style: GoogleFonts.outfit(color: AppColors.textSecondary),
+          ),
+        ),
+      );
+    }
+    return Column(
+      children: _matches.map((match) {
+        final venue = match['venue'] ?? 'Main Ground';
+        final status = match['status']?.toString().toUpperCase() ?? 'SCHEDULED';
+        final isLive = status == 'LIVE';
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            title: Text(
+              "${match['team1_name']} vs ${match['team2_name']}",
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Text("Venue: $venue", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12)),
+                const SizedBox(height: 2),
+                Text(
+                  "Type: ${match['match_type']} | Limit: ${match['over_limit']} Overs",
+                  style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11),
+                ),
+              ],
+            ),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isLive ? AppColors.error.withOpacity(0.12) : AppColors.primary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                status,
+                style: GoogleFonts.outfit(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: isLive ? AppColors.error : AppColors.primary,
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildSettingsTab() {
+    return Form(
+      key: _settingsFormKey,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            "Team Configuration",
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _settingsNameController,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: "Team Name",
+              labelStyle: const TextStyle(color: AppColors.textSecondary),
+              focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.primary), borderRadius: BorderRadius.circular(8)),
+              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white24), borderRadius: BorderRadius.circular(8)),
+            ),
+            validator: (value) => value == null || value.trim().isEmpty ? "Team name is required" : null,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _settingsMottoController,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: "Team Motto",
+              labelStyle: const TextStyle(color: AppColors.textSecondary),
+              focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.primary), borderRadius: BorderRadius.circular(8)),
+              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white24), borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _settingsHomeGroundController,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: "Home Ground",
+              labelStyle: const TextStyle(color: AppColors.textSecondary),
+              focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.primary), borderRadius: BorderRadius.circular(8)),
+              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white24), borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _settingsCityController,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: "City",
+              labelStyle: const TextStyle(color: AppColors.textSecondary),
+              focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.primary), borderRadius: BorderRadius.circular(8)),
+              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white24), borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _settingsFoundedYearController,
+            keyboardType: TextInputType.number,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: "Founded Year",
+              labelStyle: const TextStyle(color: AppColors.textSecondary),
+              focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.primary), borderRadius: BorderRadius.circular(8)),
+              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white24), borderRadius: BorderRadius.circular(8)),
+            ),
+            validator: (val) {
+              if (val != null && val.trim().isNotEmpty) {
+                final year = int.tryParse(val.trim());
+                if (year == null || year < 1800 || year > 2100) {
+                  return "Enter a valid year (1800-2100)";
+                }
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _settingsDescriptionController,
+            maxLines: 3,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: "Team Description",
+              labelStyle: const TextStyle(color: AppColors.textSecondary),
+              focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.primary), borderRadius: BorderRadius.circular(8)),
+              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white24), borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _isSavingSettings ? null : _saveSettings,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: _isSavingSettings
+                ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                : Text("Save Settings", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15)),
+          ),
+          const SizedBox(height: 32),
+          Text(
+            "Danger Zone",
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.error),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            color: AppColors.error.withOpacity(0.05),
+            shape: RoundedRectangleBorder(side: const BorderSide(color: AppColors.error, width: 0.5), borderRadius: BorderRadius.circular(8)),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Delete this Team",
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Once you delete a team, all its squad data, roles, and records will be lost forever.",
+                    style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _confirmDelete,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.error,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                      child: Text("Delete Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMemberProfileSheet(dynamic member) {
+    final name = member['user_full_name'] ?? 'Unknown User';
+    final email = member['user_email'] ?? 'No email';
+    final role = member['role']?.toString().toUpperCase() ?? 'PLAYER';
+    final joined = _formatActivityTime(member['joined_at']);
+    final jersey = member['jersey_number']?.toString() ?? 'Not Assigned';
+    final isAvailable = member['is_available'] ?? true;
+    final batOrder = member['batting_order']?.toString() ?? 'Not Set';
+    final bowlOrder = member['bowling_order']?.toString() ?? 'Not Set';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.65,
+          minChildSize: 0.5,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return SingleChildScrollView(
+              controller: scrollController,
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundColor: AppColors.primary.withOpacity(0.15),
+                        child: Text(
+                          (name[0] ?? '?').toUpperCase(),
+                          style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.primary),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              email,
+                              style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.primary, width: 0.5),
+                        ),
+                        child: Text(
+                          role,
+                          style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    "Squad Metadata",
+                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        children: [
+                          _buildProfileRow("Joined Date", joined, icon: Icons.calendar_today_outlined),
+                          const Divider(height: 20, color: Colors.white10),
+                          _buildProfileRow("Jersey Number", jersey, icon: Icons.sports_cricket_outlined),
+                          const Divider(height: 20, color: Colors.white10),
+                          _buildProfileRow(
+                            "Availability", 
+                            isAvailable ? "Available" : "Unavailable",
+                            icon: Icons.check_circle_outline_rounded,
+                            valueColor: isAvailable ? AppColors.primary : AppColors.error,
+                          ),
+                          const Divider(height: 20, color: Colors.white10),
+                          _buildProfileRow("Batting Order Pos", batOrder, icon: Icons.sports_cricket),
+                          const Divider(height: 20, color: Colors.white10),
+                          _buildProfileRow("Bowling Order Pos", bowlOrder, icon: Icons.sports_handball),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Career Statistics",
+                        style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white70),
+                      ),
+                      Text(
+                        "Future Release",
+                        style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  GridView.count(
+                    crossAxisCount: 3,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 1.2,
+                    children: [
+                      _buildStatCard("Matches", "0"),
+                      _buildStatCard("Runs", "0"),
+                      _buildStatCard("Avg / SR", "0.0 / 0.0"),
+                      _buildStatCard("Wickets", "0"),
+                      _buildStatCard("Econ", "0.00"),
+                      _buildStatCard("5w / 100s", "0 / 0"),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildProfileRow(String title, String value, {required IconData icon, Color? valueColor}) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: AppColors.textSecondary),
+        const SizedBox(width: 8),
+        Text(title, style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13)),
+        const Spacer(),
+        Text(
+          value,
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.bold, 
+            fontSize: 13,
+            color: valueColor ?? Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatCard(String label, String value) {
+    return Card(
+      color: Colors.white.withOpacity(0.02),
+      shape: RoundedRectangleBorder(
+        side: const BorderSide(color: Colors.white10, width: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              value,
+              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white38),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(fontSize: 10, color: Colors.white38),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showSnackBar(String msg, Color color) {
@@ -504,6 +1106,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
+                onTap: () => _showMemberProfileSheet(m),
                 leading: CircleAvatar(
                   backgroundColor: isCap 
                       ? AppColors.accent.withOpacity(0.15) 
@@ -994,6 +1597,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
+        onTap: () => _showMemberProfileSheet(m),
         leading: CircleAvatar(
           backgroundColor: isWK ? AppColors.accent.withOpacity(0.15) : Colors.white.withOpacity(0.05),
           child: Text(
@@ -1066,70 +1670,26 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
             icon: const Icon(Icons.refresh),
             onPressed: _loadDetails,
           ),
-          if (_isCaptain || (_isActiveMember && !_isCaptain))
+          if (_isActiveMember && !_isCaptain)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
               color: AppColors.surface,
               onSelected: (value) async {
-                if (value == 'edit') {
-                  final updated = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => TeamEditScreen(
-                        teamId: widget.teamId,
-                        currentName: _team != null ? _team['name'] ?? widget.teamName : widget.teamName,
-                        currentDescription: _teamDescription,
-                        currentLogoUrl: _teamLogoUrl,
-                        currentHomeGround: _team != null ? _team['home_ground'] : null,
-                        currentCity: _team != null ? _team['city'] : null,
-                        currentMotto: _team != null ? _team['team_motto'] : null,
-                        currentFoundedYear: _team != null ? _team['founded_year'] : null,
-                      ),
-                    ),
-                  );
-                  if (updated == true) {
-                    _loadDetails();
-                  }
-                } else if (value == 'delete') {
-                  _confirmDelete();
-                } else if (value == 'leave') {
+                if (value == 'leave') {
                   _confirmLeave();
                 }
               },
               itemBuilder: (context) => [
-                if (_isCaptain) ...[
-                  PopupMenuItem(
-                    value: 'edit',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.edit_outlined, color: Colors.white),
-                        const SizedBox(width: 8),
-                        Text("Edit Team", style: GoogleFonts.outfit(color: Colors.white)),
-                      ],
-                    ),
+                PopupMenuItem(
+                  value: 'leave',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.exit_to_app_rounded, color: AppColors.error),
+                      const SizedBox(width: 8),
+                      Text("Leave Team", style: GoogleFonts.outfit(color: AppColors.error)),
+                    ],
                   ),
-                  PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.delete_outline, color: AppColors.error),
-                        const SizedBox(width: 8),
-                        Text("Delete Team", style: GoogleFonts.outfit(color: AppColors.error)),
-                      ],
-                    ),
-                  ),
-                ] else if (_isActiveMember && !_isCaptain) ...[
-                  PopupMenuItem(
-                    value: 'leave',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.exit_to_app_rounded, color: AppColors.error),
-                        const SizedBox(width: 8),
-                        Text("Leave Team", style: GoogleFonts.outfit(color: AppColors.error)),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ],
             ),
         ],
@@ -1138,11 +1698,13 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
           indicatorColor: AppColors.primary,
           labelColor: AppColors.primary,
           unselectedLabelColor: AppColors.textSecondary,
-          tabs: const [
-            Tab(text: "Members"),
-            Tab(text: "Squad"),
-            Tab(text: "Matches"),
-            Tab(text: "Activity"),
+          isScrollable: true,
+          tabs: [
+            const Tab(text: "Overview"),
+            const Tab(text: "Members"),
+            const Tab(text: "Squad"),
+            const Tab(text: "Activity"),
+            if (_isCaptain) const Tab(text: "Settings"),
           ],
         ),
       ),
@@ -1151,10 +1713,11 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
           : TabBarView(
               controller: _tabController,
               children: [
+                _buildOverviewTab(),
                 _buildMembersTab(),
                 _buildSquadTab(),
-                _buildMatchesTab(),
                 _buildActivityTab(),
+                if (_isCaptain) _buildSettingsTab(),
               ],
             ),
     );

@@ -9,7 +9,8 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 
 class MyTeamsScreen extends StatefulWidget {
-  const MyTeamsScreen({super.key});
+  final bool selectSquad;
+  const MyTeamsScreen({super.key, this.selectSquad = false});
 
   @override
   State<MyTeamsScreen> createState() => _MyTeamsScreenState();
@@ -347,6 +348,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
                       teamId: team['id'].toString(),
                       teamName: team['name'].toString(),
                       userRole: membership['role'].toString(),
+                      initialTabIndex: widget.selectSquad ? 2 : 0,
                     ),
                   ),
                 );
