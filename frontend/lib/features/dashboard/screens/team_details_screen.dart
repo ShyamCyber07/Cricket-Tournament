@@ -28,6 +28,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
   String? _teamLogoUrl;
   List<dynamic> _members = [];
   List<dynamic> _matches = [];
+  List<dynamic> _activities = [];
   bool _isLoading = true;
 
   final _addMemberController = TextEditingController();
@@ -36,7 +37,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadDetails();
   }
 
@@ -54,6 +55,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
   bool get _isCaptain => _myMemberRole?.toLowerCase() == 'captain' || widget.userRole.toLowerCase() == 'captain';
   bool get _isVC => _myMemberRole?.toLowerCase() == 'vice_captain';
   bool get _isActiveMember => _myMemberStatus?.toLowerCase() == 'active';
+  bool get _isSquadLocked => _team != null && _team['is_squad_locked'] == true;
 
   Future<void> _loadDetails() async {
     setState(() => _isLoading = true);
@@ -86,12 +88,21 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
         );
       }
 
+      List<dynamic> activities = [];
+      if (myMemberObj != null && myMemberObj['status']?.toString().toLowerCase() == 'active') {
+        try {
+          final actRes = await _apiService.getTeamActivities(widget.teamId);
+          activities = actRes.data ?? [];
+        } catch (_) {}
+      }
+
       setState(() {
         _team = teamData;
         _teamDescription = teamData['description'] ?? '';
         _teamLogoUrl = teamData['logo_url'];
         _members = allMembers;
         _matches = filteredMatches;
+        _activities = activities;
         _currentUserId = currentUserId;
         if (myMemberObj != null) {
           _myMemberRole = myMemberObj['role'];
@@ -379,9 +390,13 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
       }
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
+    return RefreshIndicator(
+      onRefresh: _loadDetails,
+      color: AppColors.primary,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
         if ((_isCaptain || _isVC) && pendingList.isNotEmpty) ...[
           Text(
             "Pending Join Requests (${pendingList.length})",
@@ -608,68 +623,77 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
             );
           }),
       ],
+      ),
     );
   }
 
   Widget _buildMatchesTab() {
-    if (_matches.isEmpty) {
-      return Center(
-        child: Text(
-          "No matches played or scheduled for this team.",
-          style: GoogleFonts.outfit(color: AppColors.textSecondary),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: _matches.length,
-      padding: const EdgeInsets.all(16),
-      itemBuilder: (context, index) {
-        final match = _matches[index];
-        final venue = match['venue'] ?? 'Main Ground';
-        final status = match['status']?.toString().toUpperCase() ?? 'SCHEDULED';
-        final isLive = status == 'LIVE';
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: ListTile(
-            title: Text(
-              "${match['team1_name']} vs ${match['team2_name']}",
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 4),
-                Text(
-                  "Venue: $venue",
-                  style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  "Type: ${match['match_type']} | Limit: ${match['over_limit']} Overs",
-                  style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11),
-                ),
-              ],
-            ),
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: isLive ? AppColors.error.withOpacity(0.12) : AppColors.primary.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                status,
-                style: GoogleFonts.outfit(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: isLive ? AppColors.error : AppColors.primary,
+    return RefreshIndicator(
+      onRefresh: _loadDetails,
+      color: AppColors.primary,
+      child: _matches.isEmpty
+          ? SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Container(
+                height: MediaQuery.of(context).size.height * 0.5,
+                alignment: Alignment.center,
+                child: Text(
+                  "No matches played or scheduled for this team.",
+                  style: GoogleFonts.outfit(color: AppColors.textSecondary),
                 ),
               ),
+            )
+          : ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: _matches.length,
+              padding: const EdgeInsets.all(16),
+              itemBuilder: (context, index) {
+                final match = _matches[index];
+                final venue = match['venue'] ?? 'Main Ground';
+                final status = match['status']?.toString().toUpperCase() ?? 'SCHEDULED';
+                final isLive = status == 'LIVE';
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ListTile(
+                    title: Text(
+                      "${match['team1_name']} vs ${match['team2_name']}",
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 4),
+                        Text(
+                          "Venue: $venue",
+                          style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "Type: ${match['match_type']} | Limit: ${match['over_limit']} Overs",
+                          style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isLive ? AppColors.error.withOpacity(0.12) : AppColors.primary.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        status,
+                        style: GoogleFonts.outfit(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: isLive ? AppColors.error : AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
-          ),
-        );
-      },
     );
   }
 
@@ -703,14 +727,14 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                         subtitle: const Text("Include in starting XI", style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
                         value: isPlayingXI,
                         activeColor: AppColors.primary,
-                        onChanged: (val) => setState(() => isPlayingXI = val),
+                        onChanged: _isSquadLocked ? null : (val) => setState(() => isPlayingXI = val),
                       ),
                       SwitchListTile(
                         title: const Text("Wicket Keeper", style: TextStyle(color: Colors.white)),
                         subtitle: const Text("Mark as Wicket Keeper", style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
                         value: isWicketkeeper,
                         activeColor: AppColors.primary,
-                        onChanged: (val) => setState(() => isWicketkeeper = val),
+                        onChanged: _isSquadLocked ? null : (val) => setState(() => isWicketkeeper = val),
                       ),
                       SwitchListTile(
                         title: const Text("Available", style: TextStyle(color: Colors.white)),
@@ -723,6 +747,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                       TextFormField(
                         controller: jerseyController,
                         keyboardType: TextInputType.number,
+                        enabled: !_isSquadLocked,
                         style: const TextStyle(color: Colors.white),
                         decoration: const InputDecoration(
                           labelText: "Jersey Number",
@@ -742,6 +767,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                       TextFormField(
                         controller: battingController,
                         keyboardType: TextInputType.number,
+                        enabled: !_isSquadLocked,
                         style: const TextStyle(color: Colors.white),
                         decoration: const InputDecoration(
                           labelText: "Batting Position (e.g. 1, 2...)",
@@ -761,6 +787,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                       TextFormField(
                         controller: bowlingController,
                         keyboardType: TextInputType.number,
+                        enabled: !_isSquadLocked,
                         style: const TextStyle(color: Colors.white),
                         decoration: const InputDecoration(
                           labelText: "Bowling Position (e.g. 1, 2...)",
@@ -853,46 +880,107 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     // Sort Bench: name asc
     bench.sort((a, b) => (a['user_full_name'] ?? '').toString().compareTo((b['user_full_name'] ?? '').toString()));
     
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              "Playing XI (${playingXI.length})",
-              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primary),
+    return RefreshIndicator(
+      onRefresh: _loadDetails,
+      color: AppColors.primary,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (_isSquadLocked)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.error.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.error.withOpacity(0.4), width: 1),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_outline, color: AppColors.error, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      "Squad is Locked. Configurations cannot be modified.",
+                      style: GoogleFonts.outfit(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (playingXI.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12.0),
-            child: Text("No players in Playing XI.", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13)),
-          )
-        else
-          ...playingXI.map((m) => _buildSquadMemberCard(m)),
-          
-        const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              "Bench Players (${bench.length})",
-              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.secondary),
+          if (_isCaptain)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 16),
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isSquadLocked ? AppColors.secondary : AppColors.error,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: Icon(_isSquadLocked ? Icons.lock_open : Icons.lock),
+                label: Text(
+                  _isSquadLocked ? "UNLOCK SQUAD" : "LOCK SQUAD",
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                ),
+                onPressed: () async {
+                  setState(() => _isLoading = true);
+                  try {
+                    if (_isSquadLocked) {
+                      await _apiService.unlockSquad(widget.teamId);
+                      _showSnackBar("Squad unlocked successfully!", AppColors.primary);
+                    } else {
+                      await _apiService.lockSquad(widget.teamId);
+                      _showSnackBar("Squad locked successfully!", AppColors.primary);
+                    }
+                    _loadDetails();
+                  } catch (e) {
+                    setState(() => _isLoading = false);
+                    _showSnackBar("Failed to toggle squad lock: $e", AppColors.error);
+                  }
+                },
+              ),
             ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (bench.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12.0),
-            child: Text("No players on Bench.", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13)),
-          )
-        else
-          ...bench.map((m) => _buildSquadMemberCard(m)),
-      ],
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Playing XI (${playingXI.length})",
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (playingXI.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12.0),
+              child: Text("No players in Playing XI.", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13)),
+            )
+          else
+            ...playingXI.map((m) => _buildSquadMemberCard(m)),
+            
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Bench Players (${bench.length})",
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.secondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (bench.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12.0),
+              child: Text("No players on Bench.", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13)),
+            )
+          else
+            ...bench.map((m) => _buildSquadMemberCard(m)),
+        ],
+      ),
     );
   }
 
@@ -989,9 +1077,13 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                     MaterialPageRoute(
                       builder: (context) => TeamEditScreen(
                         teamId: widget.teamId,
-                        currentName: widget.teamName,
+                        currentName: _team != null ? _team['name'] ?? widget.teamName : widget.teamName,
                         currentDescription: _teamDescription,
                         currentLogoUrl: _teamLogoUrl,
+                        currentHomeGround: _team != null ? _team['home_ground'] : null,
+                        currentCity: _team != null ? _team['city'] : null,
+                        currentMotto: _team != null ? _team['team_motto'] : null,
+                        currentFoundedYear: _team != null ? _team['founded_year'] : null,
                       ),
                     ),
                   );
@@ -1050,6 +1142,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
             Tab(text: "Members"),
             Tab(text: "Squad"),
             Tab(text: "Matches"),
+            Tab(text: "Activity"),
           ],
         ),
       ),
@@ -1061,7 +1154,162 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                 _buildMembersTab(),
                 _buildSquadTab(),
                 _buildMatchesTab(),
+                _buildActivityTab(),
               ],
+            ),
+    );
+  }
+
+  String _formatActivityTime(String isoString) {
+    try {
+      final dt = DateTime.parse(isoString).toLocal();
+      final months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      final minute = dt.minute.toString().padLeft(2, '0');
+      final hour = dt.hour.toString().padLeft(2, '0');
+      return "$hour:$minute - ${dt.day} ${months[dt.month - 1]} ${dt.year}";
+    } catch (_) {
+      return isoString;
+    }
+  }
+
+  Widget _buildActivityTab() {
+    return RefreshIndicator(
+      onRefresh: _loadDetails,
+      color: AppColors.primary,
+      child: _activities.isEmpty
+          ? SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Container(
+                height: MediaQuery.of(context).size.height * 0.5,
+                alignment: Alignment.center,
+                child: Text(
+                  "No recent activity logged for this team.",
+                  style: GoogleFonts.outfit(color: AppColors.textSecondary),
+                ),
+              ),
+            )
+          : ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: _activities.length,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              itemBuilder: (context, index) {
+                final act = _activities[index];
+                final actionType = act['action_type']?.toString() ?? '';
+                final description = act['description']?.toString() ?? '';
+                final createdAt = act['created_at']?.toString() ?? '';
+                
+                IconData iconData = Icons.info_outline;
+                Color iconColor = AppColors.primary;
+                
+                if (actionType.contains('create')) {
+                  iconData = Icons.add_circle_outline;
+                  iconColor = AppColors.primary;
+                } else if (actionType.contains('update') || actionType.contains('edit')) {
+                  iconData = Icons.edit_calendar_outlined;
+                  iconColor = Colors.blue;
+                } else if (actionType.contains('invite')) {
+                  iconData = Icons.person_add_alt_1_outlined;
+                  iconColor = AppColors.secondary;
+                } else if (actionType.contains('accept')) {
+                  iconData = Icons.check_circle_outline;
+                  iconColor = Colors.green;
+                } else if (actionType.contains('reject')) {
+                  iconData = Icons.cancel_outlined;
+                  iconColor = AppColors.error;
+                } else if (actionType.contains('approve')) {
+                  iconData = Icons.person_outline;
+                  iconColor = Colors.green;
+                } else if (actionType.contains('left')) {
+                  iconData = Icons.exit_to_app_rounded;
+                  iconColor = AppColors.error;
+                } else if (actionType.contains('remove')) {
+                  iconData = Icons.person_remove_outlined;
+                  iconColor = AppColors.error;
+                } else if (actionType.contains('promote')) {
+                  iconData = Icons.verified_outlined;
+                  iconColor = AppColors.accent;
+                } else if (actionType.contains('demote')) {
+                  iconData = Icons.remove_circle_outline;
+                  iconColor = Colors.orange;
+                } else if (actionType.contains('transfer')) {
+                  iconData = Icons.swap_horiz_outlined;
+                  iconColor = Colors.purple;
+                } else if (actionType.contains('locked')) {
+                  iconData = Icons.lock_outline;
+                  iconColor = AppColors.error;
+                } else if (actionType.contains('unlocked')) {
+                  iconData = Icons.lock_open_outlined;
+                  iconColor = Colors.green;
+                } else if (actionType.contains('jersey')) {
+                  iconData = Icons.checkroom_outlined;
+                  iconColor = AppColors.secondary;
+                } else if (actionType.contains('playing_xi')) {
+                  iconData = Icons.format_list_numbered_outlined;
+                  iconColor = AppColors.primary;
+                }
+                
+                return IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Column(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: iconColor.withOpacity(0.12),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: iconColor.withOpacity(0.4), width: 1.5),
+                            ),
+                            child: Icon(iconData, color: iconColor, size: 16),
+                          ),
+                          if (index < _activities.length - 1)
+                            Expanded(
+                              child: Container(
+                                width: 2,
+                                color: Colors.white.withOpacity(0.08),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.02),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white.withOpacity(0.04)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                description,
+                                style: GoogleFonts.outfit(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                _formatActivityTime(createdAt),
+                                style: GoogleFonts.outfit(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
     );
   }

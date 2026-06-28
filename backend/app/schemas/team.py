@@ -8,6 +8,10 @@ class TeamBase(BaseModel):
     name: str
     logo_url: Optional[str] = None
     description: Optional[str] = None
+    home_ground: Optional[str] = None
+    city: Optional[str] = None
+    team_motto: Optional[str] = None
+    founded_year: Optional[int] = None
 
 class TeamCreate(TeamBase):
     captain_id: Optional[UUID] = None
@@ -16,12 +20,17 @@ class TeamUpdate(BaseModel):
     name: Optional[str] = None
     captain_id: Optional[UUID] = None
     description: Optional[str] = None
+    home_ground: Optional[str] = None
+    city: Optional[str] = None
+    team_motto: Optional[str] = None
+    founded_year: Optional[int] = None
 
 class TeamResponse(TeamBase):
     id: UUID
     captain_id: Optional[UUID] = None
     created_by: UUID
     created_at: Optional[datetime] = None
+    is_squad_locked: bool = False
     players: List[PlayerResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
@@ -56,6 +65,8 @@ class TeamMemberResponse(BaseModel):
     batting_order: Optional[int] = None
     bowling_order: Optional[int] = None
     is_available: bool = True
+    invited_by_id: Optional[UUID] = None
+    invited_by_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -88,3 +99,14 @@ class ApproveMemberRequest(BaseModel):
 
 class UpdateMemberRoleRequest(BaseModel):
     role: str
+
+class TeamActivityResponse(BaseModel):
+    id: UUID
+    team_id: UUID
+    user_id: Optional[UUID] = None
+    user_name: Optional[str] = None
+    action_type: str
+    description: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

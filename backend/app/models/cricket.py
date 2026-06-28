@@ -29,10 +29,12 @@ class TeamMember(Base):
     batting_order = Column(Integer, nullable=True)
     bowling_order = Column(Integer, nullable=True)
     is_available = Column(Boolean, default=True, nullable=False)
+    invited_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id", name="fk_team_members_invited_by_id_users", ondelete="SET NULL"), nullable=True)
 
     # Relationships
     team = relationship("Team", back_populates="members")
-    user = relationship("User")
+    user = relationship("User", foreign_keys=[user_id])
+    invited_by = relationship("User", foreign_keys=[invited_by_id])
 
 class TournamentTeam(Base):
     __tablename__ = "tournament_teams"
@@ -95,6 +97,11 @@ class Team(Base):
     description = Column(String, nullable=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    is_squad_locked = Column(Boolean, default=False, nullable=False)
+    home_ground = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    team_motto = Column(String, nullable=True)
+    founded_year = Column(Integer, nullable=True)
 
     # Relationships
     creator = relationship("User", back_populates="created_teams")
@@ -261,3 +268,17 @@ class Ball(Base):
     non_striker = relationship("Player", foreign_keys=[non_striker_id])
     player_dismissed = relationship("Player", foreign_keys=[player_dismissed_id])
     fielder = relationship("Player", foreign_keys=[fielder_id])
+
+class TeamActivity(Base):
+    __tablename__ = "team_activities"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    team_id = Column(UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action_type = Column(String, nullable=False)
+    description = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    team = relationship("Team")
+    user = relationship("User")

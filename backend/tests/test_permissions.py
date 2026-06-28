@@ -125,3 +125,104 @@ def test_captain_and_vice_captain_permissions(db, client, auth_headers):
     # 12. VC attempts to modify roles (transfer captaincy) -> 403 (restricted)
     res = client.put(f"/api/v1/teams/{team_id}/members/{other_user.id}/role", json={"role": "captain"}, headers=vc_headers)
     assert res.status_code == 403
+
+
+def test_team_stabilization_locks_and_activity(db, client, auth_headers):
+    # 1. Create a team with Captain
+    create_res = client.post(
+        "/api/v1/teams/",
+        json={"name": "Stabilization Team", "home_ground": "Eden Gardens", "city": "Kolkata", "team_motto": "Play Hard"},
+        headers=auth_headers
+    )
+    assert create_res.status_code == 201
+    team_id = create_res.json()["id"]
+
+    # Verify team details are returned correctly
+    assert create_res.json()["home_ground"] == "Eden Gardens"
+    assert create_res.json()["city"] == "Kolkata"
+    assert create_res.json()["team_motto"] == "Play Hard"
+
+    # Create Player user
+    player_user, player_headers = helper_create_and_login_user(db, client, "st_player@permissions.com", "st_player")
+    other_user, other_headers = helper_create_and_login_user(db, client, "st_other@permissions.com", "st_other")
+
+    # Invite and Accept Player
+    res = client.post(f"/api/v1/teams/{team_id}/members", json={"email": "st_player@permissions.com"}, headers=auth_headers)
+    assert res.status_code == 200
+    res = client.post(f"/api/v1/teams/{team_id}/invitations/accept", headers=player_headers)
+    assert res.status_code == 200
+
+    # 2. Lock squad
+    # Player attempts to lock squad -> 403
+    lock_res = client.post(f"/api/v1/teams/{team_id}/lock", headers=player_headers)
+    assert lock_res.status_code == 403
+
+    # Captain locks squad -> 200
+    lock_res = client.post(f"/api/v1/teams/{team_id}/lock", headers=auth_headers)
+    assert lock_res.status_code == 200
+    assert lock_res.json()["is_squad_locked"] is True
+
+    # 3. Verify Locked squad updates
+    squad_payload = {
+        "members": [
+            {
+                "user_id": str(player_user.id),
+                "is_playing_xi": False,  # Changed
+                "is_wicketkeeper": False,
+                "jersey_number": 10,
+                "batting_order": None,
+                "bowling_order": None,
+                "is_available": True
+            }
+        ]
+    }
+    # Captain attempts to change Playing XI / Jersey while locked -> 403
+    res = client.put(f"/api/v1/teams/{team_id}/squad-config", json=squad_payload, headers=auth_headers)
+    assert res.status_code == 403
+
+    # Captain updates ONLY availability -> 200 (allowed!)
+    availability_payload = {
+        "members": [
+            {
+                "user_id": str(player_user.id),
+                "is_playing_xi": True,  # Keep same
+                "is_wicketkeeper": False,
+                "jersey_number": None,
+                "batting_order": None,
+                "bowling_order": None,
+                "is_available": False  # Changed
+            }
+        ]
+    }
+    res = client.put(f"/api/v1/teams/{team_id}/squad-config", json=availability_payload, headers=auth_headers)
+    assert res.status_code == 200
+
+    # 4. Unlock squad
+    # Captain unlocks squad -> 200
+    unlock_res = client.post(f"/api/v1/teams/{team_id}/unlock", headers=auth_headers)
+    assert unlock_res.status_code == 200
+    assert unlock_res.json()["is_squad_locked"] is False
+
+    # Captain changes Playing XI now -> 200 (allowed!)
+    res = client.put(f"/api/v1/teams/{team_id}/squad-config", json=squad_payload, headers=auth_headers)
+    assert res.status_code == 200
+
+    # 5. Verify Activity Timeline Feed
+    # Other user (non-member) attempts to fetch timeline -> 403
+    act_res = client.get(f"/api/v1/teams/{team_id}/activities", headers=other_headers)
+    assert act_res.status_code == 403
+
+    # Member fetches timeline -> 200
+    act_res = client.get(f"/api/v1/teams/{team_id}/activities", headers=player_headers)
+    assert act_res.status_code == 200
+    activities = act_res.json()
+    assert len(activities) > 0
+
+    # Verify key logged actions exist
+    action_types = [a["action_type"] for a in activities]
+    assert "team_created" in action_types
+    assert "squad_locked" in action_types
+    assert "squad_unlocked" in action_types
+    assert "player_invited" in action_types
+    assert "invitation_accepted" in action_types
+    assert "player_joined" in action_types

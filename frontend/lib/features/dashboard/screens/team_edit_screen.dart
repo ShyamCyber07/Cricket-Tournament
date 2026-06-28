@@ -11,6 +11,10 @@ class TeamEditScreen extends StatefulWidget {
   final String currentName;
   final String currentDescription;
   final String? currentLogoUrl;
+  final String? currentHomeGround;
+  final String? currentCity;
+  final String? currentMotto;
+  final int? currentFoundedYear;
 
   const TeamEditScreen({
     super.key,
@@ -18,6 +22,10 @@ class TeamEditScreen extends StatefulWidget {
     required this.currentName,
     required this.currentDescription,
     this.currentLogoUrl,
+    this.currentHomeGround,
+    this.currentCity,
+    this.currentMotto,
+    this.currentFoundedYear,
   });
 
   @override
@@ -30,6 +38,10 @@ class _TeamEditScreenState extends State<TeamEditScreen> {
 
   late TextEditingController _nameController;
   late TextEditingController _descriptionController;
+  late TextEditingController _homeGroundController;
+  late TextEditingController _cityController;
+  late TextEditingController _mottoController;
+  late TextEditingController _foundedYearController;
 
   bool _isSaving = false;
   final ImagePicker _picker = ImagePicker();
@@ -41,6 +53,12 @@ class _TeamEditScreenState extends State<TeamEditScreen> {
     super.initState();
     _nameController = TextEditingController(text: widget.currentName);
     _descriptionController = TextEditingController(text: widget.currentDescription);
+    _homeGroundController = TextEditingController(text: widget.currentHomeGround ?? '');
+    _cityController = TextEditingController(text: widget.currentCity ?? '');
+    _mottoController = TextEditingController(text: widget.currentMotto ?? '');
+    _foundedYearController = TextEditingController(
+      text: widget.currentFoundedYear != null ? widget.currentFoundedYear.toString() : '',
+    );
     _uploadedLogoUrl = widget.currentLogoUrl;
   }
 
@@ -48,6 +66,10 @@ class _TeamEditScreenState extends State<TeamEditScreen> {
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
+    _homeGroundController.dispose();
+    _cityController.dispose();
+    _mottoController.dispose();
+    _foundedYearController.dispose();
     super.dispose();
   }
 
@@ -143,6 +165,10 @@ class _TeamEditScreenState extends State<TeamEditScreen> {
         widget.teamId,
         _nameController.text.trim(),
         description: _descriptionController.text.trim(),
+        homeGround: _homeGroundController.text.trim(),
+        city: _cityController.text.trim(),
+        teamMotto: _mottoController.text.trim(),
+        foundedYear: int.tryParse(_foundedYearController.text.trim()),
       );
 
       setState(() => _isSaving = false);
@@ -399,6 +425,100 @@ class _TeamEditScreenState extends State<TeamEditScreen> {
                                   borderSide: const BorderSide(color: AppColors.primary, width: 2),
                               ),
                             ),
+                          ),
+                          const SizedBox(height: 16),
+                          // Home Ground
+                          TextFormField(
+                            controller: _homeGroundController,
+                            style: GoogleFonts.outfit(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: "Home Ground",
+                              labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.textSecondary),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.02),
+                              enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          // City
+                          TextFormField(
+                            controller: _cityController,
+                            style: GoogleFonts.outfit(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: "City",
+                              labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              prefixIcon: const Icon(Icons.location_city_outlined, color: AppColors.textSecondary),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.02),
+                              enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          // Team Motto
+                          TextFormField(
+                            controller: _mottoController,
+                            style: GoogleFonts.outfit(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: "Team Motto",
+                              labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              prefixIcon: const Icon(Icons.star_outline, color: AppColors.textSecondary),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.02),
+                              enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          // Founded Year
+                          TextFormField(
+                            controller: _foundedYearController,
+                            style: GoogleFonts.outfit(color: Colors.white),
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: "Founded Year",
+                              labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              prefixIcon: const Icon(Icons.calendar_today_outlined, color: AppColors.textSecondary),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.02),
+                              enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              ),
+                            ),
+                            validator: (value) {
+                              if (value != null && value.trim().isNotEmpty) {
+                                final year = int.tryParse(value.trim());
+                                if (year == null) {
+                                    return "Please enter a valid year";
+                                }
+                              }
+                              return null;
+                            },
                           ),
                         ],
                       ),

@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -12,12 +12,15 @@ from app.core.storage import upload_image, delete_image
 from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User
-from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad, TeamMember, Notification
-from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate, BulkAddPlayersRequest, TeamMemberResponse, MyTeamsResponse, AddMemberRequest, ApproveMemberRequest, UpdateMemberRoleRequest, UpdateSquadConfigRequest
+from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad, TeamMember, Notification, TeamActivity
+from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate, BulkAddPlayersRequest, TeamMemberResponse, MyTeamsResponse, AddMemberRequest, ApproveMemberRequest, UpdateMemberRoleRequest, UpdateSquadConfigRequest, TeamActivityResponse
 
 router = APIRouter()
 
 def make_member_response(member: TeamMember, user: User) -> TeamMemberResponse:
+    invited_by_name = None
+    if member.invited_by:
+        invited_by_name = member.invited_by.full_name or member.invited_by.username or "User"
     return TeamMemberResponse(
         id=member.id,
         team_id=member.team_id,
@@ -32,7 +35,9 @@ def make_member_response(member: TeamMember, user: User) -> TeamMemberResponse:
         jersey_number=member.jersey_number,
         batting_order=member.batting_order,
         bowling_order=member.bowling_order,
-        is_available=member.is_available
+        is_available=member.is_available,
+        invited_by_id=member.invited_by_id,
+        invited_by_name=invited_by_name
     )
 
 @router.post("/", response_model=TeamResponse, status_code=status.HTTP_201_CREATED)
@@ -63,6 +68,10 @@ def create_team(
         logo_url=team_in.logo_url,
         captain_id=team_in.captain_id,
         description=team_in.description,
+        home_ground=team_in.home_ground,
+        city=team_in.city,
+        team_motto=team_in.team_motto,
+        founded_year=team_in.founded_year,
         created_by=current_user.id
     )
     db.add(db_team)
@@ -76,6 +85,13 @@ def create_team(
         status="active"
     )
     db.add(creator_member)
+    log_team_activity(
+        db=db,
+        team_id=db_team.id,
+        actor_id=current_user.id,
+        action_type="team_created",
+        description=f"Team created by {current_user.full_name or current_user.username}"
+    )
     db.commit()
     db.refresh(db_team)
         
@@ -161,6 +177,21 @@ def accept_invitation(
         )
         db.add(notif)
         
+    log_team_activity(
+        db=db,
+        team_id=id,
+        actor_id=current_user.id,
+        action_type="invitation_accepted",
+        description=f"{current_user.full_name or current_user.username} accepted the invitation"
+    )
+    log_team_activity(
+        db=db,
+        team_id=id,
+        actor_id=current_user.id,
+        action_type="player_joined",
+        description=f"{current_user.full_name or current_user.username} joined the team"
+    )
+        
     db.commit()
     db.refresh(member)
     return make_member_response(member, current_user)
@@ -203,6 +234,14 @@ def reject_invitation(
             extra_data=json.dumps({"team_id": str(id)})
         )
         db.add(notif)
+        
+    log_team_activity(
+        db=db,
+        team_id=id,
+        actor_id=current_user.id,
+        action_type="invitation_rejected",
+        description=f"{current_user.full_name or current_user.username} rejected the invitation"
+    )
         
     db.commit()
     return None
@@ -397,6 +436,22 @@ def update_team(
 
     if team_in.description is not None:
         team.description = team_in.description
+    if team_in.home_ground is not None:
+        team.home_ground = team_in.home_ground
+    if team_in.city is not None:
+        team.city = team_in.city
+    if team_in.team_motto is not None:
+        team.team_motto = team_in.team_motto
+    if team_in.founded_year is not None:
+        team.founded_year = team_in.founded_year
+
+    log_team_activity(
+        db=db,
+        team_id=id,
+        actor_id=current_user.id,
+        action_type="team_updated",
+        description=f"Team info updated by {current_user.full_name or current_user.username}"
+    )
 
     # Update captain if provided and check membership
     if team_in.captain_id is not None:
@@ -691,7 +746,8 @@ def add_member_to_team(
         team_id=id,
         user_id=user_to_add.id,
         role="player",
-        status="invited"
+        status="invited",
+        invited_by_id=current_user.id
     )
     db.add(member)
 
@@ -705,6 +761,14 @@ def add_member_to_team(
         extra_data=json.dumps({"team_id": str(id)})
     )
     db.add(notif)
+
+    log_team_activity(
+        db=db,
+        team_id=id,
+        actor_id=current_user.id,
+        action_type="player_invited",
+        description=f"{user_to_add.full_name or user_to_add.username} was invited by {current_user.full_name or current_user.username}"
+    )
 
     db.commit()
     db.refresh(member)
@@ -758,6 +822,9 @@ def remove_member_from_team(
         raise HTTPException(status_code=400, detail="The active team captain cannot be removed. Transfer captaincy first.")
 
     import json
+    target_user = db.query(User).filter(User.id == user_id).first()
+    target_name = target_user.full_name or target_user.username if target_user else "User"
+
     if is_self:
         if member.status == "pending":
             # Join request cancelled -> notify captains
@@ -791,8 +858,15 @@ def remove_member_from_team(
                     extra_data=json.dumps({"team_id": str(id)})
                 )
                 db.add(notif)
+            log_team_activity(
+                db=db,
+                team_id=id,
+                actor_id=current_user.id,
+                action_type="player_left",
+                description=f"{target_name} left the team"
+            )
     else:
-        # Captain removed member -> notify the removed user if they were active or invited
+        # Captain/VC removed member -> notify the removed user if they were active or invited
         if member.status in ["active", "invited"]:
             notif = Notification(
                 user_id=user_id,
@@ -802,6 +876,13 @@ def remove_member_from_team(
                 extra_data=json.dumps({"team_id": str(id)})
             )
             db.add(notif)
+            log_team_activity(
+                db=db,
+                team_id=id,
+                actor_id=current_user.id,
+                action_type="player_removed",
+                description=f"{target_name} was removed from the team by {current_user.full_name or current_user.username}"
+            )
 
     db.delete(member)
     db.commit()
@@ -895,6 +976,7 @@ def approve_join_request(
         raise HTTPException(status_code=404, detail="Pending request not found")
 
     member.status = "active"
+    member.invited_by_id = current_user.id
 
     # Create notification for approved user
     import json
@@ -907,10 +989,27 @@ def approve_join_request(
     )
     db.add(notif)
 
+    user_approved = db.query(User).filter(User.id == req.user_id).first()
+    user_name = user_approved.full_name or user_approved.username if user_approved else "User"
+
+    log_team_activity(
+        db=db,
+        team_id=id,
+        actor_id=current_user.id,
+        action_type="join_request_approved",
+        description=f"Join request from {user_name} approved by {current_user.full_name or current_user.username}"
+    )
+    log_team_activity(
+        db=db,
+        team_id=id,
+        actor_id=req.user_id,
+        action_type="player_joined",
+        description=f"{user_name} joined the team"
+    )
+
     db.commit()
     db.refresh(member)
 
-    user_approved = db.query(User).filter(User.id == req.user_id).first()
     return make_member_response(member, user_approved)
 
 @router.post("/{id}/reject-request", status_code=status.HTTP_204_NO_CONTENT)
@@ -961,6 +1060,17 @@ def reject_join_request(
         extra_data=json.dumps({"team_id": str(id)})
     )
     db.add(notif)
+
+    user_rejected = db.query(User).filter(User.id == req.user_id).first()
+    user_name = user_rejected.full_name or user_rejected.username if user_rejected else "User"
+
+    log_team_activity(
+        db=db,
+        team_id=id,
+        actor_id=current_user.id,
+        action_type="join_request_rejected",
+        description=f"Join request from {user_name} rejected by {current_user.full_name or current_user.username}"
+    )
     
     db.commit()
     return None
@@ -1129,6 +1239,32 @@ def update_member_role(
                     )
                     db.add(notif)
 
+    # Log Activity
+    if new_role == "captain":
+        log_team_activity(
+            db=db,
+            team_id=id,
+            actor_id=current_user.id,
+            action_type="captain_transferred",
+            description=f"Captaincy transferred to {target_user.full_name or target_user.username} by {current_user.full_name or current_user.username}"
+        )
+    elif new_role == "vice_captain":
+        log_team_activity(
+            db=db,
+            team_id=id,
+            actor_id=current_user.id,
+            action_type="vice_captain_promoted",
+            description=f"{target_user.full_name or target_user.username} promoted to Vice Captain by {current_user.full_name or current_user.username}"
+        )
+    elif new_role == "player" and old_role == "vice_captain":
+        log_team_activity(
+            db=db,
+            team_id=id,
+            actor_id=current_user.id,
+            action_type="vice_captain_removed",
+            description=f"{target_user.full_name or target_user.username} removed from Vice Captain by {current_user.full_name or current_user.username}"
+        )
+
     db.commit()
     db.refresh(member)
 
@@ -1158,6 +1294,8 @@ def update_team_squad_config(
         raise HTTPException(status_code=403, detail="Only the captain can modify squad configuration")
 
     response_members = []
+    playing_xi_changed = False
+    jersey_changed = False
     
     # Process updates for each member specified in the request
     for mem_config in req.members:
@@ -1169,6 +1307,28 @@ def update_team_squad_config(
         if not member:
             raise HTTPException(status_code=404, detail=f"Member not found for user ID: {mem_config.user_id}")
             
+        if team.is_squad_locked:
+            has_changes = (
+                member.is_playing_xi != mem_config.is_playing_xi or
+                member.is_wicketkeeper != mem_config.is_wicketkeeper or
+                member.jersey_number != mem_config.jersey_number or
+                member.batting_order != mem_config.batting_order or
+                member.bowling_order != mem_config.bowling_order
+            )
+            if has_changes:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Squad is locked. Playing XI, Jersey, Orders, and Wicket Keeper configurations cannot be modified."
+                )
+
+        if (member.is_playing_xi != mem_config.is_playing_xi or 
+            member.is_wicketkeeper != mem_config.is_wicketkeeper or
+            member.batting_order != mem_config.batting_order or
+            member.bowling_order != mem_config.bowling_order):
+            playing_xi_changed = True
+        if member.jersey_number != mem_config.jersey_number:
+            jersey_changed = True
+
         # Update fields
         member.is_playing_xi = mem_config.is_playing_xi
         member.is_wicketkeeper = mem_config.is_wicketkeeper
@@ -1195,6 +1355,140 @@ def update_team_squad_config(
         if target_user:
             response_members.append(make_member_response(member, target_user))
             
+    if playing_xi_changed:
+        log_team_activity(
+            db=db,
+            team_id=id,
+            actor_id=current_user.id,
+            action_type="playing_xi_updated",
+            description=f"Playing XI settings updated by {current_user.full_name or current_user.username}"
+        )
+    if jersey_changed:
+        log_team_activity(
+            db=db,
+            team_id=id,
+            actor_id=current_user.id,
+            action_type="jersey_changed",
+            description=f"Player jersey numbers updated by {current_user.full_name or current_user.username}"
+        )
+
     db.commit()
     
     return response_members
+
+
+def log_team_activity(db: Session, team_id: UUID, actor_id: Optional[UUID], action_type: str, description: str):
+    activity = TeamActivity(
+        team_id=team_id,
+        user_id=actor_id,
+        action_type=action_type,
+        description=description
+    )
+    db.add(activity)
+
+
+@router.post("/{id}/lock", response_model=TeamResponse)
+def lock_team_squad(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    is_captain = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).first()
+    if not is_captain and team.created_by != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only the captain can lock the squad")
+
+    team.is_squad_locked = True
+    db.add(team)
+    
+    log_team_activity(
+        db=db,
+        team_id=id,
+        actor_id=current_user.id,
+        action_type="squad_locked",
+        description=f"Squad locked by {current_user.full_name or current_user.username}"
+    )
+    db.commit()
+    db.refresh(team)
+    return team
+
+
+@router.post("/{id}/unlock", response_model=TeamResponse)
+def unlock_team_squad(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    is_captain = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).first()
+    if not is_captain and team.created_by != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only the captain can unlock the squad")
+
+    team.is_squad_locked = False
+    db.add(team)
+    
+    log_team_activity(
+        db=db,
+        team_id=id,
+        actor_id=current_user.id,
+        action_type="squad_unlocked",
+        description=f"Squad unlocked by {current_user.full_name or current_user.username}"
+    )
+    db.commit()
+    db.refresh(team)
+    return team
+
+
+@router.get("/{id}/activities", response_model=List[TeamActivityResponse])
+def get_team_activities(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    member = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.status == "active"
+    ).first()
+    if not member and team.created_by != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only team members can view the activity timeline")
+
+    activities = db.query(TeamActivity).filter(TeamActivity.team_id == id).order_by(TeamActivity.created_at.desc()).all()
+    
+    res = []
+    for act in activities:
+        actor_name = None
+        if act.user_id:
+            u = db.query(User).filter(User.id == act.user_id).first()
+            if u:
+                actor_name = u.full_name or u.username or "User"
+        res.append(TeamActivityResponse(
+            id=act.id,
+            team_id=act.team_id,
+            user_id=act.user_id,
+            user_name=actor_name,
+            action_type=act.action_type,
+            description=act.description,
+            created_at=act.created_at
+        ))
+    return res

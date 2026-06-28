@@ -468,13 +468,24 @@ class ApiService {
     );
   }
 
-  Future<Response> updateTeam(String id, String name, {String? captainId, String? description}) async {
+  Future<Response> updateTeam(String id, String name, {
+    String? captainId,
+    String? description,
+    String? homeGround,
+    String? city,
+    String? teamMotto,
+    int? foundedYear,
+  }) async {
     return await _dio.put(
       '/teams/$id',
       data: {
         'name': name,
         if (captainId != null) 'captain_id': captainId,
         if (description != null) 'description': description,
+        if (homeGround != null) 'home_ground': homeGround,
+        if (city != null) 'city': city,
+        if (teamMotto != null) 'team_motto': teamMotto,
+        if (foundedYear != null) 'founded_year': foundedYear,
       },
     );
   }
@@ -897,6 +908,18 @@ class ApiService {
         'members': members,
       },
     );
+  }
+
+  Future<Response> lockSquad(String teamId) async {
+    return await _dio.post('/teams/$teamId/lock');
+  }
+
+  Future<Response> unlockSquad(String teamId) async {
+    return await _dio.post('/teams/$teamId/unlock');
+  }
+
+  Future<Response> getTeamActivities(String teamId) async {
+    return await _dio.get('/teams/$teamId/activities');
   }
 
   Future<Response> testConnection() async {
