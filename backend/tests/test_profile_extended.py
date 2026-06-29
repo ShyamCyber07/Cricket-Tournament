@@ -1,6 +1,8 @@
 import pytest
+from uuid import UUID
+from datetime import datetime, timezone
 from app.models.user import User
-from app.models.cricket import Team, TeamMember
+from app.models.cricket import Team, TeamMember, Tournament, TeamInvitation, JoinRequest
 
 def test_public_id_and_privacy_defaults(client, db):
     # Verify that a new user gets a default public_id and privacy_settings
@@ -186,3 +188,94 @@ def test_team_code_regeneration(client, db, auth_headers):
         json={"team_code": "TC-SC0001"}
     )
     assert response_join.status_code == 404
+
+
+def test_team_and_tournament_search(client, db, auth_headers):
+    # Create test team & tournament
+    team = Team(
+        name="Searchable Stars",
+        team_code="TC-SRCH01",
+        created_by=UUID("5d264ce8-1dda-4bf9-84c6-de3d8d6852d8")
+    )
+    tour = Tournament(
+        name="Searchable Trophy",
+        organizer_id=UUID("5d264ce8-1dda-4bf9-84c6-de3d8d6852d8"),
+        created_by=UUID("5d264ce8-1dda-4bf9-84c6-de3d8d6852d8"),
+        start_date=datetime.now(timezone.utc).date(),
+        end_date=datetime.now(timezone.utc).date(),
+        format="t20"
+    )
+    db.add(team)
+    db.add(tour)
+    db.commit()
+
+    # Search team
+    response = client.get(
+        "/api/v1/teams/search?query=Searchable",
+        headers=auth_headers
+    )
+    assert response.status_code == 200
+    assert len(response.json()) > 0
+    assert response.json()[0]["name"] == "Searchable Stars"
+
+    # Search tournament
+    response = client.get(
+        "/api/v1/tournaments/search?query=Trophy",
+        headers=auth_headers
+    )
+    assert response.status_code == 200
+    assert len(response.json()) > 0
+    assert response.json()[0]["name"] == "Searchable Trophy"
+
+
+def test_invite_and_request_history(client, db, auth_headers):
+    # Retrieve scorer user
+    user = db.query(User).filter(User.email == "testscorer@example.com").first()
+
+    # Create target user
+    recipient = User(
+        email="recipient@example.com",
+        username="recipient_user",
+        hashed_password="somepassword",
+        email_verified=True
+    )
+    db.add(recipient)
+    db.commit()
+
+    # Create team
+    team = Team(
+        name="History Club",
+        team_code="TC-HIST01",
+        created_by=user.id
+    )
+    db.add(team)
+    db.commit()
+
+    # Join as Captain active member
+    captain_member = TeamMember(
+        team_id=team.id,
+        user_id=user.id,
+        role="captain",
+        status="active"
+    )
+    db.add(captain_member)
+    db.commit()
+
+    # Invite recipient
+    response = client.post(
+        f"/api/v1/teams/{team.id}/members",
+        headers=auth_headers,
+        json={"email": "recipient@example.com"}
+    )
+    assert response.status_code == 200
+
+    # Retrieve history
+    history_resp = client.get(
+        f"/api/v1/teams/{team.id}/invitations",
+        headers=auth_headers
+    )
+    assert history_resp.status_code == 200
+    data = history_resp.json()
+    assert len(data) > 0
+    assert data[0]["status"] == "pending"
+    assert data[0]["user_name"] in ["recipient_user", "User"]

@@ -12,8 +12,8 @@ from app.core.storage import upload_image, delete_image
 from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User
-from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad, TeamMember, Notification, TeamActivity
-from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate, BulkAddPlayersRequest, TeamMemberResponse, MyTeamsResponse, AddMemberRequest, ApproveMemberRequest, UpdateMemberRoleRequest, UpdateSquadConfigRequest, TeamActivityResponse
+from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad, TeamMember, Notification, TeamActivity, TeamInvitation, JoinRequest
+from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate, BulkAddPlayersRequest, TeamMemberResponse, MyTeamsResponse, AddMemberRequest, ApproveMemberRequest, UpdateMemberRoleRequest, UpdateSquadConfigRequest, TeamActivityResponse, TeamInvitationResponse, JoinRequestResponse
 
 router = APIRouter()
 
@@ -166,6 +166,15 @@ def accept_invitation(
         raise HTTPException(status_code=404, detail="Invitation not found")
         
     member.status = "active"
+
+    invitation = db.query(TeamInvitation).filter(
+        TeamInvitation.team_id == id,
+        TeamInvitation.user_id == current_user.id,
+        TeamInvitation.status == "pending"
+    ).order_by(TeamInvitation.created_at.desc()).first()
+    if invitation:
+        invitation.status = "accepted"
+        db.add(invitation)
     
     # Notify all active captains of this team that the user accepted
     import json
@@ -224,6 +233,15 @@ def reject_invitation(
         raise HTTPException(status_code=404, detail="Invitation not found")
         
     db.delete(member)
+
+    invitation = db.query(TeamInvitation).filter(
+        TeamInvitation.team_id == id,
+        TeamInvitation.user_id == current_user.id,
+        TeamInvitation.status == "pending"
+    ).order_by(TeamInvitation.created_at.desc()).first()
+    if invitation:
+        invitation.status = "rejected"
+        db.add(invitation)
     
     # Notify all active captains of this team that the user rejected
     import json
@@ -253,6 +271,22 @@ def reject_invitation(
         
     db.commit()
     return None
+
+
+@router.get("/search", response_model=List[TeamResponse])
+def search_teams(
+    query: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if len(query.strip()) < 2:
+        return []
+    teams = db.query(Team).filter(
+        (Team.name.ilike(f"%{query}%")) |
+        (Team.team_code.ilike(f"%{query}%"))
+    ).all()
+    return teams
+
 
 @router.get("/", response_model=List[TeamResponse])
 def list_teams(
@@ -764,6 +798,14 @@ def add_member_to_team(
     )
     db.add(member)
 
+    invitation = TeamInvitation(
+        team_id=id,
+        user_id=user_to_add.id,
+        invited_by_id=current_user.id,
+        status="pending"
+    )
+    db.add(invitation)
+
     # Create notification for the user
     import json
     notif = Notification(
@@ -841,6 +883,15 @@ def remove_member_from_team(
     if is_self:
         if member.status == "pending":
             # Join request cancelled -> notify captains
+            req_log = db.query(JoinRequest).filter(
+                JoinRequest.team_id == id,
+                JoinRequest.user_id == current_user.id,
+                JoinRequest.status == "pending"
+            ).order_by(JoinRequest.created_at.desc()).first()
+            if req_log:
+                req_log.status = "withdrawn"
+                db.add(req_log)
+
             captains = db.query(TeamMember).filter(
                 TeamMember.team_id == id,
                 TeamMember.role == "captain",
@@ -880,6 +931,16 @@ def remove_member_from_team(
             )
     else:
         # Captain/VC removed member -> notify the removed user if they were active or invited
+        if member.status == "invited":
+            inv = db.query(TeamInvitation).filter(
+                TeamInvitation.team_id == id,
+                TeamInvitation.user_id == user_id,
+                TeamInvitation.status == "pending"
+            ).order_by(TeamInvitation.created_at.desc()).first()
+            if inv:
+                inv.status = "cancelled"
+                db.add(inv)
+
         if member.status in ["active", "invited"]:
             notif = Notification(
                 user_id=user_id,
@@ -928,6 +989,13 @@ def create_join_request(
         status="pending"
     )
     db.add(member)
+
+    req_log = JoinRequest(
+        team_id=id,
+        user_id=current_user.id,
+        status="pending"
+    )
+    db.add(req_log)
     
     # Notify all active captains of this team
     import json
@@ -990,6 +1058,15 @@ def approve_join_request(
 
     member.status = "active"
     member.invited_by_id = current_user.id
+
+    req_log = db.query(JoinRequest).filter(
+        JoinRequest.team_id == id,
+        JoinRequest.user_id == req.user_id,
+        JoinRequest.status == "pending"
+    ).order_by(JoinRequest.created_at.desc()).first()
+    if req_log:
+        req_log.status = "approved"
+        db.add(req_log)
 
     # Create notification for approved user
     import json
@@ -1062,6 +1139,15 @@ def reject_join_request(
         raise HTTPException(status_code=404, detail="Pending request not found")
 
     db.delete(member)
+
+    req_log = db.query(JoinRequest).filter(
+        JoinRequest.team_id == id,
+        JoinRequest.user_id == req.user_id,
+        JoinRequest.status == "pending"
+    ).order_by(JoinRequest.created_at.desc()).first()
+    if req_log:
+        req_log.status = "rejected"
+        db.add(req_log)
     
     # Create notification for rejected user
     import json
@@ -1610,3 +1696,90 @@ def regenerate_team_code(
     db.commit()
     db.refresh(team)
     return team
+
+
+@router.get("/{id}/invitations", response_model=List[TeamInvitationResponse])
+def get_team_invitations_history(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+        
+    member = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.status == "active"
+    ).first()
+    is_authorized = (
+        current_user.role == "admin" or
+        team.created_by == current_user.id or
+        (member and member.role in ["captain", "vice_captain"])
+    )
+    if not is_authorized:
+        raise HTTPException(status_code=403, detail="You don't have permission to perform this action.")
+        
+    invitations = db.query(TeamInvitation).filter(
+        TeamInvitation.team_id == id
+    ).order_by(TeamInvitation.created_at.desc()).all()
+    
+    res = []
+    for inv in invitations:
+        user_name = inv.user.full_name or inv.user.username if inv.user else "User"
+        invited_by_name = inv.invited_by.full_name or inv.invited_by.username if inv.invited_by else None
+        res.append(TeamInvitationResponse(
+            id=inv.id,
+            team_id=inv.team_id,
+            user_id=inv.user_id,
+            user_name=user_name,
+            invited_by_id=inv.invited_by_id,
+            invited_by_name=invited_by_name,
+            status=inv.status,
+            created_at=inv.created_at,
+            updated_at=inv.updated_at
+        ))
+    return res
+
+
+@router.get("/{id}/join-requests", response_model=List[JoinRequestResponse])
+def get_team_join_requests_history(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+        
+    member = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.status == "active"
+    ).first()
+    is_authorized = (
+        current_user.role == "admin" or
+        team.created_by == current_user.id or
+        (member and member.role in ["captain", "vice_captain"])
+    )
+    if not is_authorized:
+        raise HTTPException(status_code=403, detail="You don't have permission to perform this action.")
+        
+    requests = db.query(JoinRequest).filter(
+        JoinRequest.team_id == id
+    ).order_by(JoinRequest.created_at.desc()).all()
+    
+    res = []
+    for req in requests:
+        user_name = req.user.full_name or req.user.username if req.user else "User"
+        res.append(JoinRequestResponse(
+            id=req.id,
+            team_id=req.team_id,
+            user_id=req.user_id,
+            user_name=user_name,
+            status=req.status,
+            created_at=req.created_at,
+            updated_at=req.updated_at
+        ))
+    return res

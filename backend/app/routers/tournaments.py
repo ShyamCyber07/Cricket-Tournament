@@ -167,6 +167,21 @@ def create_tournament(
     db.commit()
     return db_tour
 
+
+@router.get("/search", response_model=List[TournamentResponse])
+def search_tournaments(
+    query: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if len(query.strip()) < 2:
+        return []
+    tournaments = db.query(Tournament).filter(
+        Tournament.name.ilike(f"%{query}%")
+    ).all()
+    return tournaments
+
+
 @router.get("/", response_model=List[TournamentResponse])
 def list_tournaments(db: Session = Depends(get_db)):
     return db.query(Tournament).all()

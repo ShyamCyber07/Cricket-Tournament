@@ -311,3 +311,35 @@ class TournamentActivity(Base):
     # Relationships
     tournament = relationship("Tournament", foreign_keys=[tournament_id])
     user = relationship("User", foreign_keys=[user_id])
+
+
+class TeamInvitation(Base):
+    __tablename__ = "team_invitations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    team_id = Column(UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    invited_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id", name="fk_team_invitations_invited_by_id_users", ondelete="SET NULL"), nullable=True)
+    status = Column(String, default="pending", nullable=False)  # pending, accepted, rejected, cancelled, expired
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    team = relationship("Team")
+    user = relationship("User", foreign_keys=[user_id])
+    invited_by = relationship("User", foreign_keys=[invited_by_id])
+
+
+class JoinRequest(Base):
+    __tablename__ = "join_requests"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    team_id = Column(UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String, default="pending", nullable=False)  # pending, approved, rejected, cancelled, withdrawn
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    team = relationship("Team")
+    user = relationship("User", foreign_keys=[user_id])

@@ -7,6 +7,7 @@ import 'package:cricket_scorer/core/app_config.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'edit_profile_screen.dart';
+import 'settings_screen.dart';
 import 'package:cricket_scorer/features/admin/screens/admin_dashboard_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -675,7 +676,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                         icon: const Icon(Icons.share_rounded, color: Colors.white),
                                         onPressed: _shareProfile,
                                       ),
-                                      if (widget.publicId == null)
+                                      if (widget.publicId == null) ...[
                                         IconButton(
                                           icon: const Icon(Icons.edit_rounded, color: Colors.white),
                                           onPressed: () async {
@@ -692,6 +693,19 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                             }
                                           },
                                         ),
+                                        IconButton(
+                                          icon: const Icon(Icons.settings_rounded, color: Colors.white),
+                                          onPressed: () async {
+                                            await Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => const SettingsScreen(),
+                                              ),
+                                            );
+                                            _loadProfileData();
+                                          },
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ],

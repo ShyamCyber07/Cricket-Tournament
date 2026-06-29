@@ -862,3 +862,34 @@ def get_me(current_user: User = Depends(get_current_user)):
         logger.error(f"[GET_ME] user_id={current_user.id} email={current_user.email}")
         raise
 
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+def change_password(
+    req: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not verify_password(req.old_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect old password")
+    current_user.hashed_password = get_password_hash(req.new_password)
+    db.add(current_user)
+    db.commit()
+    return {"message": "Password changed successfully"}
+
+
+@router.delete("/delete-account")
+def delete_account(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role == "admin":
+        raise HTTPException(status_code=400, detail="You cannot delete your own admin account")
+    db.delete(current_user)
+    db.commit()
+    return {"message": "Account deleted successfully"}
+

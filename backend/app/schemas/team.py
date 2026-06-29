@@ -111,3 +111,29 @@ class TeamActivityResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TeamInvitationResponse(BaseModel):
+    id: UUID
+    team_id: UUID
+    user_id: UUID
+    user_name: str
+    invited_by_id: Optional[UUID] = None
+    invited_by_name: Optional[str] = None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class JoinRequestResponse(BaseModel):
+    id: UUID
+    team_id: UUID
+    user_id: UUID
+    user_name: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

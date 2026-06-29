@@ -1020,6 +1020,33 @@ class ApiService {
     return await _dio.get('/tournaments/$tournamentId/activities');
   }
 
+  Future<Response> searchTeams(String query) async {
+    return await _dio.get('/teams/search', queryParameters: {'query': query});
+  }
+
+  Future<Response> searchTournaments(String query) async {
+    return await _dio.get('/tournaments/search', queryParameters: {'query': query});
+  }
+
+  Future<Response> getTeamInvitationsHistory(String teamId) async {
+    return await _dio.get('/teams/$teamId/invitations');
+  }
+
+  Future<Response> getTeamJoinRequestsHistory(String teamId) async {
+    return await _dio.get('/teams/$teamId/join-requests');
+  }
+
+  Future<Response> changePassword(String oldPassword, String newPassword) async {
+    return await _dio.post('/auth/change-password', data: {
+      'old_password': oldPassword,
+      'new_password': newPassword,
+    });
+  }
+
+  Future<Response> deleteAccount() async {
+    return await _dio.delete('/auth/delete-account');
+  }
+
   Future<Response> testConnection() async {
     final uri = Uri.parse(AppConfig.baseUrl);
     final hostUrl = "${uri.scheme}://${uri.host}:${uri.port}/";
@@ -1054,10 +1081,9 @@ String _getFriendlyMessage(DioException e) {
       e.type == DioExceptionType.receiveTimeout ||
       e.type == DioExceptionType.sendTimeout ||
       e.type == DioExceptionType.connectionError ||
-      e.error is SocketException ||
-      e.message?.contains("SocketException") == true ||
-      e.error?.toString().contains("SocketException") == true) {
-    return "Please check your internet connection.";
+      e.error?.toString().contains("SocketException") == true ||
+      e.message?.contains("SocketException") == true) {
+    return "Connection timeout. Please check your internet connection and try again.";
   }
   
   if (e.type == DioExceptionType.badResponse) {

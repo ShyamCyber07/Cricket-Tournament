@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_edit_screen.dart';
+import 'package:cricket_scorer/features/dashboard/screens/team_history_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cricket_scorer/features/auth/bloc/auth_bloc.dart';
 import 'package:cricket_scorer/features/auth/bloc/auth_state.dart';
@@ -1990,6 +1991,22 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
             icon: const Icon(Icons.refresh),
             onPressed: _loadDetails,
           ),
+          if (_isCaptain || _isVC)
+            IconButton(
+              icon: const Icon(Icons.history_rounded),
+              tooltip: "Audit History",
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TeamHistoryScreen(
+                      teamId: widget.teamId,
+                      teamName: widget.teamName,
+                    ),
+                  ),
+                );
+              },
+            ),
           if (_isActiveMember && !_isCaptain)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),

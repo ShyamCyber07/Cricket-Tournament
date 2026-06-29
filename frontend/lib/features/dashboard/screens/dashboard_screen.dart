@@ -10,6 +10,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cricket_scorer/features/matches/screens/match_setup_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_management_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/my_teams_screen.dart';
+import 'package:cricket_scorer/features/dashboard/screens/universal_search_screen.dart';
 import 'package:cricket_scorer/features/admin/screens/admin_dashboard_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/scoring_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
@@ -496,11 +497,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         actions: [
           IconButton(
             icon: const Icon(Icons.search_rounded, color: Colors.white70),
-            tooltip: "Search Players",
+            tooltip: "Universal Search",
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const PlayerSearchScreen()),
+                MaterialPageRoute(builder: (context) => const UniversalSearchScreen()),
               );
             },
           ),

@@ -14,7 +14,9 @@ from app.models.cricket import (
     Notification,
     TeamActivity,
     TournamentRequest,
-    TournamentActivity
+    TournamentActivity,
+    TeamInvitation,
+    JoinRequest
 )
 
 __all__ = [
@@ -37,5 +39,7 @@ __all__ = [
     "Notification",
     "TeamActivity",
     "TournamentRequest",
-    "TournamentActivity"
+    "TournamentActivity",
+    "TeamInvitation",
+    "JoinRequest"
 ]
