@@ -13,10 +13,12 @@ import 'package:cricket_scorer/core/event_bus.dart';
 class MyTeamsScreen extends StatefulWidget {
   final bool selectSquad;
   final int initialTabIndex;
+  final String? joinTeamCode;
   const MyTeamsScreen({
     super.key,
     this.selectSquad = false,
     this.initialTabIndex = 0,
+    this.joinTeamCode,
   });
 
   @override
@@ -53,6 +55,13 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
         _loadData();
       }
     });
+
+    if (widget.joinTeamCode != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _joinCodeController.text = widget.joinTeamCode!;
+        _openJoinTeamByCodeDialog();
+      });
+    }
   }
 
   @override

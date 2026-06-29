@@ -107,6 +107,37 @@ def generate_user_public_id(db: Session) -> str:
         if not existing:
             return code
 
+import re
+
+def validate_username(username: str, db: Session, current_user_id=None):
+    username = username.strip()
+    if len(username) < 3 or len(username) > 20:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username must be between 3 and 20 characters."
+        )
+    if not re.match(r"^[a-zA-Z0-9_\.]+$", username):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username can only contain letters, numbers, dots, and underscores."
+        )
+    reserved = {"admin", "system", "support", "root", "cricup"}
+    if username.lower() in reserved:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"The username '{username}' is reserved and cannot be used."
+        )
+    query = db.query(User).filter(func.lower(User.username) == username.lower())
+    if current_user_id:
+        query = query.filter(User.id != current_user_id)
+    existing = query.first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username is already taken."
+        )
+
+
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def signup(user_in: UserSignup, db: Session = Depends(get_db)):
     logger.info(f"[SIGNUP REQUEST RECEIVED] Email: {user_in.email} | Username: {user_in.username}")
@@ -133,15 +164,7 @@ def signup(user_in: UserSignup, db: Session = Depends(get_db)):
             )
         
         # 2. Unique username check
-        username_user = db.query(User).filter(User.username == user_in.username).first()
-        if username_user:
-            print("[SIGNUP 400 REASON] duplicate username")
-            logger.info("[SIGNUP 400 REASON] duplicate username")
-            logger.warning(f"[SIGNUP DUPLICATE USERNAME] Username already exists: '{user_in.username}'")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A user with this username already exists."
-            )
+        validate_username(user_in.username, db)
             
         # Generate 6-digit OTP code
         otp_code = f"{secrets.randbelow(900000) + 100000:06d}"

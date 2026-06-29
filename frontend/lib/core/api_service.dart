@@ -390,6 +390,10 @@ class ApiService {
     );
   }
 
+  Future<Response> regenerateTeamCode(String teamId) async {
+    return await _dio.post('/teams/$teamId/regenerate-code');
+  }
+
   Future<Response> uploadProfilePhoto(String filePath) async {
     final fileName = filePath.split('/').last;
     final formData = FormData.fromMap({

@@ -211,6 +211,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                _buildProfileDetailRow("Current Team", _profile!['current_team'] ?? "No active team", Icons.group_outlined),
+                _buildProfileDetailRow("Team Role", _profile!['team_role'] != null ? _profile!['team_role'].toString().replaceAll('_', ' ').toUpperCase() : "No role", Icons.badge_outlined),
                 if (widget.publicId == null) ...[
                   _buildProfileDetailRow("Email", _profile!['email'] ?? "Not Set", Icons.email_outlined),
                   _buildProfileDetailRow("Phone", _profile!['phone_number'] ?? "Not Set", Icons.phone_outlined),
@@ -559,6 +561,36 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
+    int completion = 0;
+    List<String> missing = [];
+    if (widget.publicId == null && _profile != null) {
+      if (_profile!['profile_photo_url'] != null && _profile!['profile_photo_url'].toString().isNotEmpty) {
+        completion += 20;
+      } else {
+        missing.add("Profile Photo");
+      }
+      if (_profile!['bio'] != null && _profile!['bio'].toString().trim().isNotEmpty) {
+        completion += 20;
+      } else {
+        missing.add("Bio");
+      }
+      if (_profile!['batting_style'] != null && _profile!['batting_style'].toString().isNotEmpty) {
+        completion += 20;
+      } else {
+        missing.add("Batting Style");
+      }
+      if (_profile!['bowling_style'] != null && _profile!['bowling_style'].toString().isNotEmpty) {
+        completion += 20;
+      } else {
+        missing.add("Bowling Style");
+      }
+      if (_profile!['default_jersey_number'] != null) {
+        completion += 20;
+      } else {
+        missing.add("Jersey Number");
+      }
+    }
+
     return Scaffold(
       body: Stack(
         children: [
@@ -802,6 +834,63 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                               ),
                             ),
                           ),
+
+                          // Profile Completion Card
+                          if (widget.publicId == null && _profile != null) ...[
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+                              child: _buildGlassCard(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          "Profile Completion",
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        Text(
+                                          "$completion%",
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: completion == 100 ? AppColors.primary : AppColors.secondary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: LinearProgressIndicator(
+                                        value: completion / 100,
+                                        backgroundColor: Colors.white.withOpacity(0.06),
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                          completion == 100 ? AppColors.primary : AppColors.secondary,
+                                        ),
+                                        minHeight: 6,
+                                      ),
+                                    ),
+                                    if (missing.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        "Missing: ${missing.join(', ')}",
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
 
                           // Tab Bar
                           Container(

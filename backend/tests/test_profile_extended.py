@@ -114,3 +114,75 @@ def test_team_code_and_join(client, db, auth_headers):
     assert response.status_code == 200
     assert response.json()["role"] == "player"
     assert response.json()["status"] == "active"
+
+
+def test_username_validation_constraints(client, db):
+    # Test reserved username
+    response = client.post(
+        "/api/v1/auth/signup",
+        json={
+            "username": "admin",
+            "email": "admin@example.com",
+            "password": "Password123!",
+            "confirm_password": "Password123!"
+        }
+    )
+    assert response.status_code == 400
+    assert "reserved" in response.json()["detail"].lower()
+
+    # Test short username
+    response = client.post(
+        "/api/v1/auth/signup",
+        json={
+            "username": "ab",
+            "email": "ab@example.com",
+            "password": "Password123!",
+            "confirm_password": "Password123!"
+        }
+    )
+    assert response.status_code == 400
+    assert "characters" in response.json()["detail"]
+
+    # Test invalid chars
+    response = client.post(
+        "/api/v1/auth/signup",
+        json={
+            "username": "user@name",
+            "email": "username@example.com",
+            "password": "Password123!",
+            "confirm_password": "Password123!"
+        }
+    )
+    assert response.status_code == 400
+
+
+def test_team_code_regeneration(client, db, auth_headers):
+    # Get testscorer user
+    user = db.query(User).filter(User.email == "testscorer@example.com").first()
+    
+    # Create team owned by caller
+    team = Team(
+        name="Scorers XI",
+        created_by=user.id,
+        team_code="TC-SC0001"
+    )
+    db.add(team)
+    db.commit()
+    
+    # Regenerate team code
+    response = client.post(
+        f"/api/v1/teams/{team.id}/regenerate-code",
+        headers=auth_headers
+    )
+    assert response.status_code == 200
+    new_code = response.json()["team_code"]
+    assert new_code != "TC-SC0001"
+    assert new_code.startswith("TC-")
+
+    # Verify old code is invalid
+    response_join = client.post(
+        "/api/v1/teams/join-by-code",
+        headers=auth_headers,
+        json={"team_code": "TC-SC0001"}
+    )
+    assert response_join.status_code == 404

@@ -29,6 +29,8 @@ class ProfileResponse(BaseModel):
     profile_photo_bytes: Optional[bytes] = None
     public_id: Optional[str] = None
     privacy_settings: str = "public"
+    current_team: Optional[str] = None
+    team_role: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -119,6 +121,7 @@ class PublicProfileResponse(BaseModel):
     
     # Custom fields for public view
     current_team: Optional[str] = None
+    team_role: Optional[str] = None
     career_stats: Optional[CareerStatsResponse] = None
     achievements: List[UserAchievementResponse] = []
 

@@ -129,6 +129,23 @@ def get_profile(
         db.add(current_user)
         db.commit()
         db.refresh(current_user)
+        
+    # Find current active team
+    from app.models.cricket import Team, TeamMember
+    active_membership = db.query(TeamMember).filter(
+        TeamMember.user_id == current_user.id,
+        TeamMember.status == "active"
+    ).first()
+    current_team_name = None
+    team_role = None
+    if active_membership:
+        team = db.query(Team).filter(Team.id == active_membership.team_id).first()
+        if team:
+            current_team_name = team.name
+            team_role = active_membership.role
+            
+    current_user.current_team = current_team_name
+    current_user.team_role = team_role
     return current_user
 
 
@@ -139,14 +156,8 @@ def update_profile(
     current_user: User = Depends(get_current_user)
 ):
     if profile_in.username is not None and profile_in.username != current_user.username:
-        # Validate username format
-        import re
-        if not re.match(r"^[a-zA-Z0-9_\.]+$", profile_in.username) or len(profile_in.username) < 3 or len(profile_in.username) > 20:
-            raise HTTPException(status_code=400, detail="Username must be 3-20 characters long and contain only letters, numbers, underscores, or periods.")
-            
-        existing_user = db.query(User).filter(User.username == profile_in.username).first()
-        if existing_user:
-            raise HTTPException(status_code=400, detail="Username is already taken.")
+        from app.routers.auth import validate_username
+        validate_username(profile_in.username, db, current_user_id=current_user.id)
         current_user.username = profile_in.username
 
     if profile_in.full_name is not None:
@@ -557,10 +568,12 @@ def search_players(
                 TeamMember.status == "active"
             ).first()
             current_team_name = None
+            team_role = None
             if active_membership:
                 team = db.query(Team).filter(Team.id == active_membership.team_id).first()
                 if team:
                     current_team_name = team.name
+                    team_role = active_membership.role
                     
             career_stats = CareerStatsResponse(
                 batting=BattingStats(matches_played=0, innings=0, runs=0, highest_score=0, average=0.0, strike_rate=0.0, fours=0, sixes=0, fifties=0, hundreds=0),
@@ -595,6 +608,7 @@ def search_players(
                 joined_at=u.joined_at,
                 privacy_settings=u.privacy_settings,
                 current_team=current_team_name,
+                team_role=team_role,
                 career_stats=career_stats,
                 achievements=achievements_list
             ))
@@ -648,10 +662,12 @@ def get_public_profile(
         TeamMember.status == "active"
     ).first()
     current_team_name = None
+    team_role = None
     if active_membership:
         team = db.query(Team).filter(Team.id == active_membership.team_id).first()
         if team:
             current_team_name = team.name
+            team_role = active_membership.role
             
     career_stats = CareerStatsResponse(
         batting=BattingStats(matches_played=0, innings=0, runs=0, highest_score=0, average=0.0, strike_rate=0.0, fours=0, sixes=0, fifties=0, hundreds=0),
@@ -686,6 +702,7 @@ def get_public_profile(
         joined_at=user.joined_at,
         privacy_settings=user.privacy_settings,
         current_team=current_team_name,
+        team_role=team_role,
         career_stats=career_stats,
         achievements=achievements_list
     )

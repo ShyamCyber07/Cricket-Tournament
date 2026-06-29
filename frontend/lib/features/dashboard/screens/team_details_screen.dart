@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_edit_screen.dart';
@@ -269,40 +271,43 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
           ),
           if (_isCaptain || _isVC) ...[
             const SizedBox(height: 12),
-            GestureDetector(
-              onTap: () {
-                final code = _team?['team_code'] ?? "";
-                if (code.isNotEmpty) {
-                  Clipboard.setData(ClipboardData(text: code));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text("Team code copied: $code", style: GoogleFonts.outfit()),
-                      backgroundColor: AppColors.secondary,
-                      behavior: SnackBarBehavior.floating,
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Team Code (Share with players to join)", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                        const SizedBox(height: 4),
+                        Text(
+                          _team?['team_code'] ?? "NOT SET",
+                          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.primary, letterSpacing: 1),
+                        ),
+                      ],
                     ),
-                  );
-                }
-              },
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("Team Code (Share with players to join)", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
-                          const SizedBox(height: 4),
-                          Text(
-                            _team?['team_code'] ?? "NOT SET",
-                            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.primary, letterSpacing: 1),
-                          ),
-                        ],
-                      ),
-                      const Icon(Icons.copy_all_rounded, color: AppColors.primary),
-                    ],
-                  ),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.copy_all_rounded, color: AppColors.primary),
+                          onPressed: () {
+                            final code = _team?['team_code'] ?? "";
+                            if (code.isNotEmpty) {
+                              Clipboard.setData(ClipboardData(text: code));
+                              _showSnackBar("Team code copied: $code", AppColors.primary);
+                            }
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh_rounded, color: AppColors.secondary),
+                          tooltip: "Regenerate Code",
+                          onPressed: _regenerateTeamCode,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -989,48 +994,304 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     );
   }
 
-  void _showAddMemberDialog() {
-    _addMemberController.clear();
-    showDialog(
+  Future<void> _regenerateTeamCode() async {
+    final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          title: Text("Add Team Member", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-          content: Form(
-            key: _formKey,
-            child: TextFormField(
-              controller: _addMemberController,
-              keyboardType: TextInputType.text,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: "Email, Username, or Public User ID",
-                prefixIcon: Icon(Icons.person_add_alt_1_outlined, color: AppColors.primary),
-              ),
-              validator: (val) {
-                if (val == null || val.trim().isEmpty) {
-                  return "Please enter Email, Username, or Public User ID";
-                }
-                return null;
-              },
-            ),
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text("Regenerate Team Code", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        content: Text(
+          "Are you sure you want to regenerate the team code? The old code will immediately become invalid and cannot be used to join.",
+          style: GoogleFonts.outfit(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
             ),
-            ElevatedButton(
-              onPressed: _addMember,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.black,
+            onPressed: () => Navigator.pop(context, true),
+            child: Text("Regenerate", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final res = await _apiService.regenerateTeamCode(widget.teamId);
+      if (res.statusCode == 200) {
+        _showSnackBar("Team code regenerated successfully!", AppColors.primary);
+        _loadDetails();
+      }
+    } catch (e) {
+      _showSnackBar("Failed to regenerate code: $e", AppColors.error);
+    }
+  }
+
+  void _showInviteBottomSheet() {
+    _addMemberController.clear();
+    final teamName = widget.teamName;
+    final teamCode = _team?['team_code'] ?? "NOT SET";
+    final inviteLink = "https://cricup.app/team/$teamCode";
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.75,
+              decoration: const BoxDecoration(
+                color: Color(0xff090c15),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(28),
+                  topRight: Radius.circular(28),
+                ),
               ),
-              child: Text("Add", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-            ),
-          ],
+              child: DefaultTabController(
+                length: 3,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    Container(
+                      width: 50,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      "INVITE PLAYERS",
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TabBar(
+                      indicatorColor: AppColors.primary,
+                      labelColor: AppColors.primary,
+                      unselectedLabelColor: Colors.white54,
+                      labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                      tabs: const [
+                        Tab(text: "DIRECT INVITE"),
+                        Tab(text: "SHARE DETAILS"),
+                        Tab(text: "SCAN QR"),
+                      ],
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    "Invite a player directly to your team by entering their email address, CricUP username, or unique public User ID.",
+                                    style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  TextFormField(
+                                    controller: _addMemberController,
+                                    style: const TextStyle(color: Colors.white),
+                                    decoration: const InputDecoration(
+                                      labelText: "Email, Username, or Public User ID",
+                                      prefixIcon: Icon(Icons.person_add_alt_1_outlined, color: AppColors.primary),
+                                    ),
+                                    validator: (val) {
+                                      if (val == null || val.trim().isEmpty) {
+                                        return "Please enter Email, Username, or Public User ID";
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const Spacer(),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primary,
+                                      foregroundColor: Colors.black,
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                    ),
+                                    onPressed: () {
+                                      if (_formKey.currentState!.validate()) {
+                                        Navigator.pop(context);
+                                        _addMember();
+                                      }
+                                    },
+                                    child: Text(
+                                      "SEND INVITATION",
+                                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  "Share the team details, copy the unique team join code, or share the permanent join link with players.",
+                                  style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary),
+                                ),
+                                const SizedBox(height: 24),
+                                _buildShareCard(
+                                  title: "Team Code",
+                                  value: teamCode,
+                                  icon: Icons.copy_rounded,
+                                  onTap: () {
+                                    Clipboard.setData(ClipboardData(text: teamCode));
+                                    _showSnackBar("Team code copied!", AppColors.primary);
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                _buildShareCard(
+                                  title: "Invite Link",
+                                  value: inviteLink,
+                                  icon: Icons.link_rounded,
+                                  onTap: () {
+                                    Clipboard.setData(ClipboardData(text: inviteLink));
+                                    _showSnackBar("Invite link copied!", AppColors.primary);
+                                  },
+                                ),
+                                const Spacer(),
+                                ElevatedButton.icon(
+                                  icon: const Icon(Icons.share_rounded, size: 18),
+                                  label: Text(
+                                    "SHARE TEAM INFO",
+                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.secondary,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  ),
+                                  onPressed: () {
+                                    Share.share(
+                                      "Join my cricket team '$teamName' on CricUP!\n"
+                                      "Team Code: $teamCode\n"
+                                      "Invite Link: $inviteLink",
+                                    );
+                                  },
+                                ),
+                                const SizedBox(height: 20),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  "Present this QR Code to players. Scanning this code will redirect them directly to the join screen.",
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary),
+                                ),
+                                const SizedBox(height: 24),
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: QrImageView(
+                                    data: inviteLink,
+                                    version: QrVersions.auto,
+                                    size: 160.0,
+                                    eyeStyle: const QrEyeStyle(
+                                      eyeShape: QrEyeShape.square,
+                                      color: Colors.black,
+                                    ),
+                                    dataModuleStyle: const QrDataModuleStyle(
+                                      dataModuleShape: QrDataModuleShape.square,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                Text(
+                                  "Team Code: $teamCode",
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: Colors.white70,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const Spacer(),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
+    );
+  }
+
+  Widget _buildShareCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary)),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: Icon(icon, color: AppColors.primary, size: 20),
+            onPressed: onTap,
+          ),
+        ],
+      ),
     );
   }
 
@@ -1143,7 +1404,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
               TextButton.icon(
                 icon: const Icon(Icons.person_add_alt_1, size: 16),
                 label: const Text("Add Member"),
-                onPressed: _showAddMemberDialog,
+                onPressed: _showInviteBottomSheet,
               ),
           ],
         ),
