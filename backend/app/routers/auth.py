@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from pydantic import BaseModel
 import secrets
 import logging
 import traceback  # used by FULL TRACEBACK logs in except blocks below
