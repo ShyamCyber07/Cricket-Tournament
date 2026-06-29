@@ -70,7 +70,22 @@ class ApiService {
           print("CLASSIFIED ERROR: $category");
           print("=======================================================================");
           
-          return handler.next(e);
+          final friendlyMessage = _getFriendlyMessage(e);
+          if (resp != null) {
+            resp.data = {
+              'detail': friendlyMessage,
+              'message': friendlyMessage,
+            };
+          }
+          final customException = UserFriendlyDioException(
+            requestOptions: e.requestOptions,
+            response: resp,
+            type: e.type,
+            error: e.error,
+            stackTrace: e.stackTrace,
+            friendlyMessage: friendlyMessage,
+          );
+          return handler.next(customException);
         },
       ),
     );
@@ -977,5 +992,50 @@ class ApiService {
     dio.options.receiveTimeout = const Duration(seconds: 5);
     return await dio.get(hostUrl);
   }
+}
+
+class UserFriendlyDioException extends DioException {
+  final String friendlyMessage;
+
+  UserFriendlyDioException({
+    required super.requestOptions,
+    super.response,
+    super.type,
+    super.error,
+    super.stackTrace,
+    required this.friendlyMessage,
+  }) : super(message: friendlyMessage);
+
+  @override
+  String toString() {
+    return friendlyMessage;
+  }
+}
+
+String _getFriendlyMessage(DioException e) {
+  if (e.type == DioExceptionType.connectionTimeout ||
+      e.type == DioExceptionType.receiveTimeout ||
+      e.type == DioExceptionType.sendTimeout ||
+      e.type == DioExceptionType.connectionError ||
+      e.error is SocketException ||
+      e.message?.contains("SocketException") == true ||
+      e.error?.toString().contains("SocketException") == true) {
+    return "Please check your internet connection.";
+  }
+  
+  if (e.type == DioExceptionType.badResponse) {
+    final status = e.response?.statusCode;
+    if (status == 404) {
+      return "This item is no longer available.";
+    } else if (status == 403) {
+      return "You don't have permission to perform this action.";
+    } else if (status == 422) {
+      return "Please check the information and try again.";
+    } else if (status == 500) {
+      return "Something went wrong. Please try again.";
+    }
+  }
+  
+  return "Something went wrong. Please try again.";
 }
 

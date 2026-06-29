@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_details_screen.dart';
+import 'package:cricket_scorer/core/event_bus.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -17,11 +19,36 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _isLoading = true;
   List<dynamic> _notifications = [];
   String _selectedCategory = "All";
+  final Set<String> _processingNotifIds = {};
+  final Set<String> _processedNotifIds = {};
+  StreamSubscription? _eventSubscription;
+
+  Future<void> _fetchNotificationsQuietly() async {
+    try {
+      final res = await _apiService.getNotifications();
+      if (mounted) {
+        setState(() {
+          _notifications = res.data;
+        });
+      }
+    } catch (_) {}
+  }
 
   @override
   void initState() {
     super.initState();
     _fetchNotifications();
+    _eventSubscription = AppEventBus().on.listen((event) {
+      if (event is NotificationRefreshedEvent) {
+        _fetchNotificationsQuietly();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _eventSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _fetchNotifications() async {
@@ -339,73 +366,148 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                               ),
                                             ],
                                           ),
-                                          if ((type == 'join_request_sent' || type == 'invitation_received') && teamId != null) ...[
+                                          if ((type == 'join_request_sent' || type == 'invitation_received') &&
+                                              teamId != null &&
+                                              !isRead &&
+                                              !_processedNotifIds.contains(notifId)) ...[
                                             const SizedBox(height: 12),
                                             Row(
                                               mainAxisAlignment: MainAxisAlignment.end,
                                               children: [
-                                                OutlinedButton(
-                                                  style: OutlinedButton.styleFrom(
-                                                    side: const BorderSide(color: AppColors.error),
-                                                    foregroundColor: AppColors.error,
-                                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                 OutlinedButton(
+                                                   style: OutlinedButton.styleFrom(
+                                                     side: const BorderSide(color: AppColors.error),
+                                                     foregroundColor: AppColors.error,
+                                                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                   ),
+                                                   onPressed: _processingNotifIds.contains(notifId) || _processedNotifIds.contains(notifId)
+                                                       ? null
+                                                       : () async {
+                                                            setState(() {
+                                                              _processingNotifIds.add(notifId);
+                                                            });
+                                                            
+                                                            // Optimistic UI update: remove invitation notification immediately
+                                                            dynamic removedNotif;
+                                                            int removedIndex = -1;
+                                                            for (int i = 0; i < _notifications.length; i++) {
+                                                              if (_notifications[i]['id']?.toString() == notifId.toString()) {
+                                                                removedNotif = _notifications[i];
+                                                                removedIndex = i;
+                                                                break;
+                                                              }
+                                                            }
+                                                            if (removedIndex != -1) {
+                                                              setState(() {
+                                                                _notifications.removeAt(removedIndex);
+                                                              });
+                                                            }
+                                                            
+                                                            try {
+                                                              if (type == 'join_request_sent') {
+                                                                await _apiService.rejectJoinRequest(teamId!, requestUserId!);
+                                                                _showSnackBar("Join request rejected.", AppColors.textSecondary);
+                                                              } else {
+                                                                await _apiService.rejectInvitation(teamId!);
+                                                                _showSnackBar("Invitation rejected.", AppColors.textSecondary);
+                                                              }
+                                                              await _apiService.markNotificationRead(notifId);
+                                                              setState(() {
+                                                                _processedNotifIds.add(notifId);
+                                                              });
+                                                              AppEventBus().fire(NotificationRefreshedEvent());
+                                                              AppEventBus().fire(TeamRefreshedEvent());
+                                                            } catch (e) {
+                                                              // Revert optimistic update
+                                                              if (removedIndex != -1 && removedNotif != null) {
+                                                                setState(() {
+                                                                  _notifications.insert(removedIndex, removedNotif);
+                                                                });
+                                                              }
+                                                              _showSnackBar("Action failed: $e", AppColors.error);
+                                                            } finally {
+                                                              if (mounted) {
+                                                                setState(() {
+                                                                  _processingNotifIds.remove(notifId);
+                                                                });
+                                                              }
+                                                            }
+                                                          },
+                                                    child: Text(
+                                                      type == 'join_request_sent' ? "Reject" : "Decline",
+                                                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
+                                                    ),
                                                   ),
-                                                  onPressed: () async {
-                                                    setState(() => _isLoading = true);
-                                                    try {
-                                                      if (type == 'join_request_sent') {
-                                                        await _apiService.rejectJoinRequest(teamId!, requestUserId!);
-                                                        _showSnackBar("Join request rejected.", AppColors.textSecondary);
-                                                      } else {
-                                                        await _apiService.rejectInvitation(teamId!);
-                                                        _showSnackBar("Invitation rejected.", AppColors.textSecondary);
-                                                      }
-                                                      await _apiService.markNotificationRead(notifId);
-                                                      _fetchNotifications();
-                                                    } catch (e) {
-                                                      setState(() => _isLoading = false);
-                                                      _showSnackBar("Action failed: $e", AppColors.error);
-                                                    }
-                                                  },
-                                                  child: Text(
-                                                    type == 'join_request_sent' ? "Reject" : "Decline",
-                                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
+                                                  const SizedBox(width: 8),
+                                                  ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: AppColors.primary,
+                                                      foregroundColor: Colors.black,
+                                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                    ),
+                                                    onPressed: _processingNotifIds.contains(notifId) || _processedNotifIds.contains(notifId)
+                                                        ? null
+                                                        : () async {
+                                                            setState(() {
+                                                              _processingNotifIds.add(notifId);
+                                                            });
+                                                            
+                                                            // Optimistic UI update: remove invitation notification immediately
+                                                            dynamic removedNotif;
+                                                            int removedIndex = -1;
+                                                            for (int i = 0; i < _notifications.length; i++) {
+                                                              if (_notifications[i]['id']?.toString() == notifId.toString()) {
+                                                                removedNotif = _notifications[i];
+                                                                removedIndex = i;
+                                                                break;
+                                                              }
+                                                            }
+                                                            if (removedIndex != -1) {
+                                                              setState(() {
+                                                                _notifications.removeAt(removedIndex);
+                                                              });
+                                                            }
+                                                            
+                                                            try {
+                                                              if (type == 'join_request_sent') {
+                                                                await _apiService.approveJoinRequest(teamId!, requestUserId!);
+                                                                _showSnackBar("Join request approved!", AppColors.primary);
+                                                              } else {
+                                                                await _apiService.acceptInvitation(teamId!);
+                                                                _showSnackBar("Invitation accepted!", AppColors.primary);
+                                                              }
+                                                              await _apiService.markNotificationRead(notifId);
+                                                              setState(() {
+                                                                _processedNotifIds.add(notifId);
+                                                              });
+                                                              AppEventBus().fire(NotificationRefreshedEvent());
+                                                              AppEventBus().fire(TeamRefreshedEvent());
+                                                            } catch (e) {
+                                                              // Revert optimistic update
+                                                              if (removedIndex != -1 && removedNotif != null) {
+                                                                setState(() {
+                                                                  _notifications.insert(removedIndex, removedNotif);
+                                                                });
+                                                              }
+                                                              _showSnackBar("Action failed: $e", AppColors.error);
+                                                            } finally {
+                                                              if (mounted) {
+                                                                setState(() {
+                                                                  _processingNotifIds.remove(notifId);
+                                                                });
+                                                              }
+                                                            }
+                                                          },
+                                                    child: Text(
+                                                      type == 'join_request_sent' ? "Approve" : "Accept",
+                                                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
+                                                    ),
                                                   ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                ElevatedButton(
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: AppColors.primary,
-                                                    foregroundColor: Colors.black,
-                                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                  ),
-                                                  onPressed: () async {
-                                                    setState(() => _isLoading = true);
-                                                    try {
-                                                      if (type == 'join_request_sent') {
-                                                        await _apiService.approveJoinRequest(teamId!, requestUserId!);
-                                                        _showSnackBar("Join request approved!", AppColors.primary);
-                                                      } else {
-                                                        await _apiService.acceptInvitation(teamId!);
-                                                        _showSnackBar("Invitation accepted!", AppColors.primary);
-                                                      }
-                                                      await _apiService.markNotificationRead(notifId);
-                                                      _fetchNotifications();
-                                                    } catch (e) {
-                                                      setState(() => _isLoading = false);
-                                                      _showSnackBar("Action failed: $e", AppColors.error);
-                                                    }
-                                                  },
-                                                  child: Text(
-                                                    type == 'join_request_sent' ? "Approve" : "Accept",
-                                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
+                                               ],
+                                             ),
+                                           ],],
                                         ],
                                       ),
                                     ),

@@ -7,10 +7,17 @@ import 'package:cricket_scorer/features/dashboard/screens/team_details_screen.da
 import 'package:cricket_scorer/features/dashboard/screens/team_invitations_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:async';
+import 'package:cricket_scorer/core/event_bus.dart';
 
 class MyTeamsScreen extends StatefulWidget {
   final bool selectSquad;
-  const MyTeamsScreen({super.key, this.selectSquad = false});
+  final int initialTabIndex;
+  const MyTeamsScreen({
+    super.key,
+    this.selectSquad = false,
+    this.initialTabIndex = 0,
+  });
 
   @override
   State<MyTeamsScreen> createState() => _MyTeamsScreenState();
@@ -23,6 +30,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
   List<dynamic> _exploreTeams = [];
   bool _isLoading = true;
   final Set<String> _submittingRequests = {};
+  StreamSubscription? _eventSubscription;
 
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
@@ -33,12 +41,22 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTabIndex,
+    );
     _loadData();
+    _eventSubscription = AppEventBus().on.listen((event) {
+      if (event is TeamRefreshedEvent) {
+        _loadData();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _eventSubscription?.cancel();
     _tabController.dispose();
     _nameController.dispose();
     _exploreSearchController.dispose();

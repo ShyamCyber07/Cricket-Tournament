@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
@@ -9,7 +10,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cricket_scorer/features/matches/screens/match_setup_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_management_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/my_teams_screen.dart';
-import 'package:cricket_scorer/features/dashboard/screens/squad_management_screen.dart';
+import 'package:cricket_scorer/features/admin/screens/admin_dashboard_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/scoring_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
 import 'package:cricket_scorer/features/tournaments/screens/tournament_list_screen.dart';
@@ -17,6 +18,7 @@ import 'package:cricket_scorer/features/profile/screens/profile_screen.dart';
 import 'package:cricket_scorer/core/app_config.dart';
 import 'package:cricket_scorer/features/dashboard/screens/notifications_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_invitations_screen.dart';
+import 'package:cricket_scorer/core/event_bus.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -35,6 +37,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   late Map<String, dynamic> _currentUser;
 
   int _unreadCount = 0;
+  StreamSubscription? _eventSubscription;
 
   @override
   void initState() {
@@ -47,6 +50,15 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+
+    _eventSubscription = AppEventBus().on.listen((event) {
+      if (event is NotificationRefreshedEvent) {
+        _fetchNotificationsCount();
+      }
+      if (event is TeamRefreshedEvent) {
+        _refreshData();
+      }
+    });
   }
 
   String _resolvePhotoUrl(String? path) {
@@ -135,6 +147,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   @override
   void dispose() {
+    _eventSubscription?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -966,41 +979,103 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   }
 
   Widget _buildQuickActionsGrid(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 10,
-      mainAxisSpacing: 10,
-      childAspectRatio: 0.95,
+    final isAdmin = _currentUser['role'] == 'admin';
+    return Column(
       children: [
-        _buildActionCard(
-          context,
-          icon: Icons.groups_outlined,
-          title: "Teams",
-          color: AppColors.primary,
-          onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const MyTeamsScreen()));
-          },
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionCard(
+                context,
+                icon: Icons.groups_outlined,
+                title: "Team Management",
+                color: AppColors.primary,
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const MyTeamsScreen()));
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildActionCard(
+                context,
+                icon: Icons.emoji_events_outlined,
+                title: "Tournament Management",
+                color: AppColors.secondary,
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const TournamentListScreen()));
+                },
+              ),
+            ),
+          ],
         ),
-        _buildActionCard(
-          context,
-          icon: Icons.emoji_events_outlined,
-          title: "Tournaments",
-          color: AppColors.secondary,
-          onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const TournamentListScreen()));
-          },
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionCard(
+                context,
+                icon: Icons.sensors_outlined,
+                title: "Live Matches",
+                color: Colors.redAccent,
+                onTap: () {
+                  ScaffoldMessenger.of(context).clearSnackBars();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        "Live Matches module coming soon (Phase 3.4)!",
+                        style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600),
+                      ),
+                      backgroundColor: Colors.redAccent.withOpacity(0.9),
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  );
+                },
+                isPlaceholder: true,
+                placeholderText: "Phase 3.4",
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildActionCard(
+                context,
+                icon: Icons.insights_outlined,
+                title: "Statistics",
+                color: Colors.blueAccent,
+                onTap: () {
+                  ScaffoldMessenger.of(context).clearSnackBars();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        "Statistics module coming soon (Phase 3.5)!",
+                        style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600),
+                      ),
+                      backgroundColor: Colors.blueAccent.withOpacity(0.9),
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  );
+                },
+                isPlaceholder: true,
+                placeholderText: "Phase 3.5",
+              ),
+            ),
+          ],
         ),
-        _buildActionCard(
-          context,
-          icon: Icons.people_outline,
-          title: "Squad",
-          color: AppColors.accent,
-          onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const MyTeamsScreen(selectSquad: true)));
-          },
-        ),
+        if (isAdmin) ...[
+          const SizedBox(height: 12),
+          _buildActionCard(
+            context,
+            icon: Icons.admin_panel_settings_rounded,
+            title: "Admin Panel",
+            color: AppColors.error,
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminDashboardScreen()));
+            },
+            isFullWidth: true,
+          ),
+        ],
       ],
     );
   }
@@ -1011,33 +1086,96 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     required String title,
     required Color color,
     required VoidCallback onTap,
+    bool isFullWidth = false,
+    bool isPlaceholder = false,
+    String? placeholderText,
   }) {
+    final cardContent = isFullWidth
+        ? Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                maxLines: 1,
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          )
+        : Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                title,
+                maxLines: 1,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              if (isPlaceholder && placeholderText != null) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    placeholderText,
+                    style: GoogleFonts.outfit(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 15),
+              ],
+            ],
+          );
+
+    Widget cardWidget = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      decoration: AppColors.glassDecoration(borderRadius: BorderRadius.circular(16)),
+      child: cardContent,
+    );
+
+    if (isPlaceholder) {
+      cardWidget = Opacity(
+        opacity: 0.5,
+        child: cardWidget,
+      );
+    }
+
     return _buildSpringyButton(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-        decoration: AppColors.glassDecoration(borderRadius: BorderRadius.circular(16)),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
-            ),
-          ],
-        ),
-      ),
+      child: cardWidget,
     );
   }
 

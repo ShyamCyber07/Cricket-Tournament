@@ -3,6 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_edit_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:cricket_scorer/features/auth/bloc/auth_bloc.dart';
+import 'package:cricket_scorer/features/auth/bloc/auth_state.dart';
+import 'package:cricket_scorer/core/event_bus.dart';
 
 class TeamDetailsScreen extends StatefulWidget {
   final String teamId;
@@ -854,25 +858,41 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
   void _confirmLeave() {
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: AppColors.surface,
           title: Text("Leave Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
           content: Text("Are you sure you want to leave ${widget.teamName}?"),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
               onPressed: () async {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 setState(() => _isLoading = true);
                 try {
+                  if (_currentUserId == null) {
+                    try {
+                      final authState = BlocProvider.of<AuthBloc>(context).state;
+                      if (authState is AuthAuthenticated) {
+                        _currentUserId = authState.user['id']?.toString();
+                      } else if (authState is AuthProfileIncomplete) {
+                        _currentUserId = authState.user['id']?.toString();
+                      }
+                    } catch (_) {}
+                  }
+                  if (_currentUserId == null) {
+                    throw Exception("User ID not available.");
+                  }
                   await _apiService.removeTeamMember(widget.teamId, _currentUserId!);
                   _showSnackBar("You have left the team.", AppColors.primary);
-                  Navigator.pop(context, true);
+                  AppEventBus().fire(TeamRefreshedEvent());
+                  if (mounted) {
+                    Navigator.pop(context, true);
+                  }
                 } catch (e) {
                   setState(() => _isLoading = false);
                   _showSnackBar("Failed to leave team: $e", AppColors.error);
@@ -891,6 +911,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     try {
       await _apiService.deleteTeam(widget.teamId);
       _showSnackBar("Team deleted successfully", AppColors.primary);
+      AppEventBus().fire(TeamRefreshedEvent());
       if (mounted) {
         Navigator.pop(context, true); // Pop back to dashboard / my teams screen with refresh flag
       }

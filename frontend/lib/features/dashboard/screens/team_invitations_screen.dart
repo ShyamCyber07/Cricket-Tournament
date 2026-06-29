@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:cricket_scorer/core/app_config.dart';
+import 'dart:async';
+import 'package:cricket_scorer/core/event_bus.dart';
 
 class TeamInvitationsScreen extends StatefulWidget {
   const TeamInvitationsScreen({super.key});
@@ -15,11 +17,25 @@ class _TeamInvitationsScreenState extends State<TeamInvitationsScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   List<dynamic> _invitations = [];
+  final Set<String> _processingTeamIds = {};
+  final Set<String> _processedTeamIds = {};
+  StreamSubscription? _eventSubscription;
 
   @override
   void initState() {
     super.initState();
     _fetchInvitations();
+    _eventSubscription = AppEventBus().on.listen((event) {
+      if (event is NotificationRefreshedEvent) {
+        _fetchInvitationsQuietly();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _eventSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _fetchInvitations() async {
@@ -36,6 +52,17 @@ class _TeamInvitationsScreenState extends State<TeamInvitationsScreen> {
         SnackBar(content: Text("Error fetching invitations: $e"), backgroundColor: AppColors.error),
       );
     }
+  }
+
+  Future<void> _fetchInvitationsQuietly() async {
+    try {
+      final res = await _apiService.getMyInvitations();
+      if (mounted) {
+        setState(() {
+          _invitations = res.data;
+        });
+      }
+    } catch (_) {}
   }
 
   String _resolvePhotoUrl(String? path) {
@@ -89,7 +116,27 @@ class _TeamInvitationsScreenState extends State<TeamInvitationsScreen> {
   }
 
   Future<void> _handleAccept(String teamId, String teamName) async {
-    setState(() => _isLoading = true);
+    if (_processingTeamIds.contains(teamId) || _processedTeamIds.contains(teamId)) return;
+    setState(() {
+      _processingTeamIds.add(teamId);
+    });
+
+    // Optimistic UI update: find and remove the invitation immediately
+    dynamic removedInvite;
+    int removedIndex = -1;
+    for (int i = 0; i < _invitations.length; i++) {
+      if (_invitations[i]['team']?['id']?.toString() == teamId.toString()) {
+        removedInvite = _invitations[i];
+        removedIndex = i;
+        break;
+      }
+    }
+    if (removedIndex != -1) {
+      setState(() {
+        _invitations.removeAt(removedIndex);
+      });
+    }
+
     try {
       await _apiService.acceptInvitation(teamId);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -98,17 +145,54 @@ class _TeamInvitationsScreenState extends State<TeamInvitationsScreen> {
           backgroundColor: AppColors.primary,
         ),
       );
-      _fetchInvitations();
+      setState(() {
+        _processedTeamIds.add(teamId);
+      });
+      AppEventBus().fire(NotificationRefreshedEvent());
+      AppEventBus().fire(TeamRefreshedEvent());
+      // Quietly sync from backend in the background
+      await _fetchInvitationsQuietly();
     } catch (e) {
-      setState(() => _isLoading = false);
+      // Revert optimistic update
+      if (removedIndex != -1 && removedInvite != null) {
+        setState(() {
+          _invitations.insert(removedIndex, removedInvite);
+        });
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Failed to accept: $e"), backgroundColor: AppColors.error),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingTeamIds.remove(teamId);
+        });
+      }
     }
   }
 
   Future<void> _handleReject(String teamId, String teamName) async {
-    setState(() => _isLoading = true);
+    if (_processingTeamIds.contains(teamId) || _processedTeamIds.contains(teamId)) return;
+    setState(() {
+      _processingTeamIds.add(teamId);
+    });
+
+    // Optimistic UI update: find and remove the invitation immediately
+    dynamic removedInvite;
+    int removedIndex = -1;
+    for (int i = 0; i < _invitations.length; i++) {
+      if (_invitations[i]['team']?['id']?.toString() == teamId.toString()) {
+        removedInvite = _invitations[i];
+        removedIndex = i;
+        break;
+      }
+    }
+    if (removedIndex != -1) {
+      setState(() {
+        _invitations.removeAt(removedIndex);
+      });
+    }
+
     try {
       await _apiService.rejectInvitation(teamId);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -117,12 +201,29 @@ class _TeamInvitationsScreenState extends State<TeamInvitationsScreen> {
           backgroundColor: AppColors.textSecondary,
         ),
       );
-      _fetchInvitations();
+      setState(() {
+        _processedTeamIds.add(teamId);
+      });
+      AppEventBus().fire(NotificationRefreshedEvent());
+      AppEventBus().fire(TeamRefreshedEvent());
+      // Quietly sync from backend in the background
+      await _fetchInvitationsQuietly();
     } catch (e) {
-      setState(() => _isLoading = false);
+      // Revert optimistic update
+      if (removedIndex != -1 && removedInvite != null) {
+        setState(() {
+          _invitations.insert(removedIndex, removedInvite);
+        });
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Failed to reject: $e"), backgroundColor: AppColors.error),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingTeamIds.remove(teamId);
+        });
+      }
     }
   }
 
@@ -201,8 +302,10 @@ class _TeamInvitationsScreenState extends State<TeamInvitationsScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              OutlinedButton(
-                                onPressed: () => _handleReject(teamId, teamName),
+                               OutlinedButton(
+                                onPressed: _processingTeamIds.contains(teamId.toString()) || _processedTeamIds.contains(teamId.toString())
+                                    ? null
+                                    : () => _handleReject(teamId.toString(), teamName),
                                 style: OutlinedButton.styleFrom(
                                   side: const BorderSide(color: AppColors.error),
                                   foregroundColor: AppColors.error,
@@ -217,7 +320,9 @@ class _TeamInvitationsScreenState extends State<TeamInvitationsScreen> {
                               ),
                               const SizedBox(width: 12),
                               ElevatedButton(
-                                onPressed: () => _handleAccept(teamId, teamName),
+                                onPressed: _processingTeamIds.contains(teamId.toString()) || _processedTeamIds.contains(teamId.toString())
+                                    ? null
+                                    : () => _handleAccept(teamId.toString(), teamName),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
                                   foregroundColor: Colors.black,
