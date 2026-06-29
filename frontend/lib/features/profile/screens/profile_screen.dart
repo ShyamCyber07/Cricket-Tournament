@@ -131,6 +131,30 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
+  Widget _buildProfileDetailRow(String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.primary, size: 18),
+          const SizedBox(width: 12),
+          Text(
+            "$label:",
+            style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: GoogleFonts.outfit(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatsTab() {
     if (_stats == null) {
       return const Center(child: Text("No statistics available"));
@@ -147,6 +171,29 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Player Info Section
+          Text(
+            "👤 PLAYER PROFILE INFO",
+            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white70, letterSpacing: 1),
+          ),
+          const SizedBox(height: 12),
+          _buildGlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildProfileDetailRow("Email", _profile!['email'] ?? "Not Set", Icons.email_outlined),
+                _buildProfileDetailRow("Phone", _profile!['phone_number'] ?? "Not Set", Icons.phone_outlined),
+                _buildProfileDetailRow("City", _profile!['city'] ?? "Not Set", Icons.location_city_outlined),
+                _buildProfileDetailRow("Date of Birth", _profile!['dob'] ?? "Not Set", Icons.calendar_today_outlined),
+                _buildProfileDetailRow("Jersey Number", _profile!['default_jersey_number'] != null ? "#${_profile!['default_jersey_number']}" : "Not Set", Icons.numbers_outlined),
+                _buildProfileDetailRow("Player Type", _profile!['player_type'] != null ? _profile!['player_type'].toString().replaceAll('_', ' ').toUpperCase() : "Not Set", Icons.sports_cricket_outlined),
+                _buildProfileDetailRow("Dominant Hand", _profile!['dominant_hand'] != null ? _profile!['dominant_hand'].toString().toUpperCase() : "Not Set", Icons.front_hand_outlined),
+                _buildProfileDetailRow("Batting Style", _profile!['batting_style'] != null ? _profile!['batting_style'].toString().replaceAll('_', ' ').toUpperCase() : "Not Set", Icons.sports_cricket_outlined),
+                _buildProfileDetailRow("Bowling Style", _profile!['bowling_style'] != null ? _profile!['bowling_style'].toString().replaceAll('_', ' ').toUpperCase() : "Not Set", Icons.bolt_outlined),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
           // Batting Section
           Text(
             "🏏 BATTING STATS",

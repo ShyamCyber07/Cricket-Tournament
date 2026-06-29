@@ -58,6 +58,16 @@ class UserResponse(UserBase):
     role: str = "user"
     is_active: bool = True
     created_at: Optional[datetime] = None
+    
+    # New profile fields
+    phone_number: Optional[str] = None
+    city: Optional[str] = None
+    dob: Optional[str] = None
+    batting_style: Optional[str] = None
+    bowling_style: Optional[str] = None
+    player_type: Optional[str] = None
+    dominant_hand: Optional[str] = None
+    default_jersey_number: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 

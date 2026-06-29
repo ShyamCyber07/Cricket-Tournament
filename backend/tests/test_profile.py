@@ -78,7 +78,7 @@ def test_upload_profile_photo(client, auth_headers, db):
     res_data = response.json()
     assert "url" in res_data
     assert "profile_photo_url" in res_data
-    assert res_data["url"].startswith("/static/uploads/")
+    assert res_data["url"].startswith("/api/v1/profile/photo/")
     
     # Confirm it got updated on profile
     response = client.get("/api/v1/profile/", headers=auth_headers)

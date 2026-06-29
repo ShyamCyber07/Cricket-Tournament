@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Boolean, Integer, ForeignKey
+from sqlalchemy import Column, String, DateTime, Boolean, Integer, ForeignKey, LargeBinary
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -34,6 +34,17 @@ class User(Base):
     is_deleted = Column(Boolean, default=False, nullable=False)
     joined_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    # Persistent user profile fields
+    phone_number = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    dob = Column(String, nullable=True)
+    batting_style = Column(String, nullable=True)
+    bowling_style = Column(String, nullable=True)
+    player_type = Column(String, nullable=True)
+    dominant_hand = Column(String, nullable=True)
+    default_jersey_number = Column(Integer, nullable=True)
+    profile_photo_bytes = Column(LargeBinary, nullable=True)
 
 
     # Relationships - Fixed: removed problematic uselist=False

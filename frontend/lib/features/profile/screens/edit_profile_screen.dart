@@ -6,6 +6,7 @@ import 'package:cricket_scorer/core/api_service.dart';
 import 'package:cricket_scorer/core/app_config.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
+import 'package:intl/intl.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -23,6 +24,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _fullNameController;
   late TextEditingController _usernameController;
   late TextEditingController _bioController;
+  
+  // New profile controllers
+  late TextEditingController _phoneController;
+  late TextEditingController _cityController;
+  late TextEditingController _dobController;
+  late TextEditingController _jerseyController;
+
+  String? _selectedBattingStyle;
+  String? _selectedBowlingStyle;
+  String? _selectedPlayerType;
+  String? _selectedDominantHand;
 
   String _selectedAvatar = "🏏";
   bool _isSaving = false;
@@ -41,6 +53,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _fullNameController = TextEditingController(text: widget.user['full_name']);
     _usernameController = TextEditingController(text: widget.user['username']);
     _bioController = TextEditingController(text: widget.user['bio'] ?? "");
+    
+    _phoneController = TextEditingController(text: widget.user['phone_number']);
+    _cityController = TextEditingController(text: widget.user['city']);
+    _dobController = TextEditingController(text: widget.user['dob']);
+    _jerseyController = TextEditingController(
+      text: widget.user['default_jersey_number'] != null
+          ? widget.user['default_jersey_number'].toString()
+          : "",
+    );
+    
+    _selectedBattingStyle = widget.user['batting_style'] ?? "right_hand";
+    _selectedBowlingStyle = widget.user['bowling_style'] ?? "right_arm_spin";
+    _selectedPlayerType = widget.user['player_type'] ?? "all_rounder";
+    _selectedDominantHand = widget.user['dominant_hand'] ?? "right";
+
     _selectedAvatar = widget.user['profile_picture'] ?? "🏏";
     _uploadedPhotoUrl = widget.user['profile_photo_url'];
   }
@@ -143,7 +170,44 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _fullNameController.dispose();
     _usernameController.dispose();
     _bioController.dispose();
+    _phoneController.dispose();
+    _cityController.dispose();
+    _dobController.dispose();
+    _jerseyController.dispose();
     super.dispose();
+  }
+
+  Future<void> _selectDate() async {
+    DateTime initialDate = DateTime.now().subtract(const Duration(days: 365 * 18));
+    if (_dobController.text.isNotEmpty) {
+      try {
+        initialDate = DateFormat('yyyy-MM-dd').parse(_dobController.text);
+      } catch (_) {}
+    }
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.primary,
+              onPrimary: Colors.black,
+              surface: Color(0xff090c15),
+              onSurface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        _dobController.text = DateFormat('yyyy-MM-dd').format(picked);
+      });
+    }
   }
 
   Future<void> _saveProfile() async {
@@ -152,12 +216,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() => _isSaving = true);
 
     try {
+      final jerseyVal = _jerseyController.text.trim();
+      final int? jerseyNum = jerseyVal.isNotEmpty ? int.tryParse(jerseyVal) : null;
+      
       final res = await _apiService.updateProfile(
         fullName: _fullNameController.text.trim(),
         username: _usernameController.text.trim(),
         bio: _bioController.text.trim(),
         profilePicture: _selectedAvatar,
         profilePhotoUrl: _uploadedPhotoUrl ?? "",
+        phoneNumber: _phoneController.text.trim(),
+        city: _cityController.text.trim(),
+        dob: _dobController.text.trim(),
+        battingStyle: _selectedBattingStyle,
+        bowlingStyle: _selectedBowlingStyle,
+        playerType: _selectedPlayerType,
+        dominantHand: _selectedDominantHand,
+        defaultJerseyNumber: jerseyNum,
       );
 
       setState(() => _isSaving = false);
@@ -438,10 +513,239 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               if (value == null || value.trim().isEmpty) {
                                 return "Username is required";
                               }
-                              if (value.trim().length < 3) {
-                                return "Username must be at least 3 characters";
+                              if (value.trim().length < 3 || value.trim().length > 20) {
+                                return "Username must be 3-20 characters";
+                              }
+                              final reg = RegExp(r"^[a-zA-Z0-9_\.]+$");
+                              if (!reg.hasMatch(value.trim())) {
+                                return "Letters, numbers, underscores, or periods only";
                               }
                               return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          // Phone Number
+                          TextFormField(
+                            controller: _phoneController,
+                            keyboardType: TextInputType.phone,
+                            style: GoogleFonts.outfit(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: "Phone Number",
+                              labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.textSecondary),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.02),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          // City
+                          TextFormField(
+                            controller: _cityController,
+                            style: GoogleFonts.outfit(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: "City",
+                              labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              prefixIcon: const Icon(Icons.location_city_outlined, color: AppColors.textSecondary),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.02),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          // Date of Birth
+                          TextFormField(
+                            controller: _dobController,
+                            readOnly: true,
+                            onTap: _selectDate,
+                            style: GoogleFonts.outfit(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: "Date of Birth",
+                              labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              prefixIcon: const Icon(Icons.calendar_today_outlined, color: AppColors.textSecondary),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.02),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          // Default Jersey Number
+                          TextFormField(
+                            controller: _jerseyController,
+                            keyboardType: TextInputType.number,
+                            style: GoogleFonts.outfit(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: "Default Jersey Number",
+                              labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              prefixIcon: const Icon(Icons.numbers_outlined, color: AppColors.textSecondary),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.02),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              ),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) return null;
+                              final num = int.tryParse(value.trim());
+                              if (num == null) return "Must be a valid integer";
+                              if (num < 0 || num > 999) return "Jersey number must be 0-999";
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          // Player Type Dropdown
+                          DropdownButtonFormField<String>(
+                            value: _selectedPlayerType,
+                            dropdownColor: const Color(0xff090c15),
+                            style: GoogleFonts.outfit(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: "Player Type",
+                              labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              prefixIcon: const Icon(Icons.sports_cricket_outlined, color: AppColors.textSecondary),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.02),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              ),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: "batsman", child: Text("Batsman")),
+                              DropdownMenuItem(value: "bowler", child: Text("Bowler")),
+                              DropdownMenuItem(value: "all_rounder", child: Text("All Rounder")),
+                              DropdownMenuItem(value: "wicket_keeper", child: Text("Wicket Keeper")),
+                            ],
+                            onChanged: (val) {
+                              setState(() {
+                                _selectedPlayerType = val;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          // Dominant Hand Dropdown
+                          DropdownButtonFormField<String>(
+                            value: _selectedDominantHand,
+                            dropdownColor: const Color(0xff090c15),
+                            style: GoogleFonts.outfit(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: "Dominant Hand",
+                              labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              prefixIcon: const Icon(Icons.front_hand_outlined, color: AppColors.textSecondary),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.02),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              ),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: "right", child: Text("Right Hand")),
+                              DropdownMenuItem(value: "left", child: Text("Left Hand")),
+                            ],
+                            onChanged: (val) {
+                              setState(() {
+                                _selectedDominantHand = val;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          // Batting Style Dropdown
+                          DropdownButtonFormField<String>(
+                            value: _selectedBattingStyle,
+                            dropdownColor: const Color(0xff090c15),
+                            style: GoogleFonts.outfit(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: "Batting Style",
+                              labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              prefixIcon: const Icon(Icons.sports_cricket_outlined, color: AppColors.textSecondary),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.02),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              ),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: "right_hand", child: Text("Right Hand Bat")),
+                              DropdownMenuItem(value: "left_hand", child: Text("Left Hand Bat")),
+                            ],
+                            onChanged: (val) {
+                              setState(() {
+                                _selectedBattingStyle = val;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          // Bowling Style Dropdown
+                          DropdownButtonFormField<String>(
+                            value: _selectedBowlingStyle,
+                            dropdownColor: const Color(0xff090c15),
+                            style: GoogleFonts.outfit(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: "Bowling Style",
+                              labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              prefixIcon: const Icon(Icons.bolt_outlined, color: AppColors.textSecondary),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.02),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              ),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: "right_arm_fast", child: Text("Right Arm Fast")),
+                              DropdownMenuItem(value: "right_arm_medium", child: Text("Right Arm Medium")),
+                              DropdownMenuItem(value: "right_arm_spin", child: Text("Right Arm Spin")),
+                              DropdownMenuItem(value: "left_arm_fast", child: Text("Left Arm Fast")),
+                              DropdownMenuItem(value: "left_arm_medium", child: Text("Left Arm Medium")),
+                              DropdownMenuItem(value: "left_arm_spin", child: Text("Left Arm Spin")),
+                            ],
+                            onChanged: (val) {
+                              setState(() {
+                                _selectedBowlingStyle = val;
+                              });
                             },
                           ),
                           const SizedBox(height: 16),

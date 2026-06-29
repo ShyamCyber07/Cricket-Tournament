@@ -344,6 +344,14 @@ class ApiService {
     String? bio,
     String? profilePicture,
     String? profilePhotoUrl,
+    String? phoneNumber,
+    String? city,
+    String? dob,
+    String? battingStyle,
+    String? bowlingStyle,
+    String? playerType,
+    String? dominantHand,
+    int? defaultJerseyNumber,
   }) async {
     return await _dio.put(
       '/profile/',
@@ -353,6 +361,14 @@ class ApiService {
         if (bio != null) 'bio': bio,
         if (profilePicture != null) 'profile_picture': profilePicture,
         if (profilePhotoUrl != null) 'profile_photo_url': profilePhotoUrl,
+        if (phoneNumber != null) 'phone_number': phoneNumber,
+        if (city != null) 'city': city,
+        if (dob != null) 'dob': dob,
+        if (battingStyle != null) 'batting_style': battingStyle,
+        if (bowlingStyle != null) 'bowling_style': bowlingStyle,
+        if (playerType != null) 'player_type': playerType,
+        if (dominantHand != null) 'dominant_hand': dominantHand,
+        if (defaultJerseyNumber != null) 'default_jersey_number': defaultJerseyNumber,
       },
     );
   }

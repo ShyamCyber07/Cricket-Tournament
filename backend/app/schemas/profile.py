@@ -16,6 +16,16 @@ class ProfileResponse(BaseModel):
     joined_at: Optional[datetime] = None
     role: str = "user"
     is_active: bool = True
+    
+    # New profile fields
+    phone_number: Optional[str] = None
+    city: Optional[str] = None
+    dob: Optional[str] = None
+    batting_style: Optional[str] = None
+    bowling_style: Optional[str] = None
+    player_type: Optional[str] = None
+    dominant_hand: Optional[str] = None
+    default_jersey_number: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -26,6 +36,14 @@ class ProfileUpdate(BaseModel):
     bio: Optional[str] = None
     profile_picture: Optional[str] = None
     profile_photo_url: Optional[str] = None
+    phone_number: Optional[str] = None
+    city: Optional[str] = None
+    dob: Optional[str] = None
+    batting_style: Optional[str] = None
+    bowling_style: Optional[str] = None
+    player_type: Optional[str] = None
+    dominant_hand: Optional[str] = None
+    default_jersey_number: Optional[int] = None
 
 class BattingStats(BaseModel):
     matches_played: int = 0

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response
 import os
 import shutil
 import uuid
@@ -138,9 +138,14 @@ def update_profile(
     current_user: User = Depends(get_current_user)
 ):
     if profile_in.username is not None and profile_in.username != current_user.username:
+        # Validate username format
+        import re
+        if not re.match(r"^[a-zA-Z0-9_\.]+$", profile_in.username) or len(profile_in.username) < 3 or len(profile_in.username) > 20:
+            raise HTTPException(status_code=400, detail="Username must be 3-20 characters long and contain only letters, numbers, underscores, or periods.")
+            
         existing_user = db.query(User).filter(User.username == profile_in.username).first()
         if existing_user:
-            raise HTTPException(status_code=400, detail="Username is already taken")
+            raise HTTPException(status_code=400, detail="Username is already taken.")
         current_user.username = profile_in.username
 
     if profile_in.full_name is not None:
@@ -155,7 +160,32 @@ def update_profile(
         current_user.profile_picture = profile_in.profile_picture
 
     if profile_in.profile_photo_url is not None:
-        current_user.profile_photo_url = profile_in.profile_photo_url
+        if profile_in.profile_photo_url == "":
+            current_user.profile_photo_url = None
+            current_user.profile_photo_bytes = None
+        else:
+            current_user.profile_photo_url = profile_in.profile_photo_url
+
+    # Update new profile fields
+    if profile_in.phone_number is not None:
+        current_user.phone_number = profile_in.phone_number
+    if profile_in.city is not None:
+        current_user.city = profile_in.city
+    if profile_in.dob is not None:
+        current_user.dob = profile_in.dob
+    if profile_in.batting_style is not None:
+        current_user.batting_style = profile_in.batting_style
+    if profile_in.bowling_style is not None:
+        current_user.bowling_style = profile_in.bowling_style
+    if profile_in.player_type is not None:
+        current_user.player_type = profile_in.player_type
+    if profile_in.dominant_hand is not None:
+        current_user.dominant_hand = profile_in.dominant_hand
+        
+    if profile_in.default_jersey_number is not None:
+        if profile_in.default_jersey_number < 0 or profile_in.default_jersey_number > 999:
+            raise HTTPException(status_code=400, detail="Jersey number must be between 0 and 999.")
+        current_user.default_jersey_number = profile_in.default_jersey_number
 
     db.add(current_user)
     
@@ -164,8 +194,18 @@ def update_profile(
     if player:
         if profile_in.full_name is not None:
             player.name = profile_in.full_name
-        if profile_in.profile_photo_url is not None:
-            player.profile_photo_url = profile_in.profile_photo_url
+        if current_user.profile_photo_url is not None:
+            player.profile_photo_url = current_user.profile_photo_url
+        else:
+            player.profile_photo_url = None
+        if profile_in.player_type is not None:
+            player.role = profile_in.player_type
+        if profile_in.batting_style is not None:
+            player.batting_style = profile_in.batting_style
+        if profile_in.bowling_style is not None:
+            player.bowling_style = profile_in.bowling_style
+        if profile_in.default_jersey_number is not None:
+            player.jersey_number = profile_in.default_jersey_number
         db.add(player)
 
     db.commit()
@@ -409,30 +449,53 @@ def upload_profile_photo(
     if ext not in ["jpg", "jpeg", "png", "gif", "webp"]:
         raise HTTPException(status_code=400, detail="Invalid file type. Only image files are allowed.")
     
-    filename = f"{current_user.id}_{uuid.uuid4().hex}.{ext}"
-    
     try:
         content = file.file.read()
         
-        # Delete old photo if it exists
-        if current_user.profile_photo_url:
-            delete_image(current_user.profile_photo_url)
+        # Enforce size limit of 5MB
+        if len(content) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Image size exceeds the 5MB limit.")
             
-        url = upload_image(content, filename, folder="profiles")
+        # Update user record with photo bytes directly (Persistent DB storage)
+        current_user.profile_photo_bytes = content
+        
+        # Set URL to the custom database rendering endpoint
+        url = f"/api/v1/profile/photo/{current_user.id}"
+        current_user.profile_photo_url = url
+        
+        db.add(current_user)
+        
+        # Sync to Player model if linked
+        player = db.query(Player).filter(Player.user_id == current_user.id).first()
+        if player:
+            player.profile_photo_url = url
+            db.add(player)
+            
+        db.commit()
+        db.refresh(current_user)
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to upload image: {str(e)}")
         
-    current_user.profile_photo_url = url
-    db.add(current_user)
-    
-    # Sync to Player model if linked
-    player = db.query(Player).filter(Player.user_id == current_user.id).first()
-    if player:
-        player.profile_photo_url = url
-        db.add(player)
-
-    db.commit()
-    db.refresh(current_user)
-    
     log_user_activity(db, current_user.id, "profile_update", "Uploaded new profile photo.")
     return {"url": url, "profile_photo_url": url}
+
+
+@router.get("/photo/{user_id}")
+def get_user_photo(user_id: UUID, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.profile_photo_bytes:
+        raise HTTPException(status_code=404, detail="Photo not found")
+        
+    media_type = "image/png"
+    if user.profile_photo_url:
+        ext = user.profile_photo_url.split(".")[-1].lower()
+        if ext in ["jpg", "jpeg"]:
+            media_type = "image/jpeg"
+        elif ext == "gif":
+            media_type = "image/gif"
+        elif ext == "webp":
+            media_type = "image/webp"
+            
+    return Response(content=user.profile_photo_bytes, media_type=media_type)
