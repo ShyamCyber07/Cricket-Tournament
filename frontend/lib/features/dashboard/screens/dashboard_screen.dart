@@ -15,6 +15,7 @@ import 'package:cricket_scorer/features/matches/screens/scoring_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
 import 'package:cricket_scorer/features/tournaments/screens/tournament_list_screen.dart';
 import 'package:cricket_scorer/features/profile/screens/profile_screen.dart';
+import 'package:cricket_scorer/features/profile/screens/player_search_screen.dart';
 import 'package:cricket_scorer/core/app_config.dart';
 import 'package:cricket_scorer/features/dashboard/screens/notifications_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_invitations_screen.dart';
@@ -493,6 +494,16 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search_rounded, color: Colors.white70),
+            tooltip: "Search Players",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PlayerSearchScreen()),
+              );
+            },
+          ),
           Stack(
             alignment: Alignment.center,
             children: [

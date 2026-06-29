@@ -26,6 +26,9 @@ class ProfileResponse(BaseModel):
     player_type: Optional[str] = None
     dominant_hand: Optional[str] = None
     default_jersey_number: Optional[int] = None
+    profile_photo_bytes: Optional[bytes] = None
+    public_id: Optional[str] = None
+    privacy_settings: str = "public"
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -44,6 +47,7 @@ class ProfileUpdate(BaseModel):
     player_type: Optional[str] = None
     dominant_hand: Optional[str] = None
     default_jersey_number: Optional[int] = None
+    privacy_settings: Optional[str] = None
 
 class BattingStats(BaseModel):
     matches_played: int = 0
@@ -92,5 +96,30 @@ class UserAchievementResponse(BaseModel):
     achievement_type: str
     unlocked_at: Optional[datetime] = None
     is_unlocked: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PublicProfileResponse(BaseModel):
+    public_id: Optional[str] = None
+    username: Optional[str] = None
+    full_name: Optional[str] = None
+    display_name: Optional[str] = None
+    profile_picture: Optional[str] = None
+    profile_photo_url: Optional[str] = None
+    bio: Optional[str] = None
+    city: Optional[str] = None
+    batting_style: Optional[str] = None
+    bowling_style: Optional[str] = None
+    player_type: Optional[str] = None
+    dominant_hand: Optional[str] = None
+    default_jersey_number: Optional[int] = None
+    joined_at: Optional[datetime] = None
+    privacy_settings: str = "public"
+    
+    # Custom fields for public view
+    current_team: Optional[str] = None
+    career_stats: Optional[CareerStatsResponse] = None
+    achievements: List[UserAchievementResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

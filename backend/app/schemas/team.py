@@ -32,6 +32,7 @@ class TeamResponse(TeamBase):
     created_at: Optional[datetime] = None
     is_squad_locked: bool = False
     players: List[PlayerResponse] = []
+    team_code: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

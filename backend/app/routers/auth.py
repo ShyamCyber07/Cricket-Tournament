@@ -100,6 +100,13 @@ def create_refresh_token(db: Session, user_id: UUID) -> str:
     db.refresh(db_refresh)
     return token_str
 
+def generate_user_public_id(db: Session) -> str:
+    while True:
+        code = f"CU-{secrets.token_hex(3).upper()}"
+        existing = db.query(User).filter(User.public_id == code).first()
+        if not existing:
+            return code
+
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def signup(user_in: UserSignup, db: Session = Depends(get_db)):
     logger.info(f"[SIGNUP REQUEST RECEIVED] Email: {user_in.email} | Username: {user_in.username}")
@@ -156,7 +163,8 @@ def signup(user_in: UserSignup, db: Session = Depends(get_db)):
             otp_code=otp_code,
             otp_expiry=otp_expiry,
             last_otp_sent_at=get_utc_now(),
-            created_at=get_utc_now()
+            created_at=get_utc_now(),
+            public_id=generate_user_public_id(db)
         )
         db.add(db_user)
         logger.info(f"[SIGNUP USER CREATED] User record added for '{user_in.email}'")
@@ -752,7 +760,8 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
                 email_verified=True,
                 profile_completed=False,
                 role="admin" if email == "cricupservice@gmail.com" else "user",
-                created_at=get_utc_now()
+                created_at=get_utc_now(),
+                public_id=generate_user_public_id(db)
             )
             db.add(user)
             try:

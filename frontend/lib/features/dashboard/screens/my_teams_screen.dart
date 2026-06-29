@@ -37,6 +37,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
   final _exploreSearchController = TextEditingController();
   String _exploreSearchQuery = "";
   File? _selectedLogoFile;
+  final _joinCodeController = TextEditingController();
 
   @override
   void initState() {
@@ -60,6 +61,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
     _tabController.dispose();
     _nameController.dispose();
     _exploreSearchController.dispose();
+    _joinCodeController.dispose();
     super.dispose();
   }
 
@@ -272,6 +274,68 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
                   ),
                   child: Text("Create", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
                 ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _openJoinTeamByCodeDialog() {
+    _joinCodeController.clear();
+    showDialog(
+      context: context,
+      builder: (context) {
+        bool isSubmitting = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              title: Text("Join Team by Code", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              content: TextFormField(
+                controller: _joinCodeController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: "Enter Team Code (e.g. TC-XXXXXX)",
+                  prefixIcon: Icon(Icons.vpn_key_outlined, color: AppColors.primary),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                ),
+                isSubmitting
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16.0),
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2),
+                        ),
+                      )
+                    : ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.black,
+                        ),
+                        onPressed: () async {
+                          final code = _joinCodeController.text.trim();
+                          if (code.isEmpty) return;
+                          setDialogState(() => isSubmitting = true);
+                          try {
+                            final res = await _apiService.joinTeamByCode(code);
+                            Navigator.pop(context);
+                            _showSnackBar("Joined team successfully!", AppColors.primary);
+                            _loadData();
+                          } catch (e) {
+                            setDialogState(() => isSubmitting = false);
+                            _showSnackBar("Failed to join: $e", AppColors.error);
+                          }
+                        },
+                        child: Text("Join", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                      ),
               ],
             );
           },
@@ -547,6 +611,11 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
       appBar: AppBar(
         title: const Text("My Teams"),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.vpn_key_outlined),
+            tooltip: "Join Team by Code",
+            onPressed: _openJoinTeamByCodeDialog,
+          ),
           IconButton(
             icon: const Icon(Icons.mail_outline_rounded),
             tooltip: "Team Invitations",

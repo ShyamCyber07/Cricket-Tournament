@@ -35,6 +35,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   String? _selectedBowlingStyle;
   String? _selectedPlayerType;
   String? _selectedDominantHand;
+  String? _selectedPrivacySettings;
 
   String _selectedAvatar = "🏏";
   bool _isSaving = false;
@@ -70,6 +71,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     _selectedAvatar = widget.user['profile_picture'] ?? "🏏";
     _uploadedPhotoUrl = widget.user['profile_photo_url'];
+    _selectedPrivacySettings = widget.user['privacy_settings'] ?? "public";
   }
 
   String _resolvePhotoUrl(String? path) {
@@ -233,6 +235,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         playerType: _selectedPlayerType,
         dominantHand: _selectedDominantHand,
         defaultJerseyNumber: jerseyNum,
+        privacySettings: _selectedPrivacySettings,
       );
 
       setState(() => _isSaving = false);
@@ -745,6 +748,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             onChanged: (val) {
                               setState(() {
                                 _selectedBowlingStyle = val;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<String>(
+                            value: _selectedPrivacySettings,
+                            dropdownColor: const Color(0xff090c15),
+                            style: GoogleFonts.outfit(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: "Profile Visibility",
+                              labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              prefixIcon: const Icon(Icons.visibility_outlined, color: AppColors.textSecondary),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.02),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              ),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: "public", child: Text("Public")),
+                              DropdownMenuItem(value: "private", child: Text("Private")),
+                            ],
+                            onChanged: (val) {
+                              setState(() {
+                                _selectedPrivacySettings = val;
                               });
                             },
                           ),

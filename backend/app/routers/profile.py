@@ -17,6 +17,7 @@ from app.models.cricket import Player, MatchSquad, Ball, TournamentTeam, Tournam
 from app.schemas.profile import (
     ProfileResponse,
     ProfileUpdate,
+    PublicProfileResponse,
     CareerStatsResponse,
     BattingStats,
     BowlingStats,
@@ -186,6 +187,11 @@ def update_profile(
         if profile_in.default_jersey_number < 0 or profile_in.default_jersey_number > 999:
             raise HTTPException(status_code=400, detail="Jersey number must be between 0 and 999.")
         current_user.default_jersey_number = profile_in.default_jersey_number
+
+    if profile_in.privacy_settings is not None:
+        if profile_in.privacy_settings not in ["public", "private"]:
+            raise HTTPException(status_code=400, detail="Invalid privacy settings.")
+        current_user.privacy_settings = profile_in.privacy_settings
 
     db.add(current_user)
     
@@ -499,3 +505,187 @@ def get_user_photo(user_id: UUID, db: Session = Depends(get_db)):
             media_type = "image/webp"
             
     return Response(content=user.profile_photo_bytes, media_type=media_type)
+
+
+@router.get("/search", response_model=List[PublicProfileResponse])
+def search_players(
+    query: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if len(query.strip()) < 2:
+        return []
+        
+    # Search users by partial username, partial full_name, or exact public_id
+    search_pattern = f"%{query}%"
+    users = db.query(User).filter(
+        (User.username.ilike(search_pattern)) |
+        (User.full_name.ilike(search_pattern)) |
+        (User.public_id == query.strip())
+    ).all()
+    
+    res = []
+    for u in users:
+        # Check privacy settings: if private, only return if current_user is authorized
+        is_authorized = True
+        if u.privacy_settings == "private":
+            is_authorized = False
+            if current_user.role == "admin" or current_user.id == u.id:
+                is_authorized = True
+            else:
+                # Check shared teams
+                from app.models.cricket import TeamMember
+                target_teams = db.query(TeamMember.team_id).filter(
+                    TeamMember.user_id == u.id,
+                    TeamMember.status == "active"
+                ).all()
+                target_team_ids = [t[0] for t in target_teams]
+                if target_team_ids:
+                    shared_member = db.query(TeamMember).filter(
+                        TeamMember.team_id.in_(target_team_ids),
+                        TeamMember.user_id == current_user.id,
+                        TeamMember.status == "active"
+                    ).first()
+                    if shared_member:
+                        is_authorized = True
+        
+        if is_authorized:
+            # Find current team
+            from app.models.cricket import Team, TeamMember
+            active_membership = db.query(TeamMember).filter(
+                TeamMember.user_id == u.id,
+                TeamMember.status == "active"
+            ).first()
+            current_team_name = None
+            if active_membership:
+                team = db.query(Team).filter(Team.id == active_membership.team_id).first()
+                if team:
+                    current_team_name = team.name
+                    
+            career_stats = CareerStatsResponse(
+                batting=BattingStats(matches_played=0, innings=0, runs=0, highest_score=0, average=0.0, strike_rate=0.0, fours=0, sixes=0, fifties=0, hundreds=0),
+                bowling=BowlingStats(wickets=0, overs_bowled=0.0, economy=0.0, best_bowling_figures="0/0", maidens=0),
+                fielding=FieldingStats(catches=0, run_outs=0, stumpings=0),
+                tournament=TournamentStats(tournaments_played=0, tournaments_won=0, finals_played=0, win_percentage=0.0)
+            )
+            
+            achievements = db.query(UserAchievement).filter(UserAchievement.user_id == u.id).all()
+            achievements_list = [
+                UserAchievementResponse(
+                    achievement_type=a.achievement_type,
+                    unlocked_at=a.unlocked_at,
+                    is_unlocked=a.is_unlocked
+                ) for a in achievements
+            ]
+            
+            res.append(PublicProfileResponse(
+                public_id=u.public_id,
+                username=u.username,
+                full_name=u.full_name,
+                display_name=u.display_name,
+                profile_picture=u.profile_picture,
+                profile_photo_url=u.profile_photo_url,
+                bio=u.bio,
+                city=u.city,
+                batting_style=u.batting_style,
+                bowling_style=u.bowling_style,
+                player_type=u.player_type,
+                dominant_hand=u.dominant_hand,
+                default_jersey_number=u.default_jersey_number,
+                joined_at=u.joined_at,
+                privacy_settings=u.privacy_settings,
+                current_team=current_team_name,
+                career_stats=career_stats,
+                achievements=achievements_list
+            ))
+            
+    return res
+
+
+@router.get("/public/{identifier}", response_model=PublicProfileResponse)
+def get_public_profile(
+    identifier: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    user = db.query(User).filter(
+        (User.public_id == identifier) | 
+        (func.lower(User.username) == identifier.lower())
+    ).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="This item is no longer available.")
+        
+    # Check privacy settings
+    if user.privacy_settings == "private":
+        is_authorized = False
+        if current_user.role == "admin" or current_user.id == user.id:
+            is_authorized = True
+        else:
+            # Check shared teams
+            from app.models.cricket import TeamMember
+            target_teams = db.query(TeamMember.team_id).filter(
+                TeamMember.user_id == user.id,
+                TeamMember.status == "active"
+            ).all()
+            target_team_ids = [t[0] for t in target_teams]
+            if target_team_ids:
+                shared_member = db.query(TeamMember).filter(
+                    TeamMember.team_id.in_(target_team_ids),
+                    TeamMember.user_id == current_user.id,
+                    TeamMember.status == "active"
+                ).first()
+                if shared_member:
+                    is_authorized = True
+                    
+        if not is_authorized:
+            raise HTTPException(status_code=403, detail="You don't have permission to perform this action.")
+            
+    # Find current active team
+    from app.models.cricket import Team, TeamMember
+    active_membership = db.query(TeamMember).filter(
+        TeamMember.user_id == user.id,
+        TeamMember.status == "active"
+    ).first()
+    current_team_name = None
+    if active_membership:
+        team = db.query(Team).filter(Team.id == active_membership.team_id).first()
+        if team:
+            current_team_name = team.name
+            
+    career_stats = CareerStatsResponse(
+        batting=BattingStats(matches_played=0, innings=0, runs=0, highest_score=0, average=0.0, strike_rate=0.0, fours=0, sixes=0, fifties=0, hundreds=0),
+        bowling=BowlingStats(wickets=0, overs_bowled=0.0, economy=0.0, best_bowling_figures="0/0", maidens=0),
+        fielding=FieldingStats(catches=0, run_outs=0, stumpings=0),
+        tournament=TournamentStats(tournaments_played=0, tournaments_won=0, finals_played=0, win_percentage=0.0)
+    )
+    
+    achievements = db.query(UserAchievement).filter(UserAchievement.user_id == user.id).all()
+    achievements_list = [
+        UserAchievementResponse(
+            achievement_type=a.achievement_type,
+            unlocked_at=a.unlocked_at,
+            is_unlocked=a.is_unlocked
+        ) for a in achievements
+    ]
+    
+    return PublicProfileResponse(
+        public_id=user.public_id,
+        username=user.username,
+        full_name=user.full_name,
+        display_name=user.display_name,
+        profile_picture=user.profile_picture,
+        profile_photo_url=user.profile_photo_url,
+        bio=user.bio,
+        city=user.city,
+        batting_style=user.batting_style,
+        bowling_style=user.bowling_style,
+        player_type=user.player_type,
+        dominant_hand=user.dominant_hand,
+        default_jersey_number=user.default_jersey_number,
+        joined_at=user.joined_at,
+        privacy_settings=user.privacy_settings,
+        current_team=current_team_name,
+        career_stats=career_stats,
+        achievements=achievements_list
+    )

@@ -5,11 +5,13 @@ import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:cricket_scorer/core/app_config.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
 import 'edit_profile_screen.dart';
 import 'package:cricket_scorer/features/admin/screens/admin_dashboard_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final String? publicId;
+  const ProfileScreen({super.key, this.publicId});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -38,7 +40,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(
+      length: widget.publicId != null ? 2 : 3,
+      vsync: this,
+    );
     _loadProfileData();
   }
 
@@ -55,18 +60,29 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     });
 
     try {
-      final pRes = await _apiService.getProfile();
-      final sRes = await _apiService.getProfileStats();
-      final actRes = await _apiService.getProfileActivity();
-      final achRes = await _apiService.getProfileAchievements();
+      if (widget.publicId != null) {
+        final pRes = await _apiService.getPublicProfile(widget.publicId!);
+        setState(() {
+          _profile = pRes.data;
+          _stats = _profile!['career_stats'];
+          _activities = [];
+          _achievements = _profile!['achievements'] ?? [];
+          _isLoading = false;
+        });
+      } else {
+        final pRes = await _apiService.getProfile();
+        final sRes = await _apiService.getProfileStats();
+        final actRes = await _apiService.getProfileActivity();
+        final achRes = await _apiService.getProfileAchievements();
 
-      setState(() {
-        _profile = pRes.data;
-        _stats = sRes.data;
-        _activities = actRes.data;
-        _achievements = achRes.data;
-        _isLoading = false;
-      });
+        setState(() {
+          _profile = pRes.data;
+          _stats = sRes.data;
+          _activities = actRes.data;
+          _achievements = achRes.data;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -83,6 +99,20 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     } catch (_) {
       return "Joined CricUP";
     }
+  }
+
+  void _shareProfile() {
+    if (_profile == null || _profile!['public_id'] == null) return;
+    final publicId = _profile!['public_id'];
+    final url = "https://cricup.app/u/$publicId";
+    Clipboard.setData(ClipboardData(text: url));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Profile link copied: $url", style: GoogleFonts.outfit()),
+        backgroundColor: AppColors.secondary,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Widget _buildGlassCard({required Widget child, EdgeInsets? padding, double? width}) {
@@ -181,15 +211,40 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildProfileDetailRow("Email", _profile!['email'] ?? "Not Set", Icons.email_outlined),
-                _buildProfileDetailRow("Phone", _profile!['phone_number'] ?? "Not Set", Icons.phone_outlined),
-                _buildProfileDetailRow("City", _profile!['city'] ?? "Not Set", Icons.location_city_outlined),
-                _buildProfileDetailRow("Date of Birth", _profile!['dob'] ?? "Not Set", Icons.calendar_today_outlined),
+                if (widget.publicId == null) ...[
+                  _buildProfileDetailRow("Email", _profile!['email'] ?? "Not Set", Icons.email_outlined),
+                  _buildProfileDetailRow("Phone", _profile!['phone_number'] ?? "Not Set", Icons.phone_outlined),
+                  _buildProfileDetailRow("Date of Birth", _profile!['dob'] ?? "Not Set", Icons.calendar_today_outlined),
+                ],
                 _buildProfileDetailRow("Jersey Number", _profile!['default_jersey_number'] != null ? "#${_profile!['default_jersey_number']}" : "Not Set", Icons.numbers_outlined),
                 _buildProfileDetailRow("Player Type", _profile!['player_type'] != null ? _profile!['player_type'].toString().replaceAll('_', ' ').toUpperCase() : "Not Set", Icons.sports_cricket_outlined),
                 _buildProfileDetailRow("Dominant Hand", _profile!['dominant_hand'] != null ? _profile!['dominant_hand'].toString().toUpperCase() : "Not Set", Icons.front_hand_outlined),
                 _buildProfileDetailRow("Batting Style", _profile!['batting_style'] != null ? _profile!['batting_style'].toString().replaceAll('_', ' ').toUpperCase() : "Not Set", Icons.sports_cricket_outlined),
                 _buildProfileDetailRow("Bowling Style", _profile!['bowling_style'] != null ? _profile!['bowling_style'].toString().replaceAll('_', ' ').toUpperCase() : "Not Set", Icons.bolt_outlined),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Career Stats Section
+          Text(
+            "🏆 CAREER STATS",
+            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white70, letterSpacing: 1),
+          ),
+          const SizedBox(height: 12),
+          _buildGlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildProfileDetailRow("Matches", "0 (Placeholder)", Icons.sports_cricket_outlined),
+                _buildProfileDetailRow("Runs", "0 (Placeholder)", Icons.emoji_events_outlined),
+                _buildProfileDetailRow("Wickets", "0 (Placeholder)", Icons.bolt_outlined),
+                _buildProfileDetailRow("Strike Rate", "0.0 (Placeholder)", Icons.speed_outlined),
+                _buildProfileDetailRow("Economy", "0.0 (Placeholder)", Icons.show_chart_outlined),
+                _buildProfileDetailRow("Catches", "0 (Placeholder)", Icons.front_hand_outlined),
+                _buildProfileDetailRow("Stumpings", "0 (Placeholder)", Icons.front_hand_outlined),
+                _buildProfileDetailRow("MVP Awards", "0 (Placeholder)", Icons.star_border_outlined),
+                _buildProfileDetailRow("Teams Played For", "None (Placeholder)", Icons.group_outlined),
+                _buildProfileDetailRow("Tournament History", "None (Placeholder)", Icons.history_outlined),
               ],
             ),
           ),
@@ -292,10 +347,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   }
 
   Widget _buildAchievementsTab() {
-    if (_achievements.isEmpty) {
-      return const Center(child: Text("No achievements unlocked yet"));
-    }
-
     final achievementTitles = {
       "first_match": "First Match",
       "first_fifty": "First Fifty",
@@ -323,6 +374,17 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       "mvp": "⭐"
     };
 
+    final List<dynamic> displayAchievements = _achievements.isNotEmpty
+        ? _achievements
+        : [
+            {"achievement_type": "first_match", "is_unlocked": false},
+            {"achievement_type": "first_fifty", "is_unlocked": false},
+            {"achievement_type": "first_century", "is_unlocked": false},
+            {"achievement_type": "first_wicket", "is_unlocked": false},
+            {"achievement_type": "tournament_winner", "is_unlocked": false},
+            {"achievement_type": "mvp", "is_unlocked": false},
+          ];
+
     return GridView.builder(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.only(top: 16, bottom: 40),
@@ -332,9 +394,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         mainAxisSpacing: 12,
         childAspectRatio: 0.9,
       ),
-      itemCount: _achievements.length,
+      itemCount: displayAchievements.length,
       itemBuilder: (context, index) {
-        final ach = _achievements[index];
+        final ach = displayAchievements[index];
         final type = ach['achievement_type'] ?? "";
         final isUnlocked = ach['is_unlocked'] ?? false;
         final title = achievementTitles[type] ?? "Achievement";
@@ -575,25 +637,34 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                     letterSpacing: 1.5,
                                   ),
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.edit_rounded, color: Colors.white),
-                                  onPressed: () async {
-                                    final result = await Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => EditProfileScreen(
-                                          user: _profile!,
-                                        ),
+                                  Row(
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.share_rounded, color: Colors.white),
+                                        onPressed: _shareProfile,
                                       ),
-                                    );
-                                    if (result == true) {
-                                      _loadProfileData();
-                                    }
-                                  },
-                                ),
-                              ],
+                                      if (widget.publicId == null)
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_rounded, color: Colors.white),
+                                          onPressed: () async {
+                                            final result = await Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => EditProfileScreen(
+                                                  user: _profile!,
+                                                ),
+                                              ),
+                                            );
+                                            if (result == true) {
+                                              _loadProfileData();
+                                            }
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
 
                           // Header Card
                           Padding(
@@ -643,14 +714,26 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                     ],
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(
-                                    "@${_profile!['username'] ?? 'user'}",
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 14,
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.w600,
+                                    Text(
+                                      "@${_profile!['username'] ?? 'user'}",
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 14,
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
-                                  ),
+                                    if (_profile!['public_id'] != null) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _profile!['public_id'],
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          color: AppColors.textSecondary,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 1,
+                                        ),
+                                      ),
+                                    ],
                                   const SizedBox(height: 12),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -740,10 +823,11 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                               unselectedLabelColor: Colors.white70,
                               labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 0.5),
                               unselectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13, letterSpacing: 0.5),
-                              tabs: const [
-                                Tab(text: "STATS"),
-                                Tab(text: "ACHIEVED"),
-                                Tab(text: "ACTIVITY"),
+                               tabs: [
+                                const Tab(text: "STATS"),
+                                const Tab(text: "ACHIEVED"),
+                                if (widget.publicId == null)
+                                  const Tab(text: "ACTIVITY"),
                               ],
                             ),
                           ),
@@ -757,7 +841,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                 children: [
                                   _buildStatsTab(),
                                   _buildAchievementsTab(),
-                                  _buildActivityTab(),
+                                  if (widget.publicId == null)
+                                    _buildActivityTab(),
                                 ],
                               ),
                             ),

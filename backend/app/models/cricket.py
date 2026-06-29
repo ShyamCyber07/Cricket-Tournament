@@ -102,6 +102,7 @@ class Team(Base):
     city = Column(String, nullable=True)
     team_motto = Column(String, nullable=True)
     founded_year = Column(Integer, nullable=True)
+    team_code = Column(String, unique=True, index=True, nullable=True)
 
     # Relationships
     creator = relationship("User", back_populates="created_teams")

@@ -352,6 +352,7 @@ class ApiService {
     String? playerType,
     String? dominantHand,
     int? defaultJerseyNumber,
+    String? privacySettings,
   }) async {
     return await _dio.put(
       '/profile/',
@@ -369,7 +370,23 @@ class ApiService {
         if (playerType != null) 'player_type': playerType,
         if (dominantHand != null) 'dominant_hand': dominantHand,
         if (defaultJerseyNumber != null) 'default_jersey_number': defaultJerseyNumber,
+        if (privacySettings != null) 'privacy_settings': privacySettings,
       },
+    );
+  }
+
+  Future<Response> getPublicProfile(String identifier) async {
+    return await _dio.get('/profile/public/$identifier');
+  }
+
+  Future<Response> searchPlayers(String query) async {
+    return await _dio.get('/profile/search', queryParameters: {'query': query});
+  }
+
+  Future<Response> joinTeamByCode(String teamCode) async {
+    return await _dio.post(
+      '/teams/join-by-code',
+      data: {'team_code': teamCode},
     );
   }
 

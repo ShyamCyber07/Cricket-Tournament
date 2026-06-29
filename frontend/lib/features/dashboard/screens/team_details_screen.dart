@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
@@ -266,7 +267,47 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          if (_isCaptain || _isVC) ...[
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: () {
+                final code = _team?['team_code'] ?? "";
+                if (code.isNotEmpty) {
+                  Clipboard.setData(ClipboardData(text: code));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Team code copied: $code", style: GoogleFonts.outfit()),
+                      backgroundColor: AppColors.secondary,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              },
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("Team Code (Share with players to join)", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                          const SizedBox(height: 4),
+                          Text(
+                            _team?['team_code'] ?? "NOT SET",
+                            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.primary, letterSpacing: 1),
+                          ),
+                        ],
+                      ),
+                      const Icon(Icons.copy_all_rounded, color: AppColors.primary),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
           Text(
             "About the Team",
             style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
@@ -960,18 +1001,15 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
             key: _formKey,
             child: TextFormField(
               controller: _addMemberController,
-              keyboardType: TextInputType.emailAddress,
+              keyboardType: TextInputType.text,
               style: const TextStyle(color: Colors.white),
               decoration: const InputDecoration(
-                labelText: "User Email Address",
-                prefixIcon: Icon(Icons.email_outlined, color: AppColors.primary),
+                labelText: "Email, Username, or Public User ID",
+                prefixIcon: Icon(Icons.person_add_alt_1_outlined, color: AppColors.primary),
               ),
               validator: (val) {
                 if (val == null || val.trim().isEmpty) {
-                  return "Please enter an email address";
-                }
-                if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(val.trim())) {
-                  return "Please enter a valid email address";
+                  return "Please enter Email, Username, or Public User ID";
                 }
                 return null;
               },

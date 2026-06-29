@@ -68,6 +68,8 @@ class UserResponse(UserBase):
     player_type: Optional[str] = None
     dominant_hand: Optional[str] = None
     default_jersey_number: Optional[int] = None
+    public_id: Optional[str] = None
+    privacy_settings: str = "public"
 
     model_config = ConfigDict(from_attributes=True)
 

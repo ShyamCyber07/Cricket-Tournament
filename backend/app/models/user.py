@@ -45,6 +45,8 @@ class User(Base):
     dominant_hand = Column(String, nullable=True)
     default_jersey_number = Column(Integer, nullable=True)
     profile_photo_bytes = Column(LargeBinary, nullable=True)
+    public_id = Column(String, unique=True, index=True, nullable=True)
+    privacy_settings = Column(String, default="public", nullable=False)
 
 
     # Relationships - Fixed: removed problematic uselist=False

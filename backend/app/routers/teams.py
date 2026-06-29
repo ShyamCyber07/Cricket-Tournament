@@ -63,6 +63,13 @@ def create_team(
         if not captain:
             raise HTTPException(status_code=404, detail="Captain player not found")
 
+    import secrets
+    while True:
+        code = f"TC-{secrets.token_hex(3).upper()}"
+        existing_code = db.query(Team).filter(Team.team_code == code).first()
+        if not existing_code:
+            break
+
     db_team = Team(
         name=team_in.name,
         logo_url=team_in.logo_url,
@@ -72,7 +79,8 @@ def create_team(
         city=team_in.city,
         team_motto=team_in.team_motto,
         founded_year=team_in.founded_year,
-        created_by=current_user.id
+        created_by=current_user.id,
+        team_code=code
     )
     db.add(db_team)
     db.flush()
@@ -728,10 +736,15 @@ def add_member_to_team(
     if not is_authorized:
         raise HTTPException(status_code=403, detail="Only the captain or vice captain can add members")
 
-    # Find user by email
-    user_to_add = db.query(User).filter(User.email == req.email).first()
+    # Find user by email, username, or public_id
+    identifier = req.email.strip()
+    user_to_add = db.query(User).filter(
+        (User.email.ilike(identifier)) |
+        (User.username.ilike(identifier)) |
+        (User.public_id == identifier)
+    ).first()
     if not user_to_add:
-        raise HTTPException(status_code=404, detail="User with this email not found")
+        raise HTTPException(status_code=404, detail="User not found with the provided email, username, or public ID")
 
     # Check if already a member or pending
     existing = db.query(TeamMember).filter(
@@ -1492,3 +1505,59 @@ def get_team_activities(
             created_at=act.created_at
         ))
     return res
+
+
+from pydantic import BaseModel
+class JoinTeamByCodeRequest(BaseModel):
+    team_code: str
+
+
+@router.post("/join-by-code", response_model=TeamMemberResponse)
+def join_team_by_code(
+    req: JoinTeamByCodeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.team_code == req.team_code.strip()).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team with this code not found")
+        
+    # Check if already a member or pending
+    existing = db.query(TeamMember).filter(
+        TeamMember.team_id == team.id,
+        TeamMember.user_id == current_user.id
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="You are already a member or have a pending request for this team")
+        
+    # Add directly as active member
+    member = TeamMember(
+        team_id=team.id,
+        user_id=current_user.id,
+        role="player",
+        status="active"
+    )
+    db.add(member)
+    
+    # Sync to Player if linked
+    player = db.query(Player).filter(Player.user_id == current_user.id).first()
+    if player:
+        existing_link = db.query(Player).filter(
+            Player.id == player.id,
+            Player.teams.any(id=team.id)
+        ).first()
+        if not existing_link:
+            team.players.append(player)
+            db.add(team)
+            
+    log_team_activity(
+        db=db,
+        team_id=team.id,
+        actor_id=current_user.id,
+        action_type="member_joined",
+        description=f"{current_user.full_name or current_user.username} joined the team using team code."
+    )
+    db.commit()
+    db.refresh(member)
+    return make_member_response(member, current_user)
