@@ -374,140 +374,140 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                             Row(
                                               mainAxisAlignment: MainAxisAlignment.end,
                                               children: [
-                                                 OutlinedButton(
-                                                   style: OutlinedButton.styleFrom(
-                                                     side: const BorderSide(color: AppColors.error),
-                                                     foregroundColor: AppColors.error,
-                                                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                   ),
-                                                   onPressed: _processingNotifIds.contains(notifId) || _processedNotifIds.contains(notifId)
-                                                       ? null
-                                                       : () async {
-                                                            setState(() {
-                                                              _processingNotifIds.add(notifId);
-                                                            });
-                                                            
-                                                            // Optimistic UI update: remove invitation notification immediately
-                                                            dynamic removedNotif;
-                                                            int removedIndex = -1;
-                                                            for (int i = 0; i < _notifications.length; i++) {
-                                                              if (_notifications[i]['id']?.toString() == notifId.toString()) {
-                                                                removedNotif = _notifications[i];
-                                                                removedIndex = i;
-                                                                break;
-                                                              }
-                                                            }
-                                                            if (removedIndex != -1) {
-                                                              setState(() {
-                                                                _notifications.removeAt(removedIndex);
-                                                              });
-                                                            }
-                                                            
-                                                            try {
-                                                              if (type == 'join_request_sent') {
-                                                                await _apiService.rejectJoinRequest(teamId!, requestUserId!);
-                                                                _showSnackBar("Join request rejected.", AppColors.textSecondary);
-                                                              } else {
-                                                                await _apiService.rejectInvitation(teamId!);
-                                                                _showSnackBar("Invitation rejected.", AppColors.textSecondary);
-                                                              }
-                                                              await _apiService.markNotificationRead(notifId);
-                                                              setState(() {
-                                                                _processedNotifIds.add(notifId);
-                                                              });
-                                                              AppEventBus().fire(NotificationRefreshedEvent());
-                                                              AppEventBus().fire(TeamRefreshedEvent());
-                                                            } catch (e) {
-                                                              // Revert optimistic update
-                                                              if (removedIndex != -1 && removedNotif != null) {
-                                                                setState(() {
-                                                                  _notifications.insert(removedIndex, removedNotif);
-                                                                });
-                                                              }
-                                                              _showSnackBar("Action failed: $e", AppColors.error);
-                                                            } finally {
-                                                              if (mounted) {
-                                                                setState(() {
-                                                                  _processingNotifIds.remove(notifId);
-                                                                });
-                                                              }
-                                                            }
-                                                          },
-                                                    child: Text(
-                                                      type == 'join_request_sent' ? "Reject" : "Decline",
-                                                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
-                                                    ),
+                                                OutlinedButton(
+                                                  style: OutlinedButton.styleFrom(
+                                                    side: const BorderSide(color: AppColors.error),
+                                                    foregroundColor: AppColors.error,
+                                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                                   ),
-                                                  const SizedBox(width: 8),
-                                                  ElevatedButton(
-                                                    style: ElevatedButton.styleFrom(
-                                                      backgroundColor: AppColors.primary,
-                                                      foregroundColor: Colors.black,
-                                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                    ),
-                                                    onPressed: _processingNotifIds.contains(notifId) || _processedNotifIds.contains(notifId)
-                                                        ? null
-                                                        : () async {
+                                                  onPressed: _processingNotifIds.contains(notifId) || _processedNotifIds.contains(notifId)
+                                                      ? null
+                                                      : () async {
+                                                          setState(() {
+                                                            _processingNotifIds.add(notifId);
+                                                          });
+                                                          
+                                                          // Optimistic UI update: remove invitation notification immediately
+                                                          dynamic removedNotif;
+                                                          int removedIndex = -1;
+                                                          for (int i = 0; i < _notifications.length; i++) {
+                                                            if (_notifications[i]['id']?.toString() == notifId.toString()) {
+                                                              removedNotif = _notifications[i];
+                                                              removedIndex = i;
+                                                              break;
+                                                            }
+                                                          }
+                                                          if (removedIndex != -1) {
                                                             setState(() {
-                                                              _processingNotifIds.add(notifId);
+                                                              _notifications.removeAt(removedIndex);
                                                             });
-                                                            
-                                                            // Optimistic UI update: remove invitation notification immediately
-                                                            dynamic removedNotif;
-                                                            int removedIndex = -1;
-                                                            for (int i = 0; i < _notifications.length; i++) {
-                                                              if (_notifications[i]['id']?.toString() == notifId.toString()) {
-                                                                removedNotif = _notifications[i];
-                                                                removedIndex = i;
-                                                                break;
-                                                              }
+                                                          }
+                                                          
+                                                          try {
+                                                            if (type == 'join_request_sent') {
+                                                              await _apiService.rejectJoinRequest(teamId!, requestUserId!);
+                                                              _showSnackBar("Join request rejected.", AppColors.textSecondary);
+                                                            } else {
+                                                              await _apiService.rejectInvitation(teamId!);
+                                                              _showSnackBar("Invitation rejected.", AppColors.textSecondary);
                                                             }
-                                                            if (removedIndex != -1) {
+                                                            await _apiService.markNotificationRead(notifId);
+                                                            setState(() {
+                                                              _processedNotifIds.add(notifId);
+                                                            });
+                                                            AppEventBus().fire(NotificationRefreshedEvent());
+                                                            AppEventBus().fire(TeamRefreshedEvent());
+                                                          } catch (e) {
+                                                            // Revert optimistic update
+                                                            if (removedIndex != -1 && removedNotif != null) {
                                                               setState(() {
-                                                                _notifications.removeAt(removedIndex);
+                                                                _notifications.insert(removedIndex, removedNotif);
                                                               });
                                                             }
-                                                            
-                                                            try {
-                                                              if (type == 'join_request_sent') {
-                                                                await _apiService.approveJoinRequest(teamId!, requestUserId!);
-                                                                _showSnackBar("Join request approved!", AppColors.primary);
-                                                              } else {
-                                                                await _apiService.acceptInvitation(teamId!);
-                                                                _showSnackBar("Invitation accepted!", AppColors.primary);
-                                                              }
-                                                              await _apiService.markNotificationRead(notifId);
+                                                            _showSnackBar("Action failed: $e", AppColors.error);
+                                                          } finally {
+                                                            if (mounted) {
                                                               setState(() {
-                                                                _processedNotifIds.add(notifId);
+                                                                _processingNotifIds.remove(notifId);
                                                               });
-                                                              AppEventBus().fire(NotificationRefreshedEvent());
-                                                              AppEventBus().fire(TeamRefreshedEvent());
-                                                            } catch (e) {
-                                                              // Revert optimistic update
-                                                              if (removedIndex != -1 && removedNotif != null) {
-                                                                setState(() {
-                                                                  _notifications.insert(removedIndex, removedNotif);
-                                                                });
-                                                              }
-                                                              _showSnackBar("Action failed: $e", AppColors.error);
-                                                            } finally {
-                                                              if (mounted) {
-                                                                setState(() {
-                                                                  _processingNotifIds.remove(notifId);
-                                                                });
-                                                              }
                                                             }
-                                                          },
-                                                    child: Text(
-                                                      type == 'join_request_sent' ? "Approve" : "Accept",
-                                                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
-                                                    ),
+                                                          }
+                                                        },
+                                                  child: Text(
+                                                    type == 'join_request_sent' ? "Reject" : "Decline",
+                                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
                                                   ),
-                                               ],
-                                             ),
-                                           ],],
+                                                ),
+                                                const SizedBox(width: 8),
+                                                ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: AppColors.primary,
+                                                    foregroundColor: Colors.black,
+                                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  ),
+                                                  onPressed: _processingNotifIds.contains(notifId) || _processedNotifIds.contains(notifId)
+                                                      ? null
+                                                      : () async {
+                                                          setState(() {
+                                                            _processingNotifIds.add(notifId);
+                                                          });
+                                                          
+                                                          // Optimistic UI update: remove invitation notification immediately
+                                                          dynamic removedNotif;
+                                                          int removedIndex = -1;
+                                                          for (int i = 0; i < _notifications.length; i++) {
+                                                            if (_notifications[i]['id']?.toString() == notifId.toString()) {
+                                                              removedNotif = _notifications[i];
+                                                              removedIndex = i;
+                                                              break;
+                                                            }
+                                                          }
+                                                          if (removedIndex != -1) {
+                                                            setState(() {
+                                                              _notifications.removeAt(removedIndex);
+                                                            });
+                                                          }
+                                                          
+                                                          try {
+                                                            if (type == 'join_request_sent') {
+                                                              await _apiService.approveJoinRequest(teamId!, requestUserId!);
+                                                              _showSnackBar("Join request approved!", AppColors.primary);
+                                                            } else {
+                                                              await _apiService.acceptInvitation(teamId!);
+                                                              _showSnackBar("Invitation accepted!", AppColors.primary);
+                                                            }
+                                                            await _apiService.markNotificationRead(notifId);
+                                                            setState(() {
+                                                              _processedNotifIds.add(notifId);
+                                                            });
+                                                            AppEventBus().fire(NotificationRefreshedEvent());
+                                                            AppEventBus().fire(TeamRefreshedEvent());
+                                                          } catch (e) {
+                                                            // Revert optimistic update
+                                                            if (removedIndex != -1 && removedNotif != null) {
+                                                              setState(() {
+                                                                _notifications.insert(removedIndex, removedNotif);
+                                                              });
+                                                            }
+                                                            _showSnackBar("Action failed: $e", AppColors.error);
+                                                          } finally {
+                                                            if (mounted) {
+                                                              setState(() {
+                                                                _processingNotifIds.remove(notifId);
+                                                              });
+                                                            }
+                                                          }
+                                                        },
+                                                  child: Text(
+                                                    type == 'join_request_sent' ? "Approve" : "Accept",
+                                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
                                         ],
                                       ),
                                     ),
