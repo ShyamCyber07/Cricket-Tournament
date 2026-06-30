@@ -33,6 +33,8 @@ class MatchResponse(MatchBase):
     current_striker_id: Optional[UUID] = None
     current_non_striker_id: Optional[UUID] = None
     current_bowler_id: Optional[UUID] = None
+    umpire_name: Optional[str] = None
+    scorer_name: Optional[str] = None
     created_by: Optional[UUID] = None
     assigned_scorer_id: Optional[UUID] = None
     created_at: Optional[datetime] = None
@@ -245,6 +247,8 @@ class MatchUpdate(BaseModel):
     win_margin_runs: Optional[int] = None
     win_margin_wickets: Optional[int] = None
     assigned_scorer_id: Optional[UUID] = None
+    umpire_name: Optional[str] = None
+    scorer_name: Optional[str] = None
 
 
 class MatchActivityResponse(BaseModel):
@@ -262,6 +266,12 @@ class MatchActivityResponse(BaseModel):
 
 class TossDecisionRequest(BaseModel):
     toss_decision: str  # bat, bowl
+
+
+class MatchStartRequest(BaseModel):
+    striker_id: UUID
+    non_striker_id: UUID
+    bowler_id: UUID
 
 
 

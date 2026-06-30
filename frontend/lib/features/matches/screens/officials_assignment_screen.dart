@@ -52,12 +52,23 @@ class _OfficialsAssignmentScreenState extends State<OfficialsAssignmentScreen> {
     try {
       final userRes = await _apiService.getMe();
       final username = userRes.data['full_name'] ?? userRes.data['username'] ?? 'Scorer';
-      final prefs = await SharedPreferences.getInstance();
-      final savedUmpire = prefs.getString('umpire_${widget.matchId}') ?? 'Not Assigned';
+      
+      String umpire = 'Not Assigned';
+      try {
+        final matchRes = await _apiService.getLiveMatch(widget.matchId);
+        umpire = matchRes.data['umpire_name'] ?? 'Not Assigned';
+        if (umpire == 'Not Assigned') {
+          final prefs = await SharedPreferences.getInstance();
+          umpire = prefs.getString('umpire_${widget.matchId}') ?? 'Not Assigned';
+        }
+      } catch (_) {
+        final prefs = await SharedPreferences.getInstance();
+        umpire = prefs.getString('umpire_${widget.matchId}') ?? 'Not Assigned';
+      }
 
       setState(() {
         _currentScorerName = username;
-        _umpireController.text = savedUmpire;
+        _umpireController.text = umpire;
         _isLoading = false;
       });
     } catch (_) {
@@ -71,12 +82,14 @@ class _OfficialsAssignmentScreenState extends State<OfficialsAssignmentScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('umpire_${widget.matchId}', _umpireController.text.trim());
 
-      // Optionally, we update the assigned scorer on the backend using updateMatch.
+      // Optionally, we update the assigned scorer and officials on the backend using updateMatch.
       final userRes = await _apiService.getMe();
       final currentUserId = userRes.data['id']?.toString();
       if (currentUserId != null) {
         await _apiService.updateMatch(widget.matchId, {
           'assigned_scorer_id': currentUserId,
+          'umpire_name': _umpireController.text.trim(),
+          'scorer_name': _currentScorerName,
         });
       }
 

@@ -1913,6 +1913,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
     final currentInnings = _liveState!['current_innings'];
     final prevInnings = _liveState!['previous_innings'];
+    final target = _liveState!['target'] as int?;
     final striker = _liveState!['striker'] ?? _getLocalStrikerState(isOnStrike: true);
     final nonStriker = _liveState!['non_striker'] ?? _getLocalStrikerState(isOnStrike: false);
     final bowler = _liveState!['bowler'] ?? _getLocalBowlerState();
@@ -2086,161 +2087,21 @@ class _ScoringScreenState extends State<ScoringScreen> {
                   ? _buildViewerBody()
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          return SingleChildScrollView(
-                            physics: const BouncingScrollPhysics(),
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                minHeight: constraints.maxHeight,
-                              ),
-                              child: IntrinsicHeight(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: [
-                                    if (_liveState!['tournament_name'] != null) ...[
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 4.0),
-                                        child: Row(
-                                          children: [
-                                            _buildTournamentLogo(
-                                              _liveState!['tournament_logo_url'],
-                                              _liveState!['tournament_name']!,
-                                              size: 24,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                _liveState!['tournament_name']!.toUpperCase(),
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w900,
-                                                  color: AppColors.primary,
-                                                  letterSpacing: 1.2,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                    ] else ...[
-                                      const SizedBox(height: 8),
-                                    ],
-                                    // 1. Digital Scoreboard Card
-                                    Container(
-                                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                      padding: const EdgeInsets.all(20),
-                                      decoration: BoxDecoration(
-                                        gradient: AppColors.pitchGradient,
-                                        borderRadius: BorderRadius.circular(20),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: AppColors.primary.withOpacity(0.25),
-                                            blurRadius: 10,
-                                            offset: const Offset(0, 5),
-                                          )
-                                        ],
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  _buildTeamLogo(
-                                                    _getBattingTeamLogoUrl(currentInnings),
-                                                    currentInnings != null
-                                                        ? currentInnings['batting_team_name'].toString()
-                                                        : "Batting Team",
-                                                    size: 24,
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Text(
-                                                    currentInnings != null
-                                                        ? currentInnings['batting_team_name'].toString().toUpperCase()
-                                                        : "BATTING TEAM",
-                                                    style: GoogleFonts.outfit(
-                                                        fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70),
-                                                  ),
-                                                ],
-                                              ),
-                                              if (_liveState!['target'] != null)
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.black.withOpacity(0.2),
-                                                    borderRadius: BorderRadius.circular(6),
-                                                  ),
-                                                  child: Text(
-                                                    "TARGET: ${_liveState!['target']}",
-                                                    style: GoogleFonts.outfit(
-                                                        fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.accent),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            crossAxisAlignment: CrossAxisAlignment.baseline,
-                                            textBaseline: TextBaseline.alphabetic,
-                                            children: [
-                                              AnimatedSwitcher(
-                                                duration: const Duration(milliseconds: 300),
-                                                transitionBuilder: (Widget child, Animation<double> animation) {
-                                                  return ScaleTransition(
-                                                    scale: animation,
-                                                    child: child,
-                                                  );
-                                                },
-                                                child: Text(
-                                                  currentInnings != null
-                                                      ? "${currentInnings['total_runs']}/${currentInnings['total_wickets']}"
-                                                      : "0/0",
-                                                  key: ValueKey<String>(currentInnings != null
-                                                      ? "${currentInnings['total_runs']}/${currentInnings['total_wickets']}"
-                                                      : "0/0"),
-                                                  style: GoogleFonts.outfit(
-                                                      fontSize: 48, fontWeight: FontWeight.w900, color: Colors.white),
-                                                ),
-                                              ),
-                                              Text(
-                                                currentInnings != null
-                                                    ? "Overs: ${currentInnings['total_overs']}"
-                                                    : "Overs: 0.0",
-                                                style: GoogleFonts.outfit(
-                                                    fontSize: 20,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.white.withOpacity(0.9)),
-                                              ),
-                                            ],
-                                          ),
-                                          const Divider(color: Colors.white24, height: 20),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                currentInnings != null
-                                                    ? "CRR: ${((currentInnings['total_runs'] as int) / (currentInnings['total_overs'] == 0 ? 1 : currentInnings['total_overs'] as double)).toStringAsFixed(2)}"
-                                                    : "CRR: 0.00",
-                                                style: GoogleFonts.outfit(color: Colors.white70, fontWeight: FontWeight.bold),
-                                              ),
-                                              Text(
-                                                currentInnings != null
-                                                    ? "Extras: ${currentInnings['extras_wides'] + currentInnings['extras_noballs'] + currentInnings['extras_byes'] + currentInnings['extras_legbyes']}"
-                                                    : "Extras: 0",
-                                                style: GoogleFonts.outfit(color: Colors.white70, fontWeight: FontWeight.bold),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                    ),
+                      children: [
+                        _buildLiveScoreHeader(currentInnings, prevInnings, target, striker, nonStriker, bowler),
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              return SingleChildScrollView(
+                                physics: const BouncingScrollPhysics(),
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    minHeight: constraints.maxHeight,
+                                  ),
+                                  child: IntrinsicHeight(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: [
                                     const Spacer(flex: 1),
                                     // 2. Batter / Bowler Card Setup
                                     Padding(
@@ -2756,6 +2617,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
     return Column(
       children: [
+        _buildLiveScoreHeader(currentInnings, prevInnings, target, striker, nonStriker, bowler),
         Expanded(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
@@ -2763,9 +2625,6 @@ class _ScoringScreenState extends State<ScoringScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. Live Score Header
-                _buildLiveScoreHeader(currentInnings, prevInnings, target),
-                const SizedBox(height: 16),
                 
                 // 2. Current Over Ball-by-ball Ticker
                 _buildBallByBallTicker(recentBalls),
@@ -2809,6 +2668,9 @@ class _ScoringScreenState extends State<ScoringScreen> {
     Map<String, dynamic>? currentInnings,
     Map<String, dynamic>? prevInnings,
     int? target,
+    Map<String, dynamic>? striker,
+    Map<String, dynamic>? nonStriker,
+    Map<String, dynamic>? bowler,
   ) {
     final team1Name = _liveState?['team1_name'] ?? 'Team 1';
     final team2Name = _liveState?['team2_name'] ?? 'Team 2';
@@ -3026,9 +2888,130 @@ class _ScoringScreenState extends State<ScoringScreen> {
                 _buildHeaderStatItem("EXTRAS", extras.toString()),
               ],
             ),
+
+            const Divider(color: Colors.white12, height: 24),
+
+            // Current Batsmen & Bowler row
+            Row(
+              children: [
+                // Batsmen section
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeaderPlayerItem(
+                        name: striker?['name'] ?? 'Striker',
+                        stat: "${striker?['runs'] ?? 0} (${striker?['balls'] ?? 0}b)",
+                        isOnStrike: true,
+                      ),
+                      const SizedBox(height: 6),
+                      _buildHeaderPlayerItem(
+                        name: nonStriker?['name'] ?? 'Non-Striker',
+                        stat: "${nonStriker?['runs'] ?? 0} (${nonStriker?['balls'] ?? 0}b)",
+                        isOnStrike: false,
+                      ),
+                    ],
+                  ),
+                ),
+                // Vertical divider
+                Container(
+                  height: 36,
+                  width: 1,
+                  color: Colors.white12,
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+                // Bowler section
+                Expanded(
+                  child: _buildHeaderBowlerItem(
+                    name: bowler?['name'] ?? 'Bowler',
+                    stat: "${bowler?['overs'] ?? '0.0'} - ${bowler?['maidens'] ?? 0} - ${bowler?['runs'] ?? 0} - ${bowler?['wickets'] ?? 0}",
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildHeaderPlayerItem({
+    required String name,
+    required String stat,
+    required bool isOnStrike,
+  }) {
+    return Row(
+      children: [
+        if (isOnStrike)
+          const Padding(
+            padding: EdgeInsets.only(right: 4.0),
+            child: Icon(Icons.star, color: AppColors.primary, size: 10),
+          ),
+        Expanded(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.outfit(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: isOnStrike ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          stat,
+          style: GoogleFonts.outfit(
+            color: isOnStrike ? AppColors.primary : AppColors.textSecondary,
+            fontSize: 12,
+            fontWeight: isOnStrike ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeaderBowlerItem({
+    required String name,
+    required String stat,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.outfit(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              stat,
+              style: GoogleFonts.outfit(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+        Text(
+          "O - M - R - W",
+          style: GoogleFonts.outfit(
+            color: AppColors.textSecondary.withOpacity(0.4),
+            fontSize: 8,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
     );
   }
 

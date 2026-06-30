@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
-import 'package:cricket_scorer/core/app_config.dart';
 import 'scoring_screen.dart';
 
 class ReadyToStartScreen extends StatefulWidget {
@@ -36,179 +35,125 @@ class ReadyToStartScreen extends StatefulWidget {
 class _ReadyToStartScreenState extends State<ReadyToStartScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = false;
+  bool _isInitialized = false;
 
-  void _promptOpenersAndStart() async {
+  String? _tossWinnerId;
+  String? _tossDecision;
+  String? _umpireName;
+  String? _scorerName;
+
+  List<dynamic> _battingPlayers = [];
+  List<dynamic> _bowlingPlayers = [];
+
+  String? _selectedStrikerId;
+  String? _selectedNonStrikerId;
+  String? _selectedBowlerId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMatchDetails();
+  }
+
+  Future<void> _loadMatchDetails() async {
     setState(() => _isLoading = true);
     try {
-      final liveMatchRes = await _apiService.getLiveMatch(widget.matchId);
-      final liveState = liveMatchRes.data;
+      final matchRes = await _apiService.getLiveMatch(widget.matchId);
+      final data = matchRes.data;
+
+      _tossWinnerId = data['toss_winner_id']?.toString();
+      _tossDecision = data['toss_decision']?.toString();
+      _umpireName = data['umpire_name']?.toString() ?? widget.umpireName;
+      _scorerName = data['scorer_name']?.toString() ?? widget.scorerName;
+
+      final isTeam1Batting = (_tossWinnerId == widget.team1Id && _tossDecision == 'bat') || 
+                             (_tossWinnerId == widget.team2Id && _tossDecision == 'bowl');
       
-      final battingTeamName = liveState['current_innings']['batting_team_name'];
-      final isTeam1Batting = (battingTeamName == widget.team1Name);
+      _battingPlayers = isTeam1Batting ? widget.squad1 : widget.squad2;
+      _bowlingPlayers = isTeam1Batting ? widget.squad2 : widget.squad1;
 
-      final battingPlayers = isTeam1Batting ? widget.squad1 : widget.squad2;
-      final bowlingPlayers = isTeam1Batting ? widget.squad2 : widget.squad1;
-
-      setState(() => _isLoading = false);
-
-      if (battingPlayers.length < 2 || bowlingPlayers.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Ensure batting team has >= 2 players & bowling team has >= 1 player selected"), backgroundColor: AppColors.error),
-        );
-        return;
+      if (_battingPlayers.length >= 2) {
+        _selectedStrikerId = (_battingPlayers[0]['id'] ?? _battingPlayers[0]['player_id'])?.toString();
+        _selectedNonStrikerId = (_battingPlayers[1]['id'] ?? _battingPlayers[1]['player_id'])?.toString();
+      }
+      if (_bowlingPlayers.isNotEmpty) {
+        _selectedBowlerId = (_bowlingPlayers[0]['id'] ?? _bowlingPlayers[0]['player_id'])?.toString();
       }
 
-      if (!mounted) return;
-      _showOpenersSelectionDialog(
-        battingTeamName: battingTeamName,
-        battingPlayers: battingPlayers,
-        bowlingPlayers: bowlingPlayers,
-      );
+      setState(() {
+        _isInitialized = true;
+        _isLoading = false;
+      });
     } catch (e) {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error checking match live state: $e"), backgroundColor: AppColors.error),
+        SnackBar(content: Text("Error loading match: $e"), backgroundColor: AppColors.error),
       );
     }
   }
 
-  void _showOpenersSelectionDialog({
-    required String battingTeamName,
-    required List<dynamic> battingPlayers,
-    required List<dynamic> bowlingPlayers,
-  }) {
-    final screenContext = context;
-    String strikerId = battingPlayers[0]['id'] ?? battingPlayers[0]['player_id'];
-    String nonStrikerId = battingPlayers[1]['id'] ?? battingPlayers[1]['player_id'];
-    String bowlerId = bowlingPlayers[0]['id'] ?? bowlingPlayers[0]['player_id'];
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (statefulContext, setDialogState) {
-            return AlertDialog(
-              backgroundColor: AppColors.surface,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Text(
-                "Select Openers",
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Batting Team: $battingTeamName", style: GoogleFonts.outfit(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  Text("Striker Batsman:", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12)),
-                  DropdownButton<String>(
-                    value: strikerId,
-                    dropdownColor: AppColors.surface,
-                    isExpanded: true,
-                    items: battingPlayers.map<DropdownMenuItem<String>>((p) {
-                      final pId = p['id'] ?? p['player_id'];
-                      return DropdownMenuItem<String>(
-                        value: pId.toString(),
-                        child: Text(p['name'] ?? p['player_name'] ?? 'Player'),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() {
-                          strikerId = val;
-                          if (strikerId == nonStrikerId) {
-                            final nextOpener = battingPlayers.firstWhere(
-                              (p) => (p['id'] ?? p['player_id']).toString() != strikerId,
-                            );
-                            nonStrikerId = (nextOpener['id'] ?? nextOpener['player_id']).toString();
-                          }
-                        });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Text("Non-Striker Batsman:", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12)),
-                  DropdownButton<String>(
-                    value: nonStrikerId,
-                    dropdownColor: AppColors.surface,
-                    isExpanded: true,
-                    items: battingPlayers
-                        .where((p) => (p['id'] ?? p['player_id']).toString() != strikerId)
-                        .map<DropdownMenuItem<String>>((p) {
-                      final pId = p['id'] ?? p['player_id'];
-                      return DropdownMenuItem<String>(
-                        value: pId.toString(),
-                        child: Text(p['name'] ?? p['player_name'] ?? 'Player'),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() => nonStrikerId = val);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Text("Opening Bowler:", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12)),
-                  DropdownButton<String>(
-                    value: bowlerId,
-                    dropdownColor: AppColors.surface,
-                    isExpanded: true,
-                    items: bowlingPlayers.map<DropdownMenuItem<String>>((p) {
-                      final pId = p['id'] ?? p['player_id'];
-                      return DropdownMenuItem<String>(
-                        value: pId.toString(),
-                        child: Text(p['name'] ?? p['player_name'] ?? 'Player'),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() => bowlerId = val);
-                      }
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () async {
-                    Navigator.pop(dialogContext); // Close dialog
-                    
-                    // We must transition status to active innings1 on the backend
-                    // To do this, we call createBall or simply launch ScoringScreen which automatically starts on first ball,
-                    // or let's navigate to ScoringScreen with the opener state variables so the live match is loaded!
-                    Navigator.pushReplacement(
-                      screenContext,
-                      MaterialPageRoute(
-                        builder: (context) => ScoringScreen(
-                          matchId: widget.matchId,
-                          strikerId: strikerId,
-                          nonStrikerId: nonStrikerId,
-                          bowlerId: bowlerId,
-                        ),
-                      ),
-                    );
-                  },
-                  child: const Text("Start Match Scoring"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+  void _startMatchScoring() async {
+    if (_selectedStrikerId == null || _selectedNonStrikerId == null || _selectedBowlerId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select opening players"), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.startMatch(
+        widget.matchId,
+        _selectedStrikerId!,
+        _selectedNonStrikerId!,
+        _selectedBowlerId!,
+      );
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ScoringScreen(
+            matchId: widget.matchId,
+            strikerId: _selectedStrikerId,
+            nonStrikerId: _selectedNonStrikerId,
+            bowlerId: _selectedBowlerId,
+          ),
+        ),
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to start match: $e"), backgroundColor: AppColors.error),
+      );
+    }
   }
 
-  Widget _buildSummaryItem(String label, String value, IconData icon) {
+  bool get _isTossOk => _tossWinnerId != null && _tossDecision != null;
+  bool get _isSquadsOk => widget.squad1.isNotEmpty && widget.squad2.isNotEmpty;
+  bool get _isOfficialsOk => _umpireName != null && _umpireName != 'Not Assigned' && _umpireName!.isNotEmpty && _scorerName != null && _scorerName!.isNotEmpty;
+  bool get _isOpenersOk => _selectedStrikerId != null && _selectedNonStrikerId != null && _selectedBowlerId != null && _selectedStrikerId != _selectedNonStrikerId;
+
+  bool get _canStartMatch => _isTossOk && _isSquadsOk && _isOfficialsOk && _isOpenersOk;
+
+  Widget _buildChecklistItem(String title, bool isCompleted) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.primary, size: 18),
+          Icon(
+            isCompleted ? Icons.check_circle_rounded : Icons.cancel_rounded,
+            color: isCompleted ? AppColors.primary : AppColors.textSecondary.withOpacity(0.5),
+            size: 20,
+          ),
           const SizedBox(width: 12),
-          Text(label, style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
-          const Spacer(),
-          Text(value, style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+          Text(
+            title,
+            style: GoogleFonts.outfit(
+              color: isCompleted ? Colors.white : AppColors.textSecondary,
+              fontSize: 14,
+              fontWeight: isCompleted ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
         ],
       ),
     );
@@ -218,59 +163,168 @@ class _ReadyToStartScreenState extends State<ReadyToStartScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("READY TO START MATCH"),
+        title: Text(
+          "READY TO START MATCH",
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
       ),
       body: SafeArea(
-        child: _isLoading
+        child: _isLoading || !_isInitialized
             ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-            : Padding(
+            : SingleChildScrollView(
                 padding: const EdgeInsets.all(24.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Icon(Icons.check_circle_outline_rounded, color: AppColors.primary, size: 64),
+                    const Icon(Icons.sports_cricket_rounded, color: AppColors.primary, size: 64),
                     const SizedBox(height: 16),
                     Text(
-                      "Setup Complete!",
+                      "Match Setup Checklist",
                       textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      "Review the final checklist configuration below to ensure all details are correct.",
+                      "Verify the prerequisites below to unlock live scoring.",
                       textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 24),
 
-                    // Summary details card
+                    // Checklist Card
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: AppColors.glassDecoration(borderRadius: BorderRadius.circular(20)),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSummaryItem("Matchup", "${widget.team1Name} vs ${widget.team2Name}", Icons.sports_cricket_rounded),
-                          _buildSummaryItem("Lock Status", "Playing XI Locked", Icons.lock_rounded),
-                          _buildSummaryItem("Roster Size", "${widget.squad1.length} vs ${widget.squad2.length} Players", Icons.groups),
-                          _buildSummaryItem("Match Scorer", widget.scorerName, Icons.person),
-                          _buildSummaryItem("Match Umpire", widget.umpireName, Icons.sports_kabaddi_rounded),
+                          Text(
+                            "PREREQUISITES",
+                            style: GoogleFonts.outfit(color: AppColors.accent, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildChecklistItem("Toss completed & decision registered", _isTossOk),
+                          _buildChecklistItem("Playing XI locked for both teams", _isSquadsOk),
+                          _buildChecklistItem("Match officials assigned", _isOfficialsOk),
+                          _buildChecklistItem("Opening batsmen & bowler selected", _isOpenersOk),
                         ],
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(height: 24),
+
+                    // Openers Selection (Only visible/active if first 3 are OK)
+                    if (_isTossOk && _isSquadsOk && _isOfficialsOk) ...[
+                      Text(
+                        "SELECT OPENING PLAYERS",
+                        style: GoogleFonts.outfit(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      // Striker Selector
+                      Text("Striker Batsman", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12)),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        value: _selectedStrikerId,
+                        dropdownColor: AppColors.surface,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        items: _battingPlayers.map<DropdownMenuItem<String>>((p) {
+                          final pId = (p['id'] ?? p['player_id']).toString();
+                          return DropdownMenuItem<String>(
+                            value: pId,
+                            child: Text(p['name'] ?? p['player_name'] ?? 'Player', style: const TextStyle(color: Colors.white)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _selectedStrikerId = val;
+                              if (_selectedStrikerId == _selectedNonStrikerId) {
+                                final nextOpener = _battingPlayers.firstWhere(
+                                  (p) => (p['id'] ?? p['player_id']).toString() != _selectedStrikerId,
+                                );
+                                _selectedNonStrikerId = (nextOpener['id'] ?? nextOpener['player_id']).toString();
+                              }
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Non-Striker Selector
+                      Text("Non-Striker Batsman", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12)),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        value: _selectedNonStrikerId,
+                        dropdownColor: AppColors.surface,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        items: _battingPlayers
+                            .where((p) => (p['id'] ?? p['player_id']).toString() != _selectedStrikerId)
+                            .map<DropdownMenuItem<String>>((p) {
+                          final pId = (p['id'] ?? p['player_id']).toString();
+                          return DropdownMenuItem<String>(
+                            value: pId,
+                            child: Text(p['name'] ?? p['player_name'] ?? 'Player', style: const TextStyle(color: Colors.white)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedNonStrikerId = val);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Bowler Selector
+                      Text("Opening Bowler", style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12)),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        value: _selectedBowlerId,
+                        dropdownColor: AppColors.surface,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        items: _bowlingPlayers.map<DropdownMenuItem<String>>((p) {
+                          final pId = (p['id'] ?? p['player_id']).toString();
+                          return DropdownMenuItem<String>(
+                            value: pId,
+                            child: Text(p['name'] ?? p['player_name'] ?? 'Player', style: const TextStyle(color: Colors.white)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedBowlerId = val);
+                          }
+                        },
+                      ),
+                    ],
+
+                    const SizedBox(height: 40),
 
                     // Start Match button
                     Container(
                       width: double.infinity,
                       decoration: BoxDecoration(
-                        gradient: AppColors.buttonGradient,
+                        gradient: _canStartMatch ? AppColors.buttonGradient : null,
+                        color: _canStartMatch ? null : AppColors.surface,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: ElevatedButton(
-                        onPressed: _promptOpenersAndStart,
+                        onPressed: _canStartMatch ? _startMatchScoring : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
                           foregroundColor: Colors.black,
+                          disabledForegroundColor: AppColors.textSecondary,
+                          disabledBackgroundColor: Colors.transparent,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

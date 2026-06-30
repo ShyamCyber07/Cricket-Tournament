@@ -68,6 +68,14 @@ def test_squad_player_duplication_validation(client, auth_headers):
     )
     assert toss_res.status_code == 200
 
+    # Assign officials so status transitions to ready upon squad completion
+    officials_res = client.put(
+        f"/api/v1/matches/{match_id}",
+        json={"umpire_name": "Umpire A", "scorer_name": "Scorer B"},
+        headers=auth_headers
+    )
+    assert officials_res.status_code == 200
+
     # Test Case 1: Submit Team 1 squad with duplicate player IDs inside the same list
     sq1_dup_res = client.post(
         f"/api/v1/matches/{match_id}/squads",
@@ -126,4 +134,4 @@ def test_squad_player_duplication_validation(client, auth_headers):
         headers=auth_headers
     )
     assert sq2_clean_res.status_code == 200
-    assert sq2_clean_res.json()["match_status"] == "innings1"
+    assert sq2_clean_res.json()["match_status"] == "ready"

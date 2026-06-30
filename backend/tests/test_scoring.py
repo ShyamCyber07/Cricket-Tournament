@@ -121,7 +121,15 @@ def test_complete_match_scoring_flow(client, auth_headers):
     )
     assert sq1_res.status_code == 200
     
-    # Team 2 squad -> should trigger transition to 'innings1'
+    # Assign officials so status transitions to ready upon squad completion
+    officials_res = client.put(
+        f"/api/v1/matches/{match_id}",
+        json={"umpire_name": "Umpire A", "scorer_name": "Scorer B"},
+        headers=auth_headers
+    )
+    assert officials_res.status_code == 200
+
+    # Team 2 squad -> should trigger transition to 'ready'
     sq2_res = client.post(
         f"/api/v1/matches/{match_id}/squads",
         json={
@@ -134,7 +142,20 @@ def test_complete_match_scoring_flow(client, auth_headers):
         headers=auth_headers
     )
     assert sq2_res.status_code == 200
-    assert sq2_res.json()["match_status"] == "innings1"
+    assert sq2_res.json()["match_status"] == "ready"
+
+    # Start the match
+    start_res = client.post(
+        f"/api/v1/matches/{match_id}/start",
+        json={
+            "striker_id": p_virat,
+            "non_striker_id": p_rohit,
+            "bowler_id": p_bumrah
+        },
+        headers=auth_headers
+    )
+    assert start_res.status_code == 200
+    assert start_res.json()["status"] == "live"
 
     # 6. Test Scoring a ball
     # Ball 1: 1 Run (strike rotation)
@@ -361,6 +382,14 @@ def test_no_ball_scoring_variations(client, auth_headers):
         headers=auth_headers
     )
     
+    # Assign officials so status transitions to ready upon squad completion
+    officials_res = client.put(
+        f"/api/v1/matches/{match_id}",
+        json={"umpire_name": "Umpire A", "scorer_name": "Scorer B"},
+        headers=auth_headers
+    )
+    assert officials_res.status_code == 200
+
     sq2_res = client.post(
         f"/api/v1/matches/{match_id}/squads",
         json={
@@ -372,7 +401,21 @@ def test_no_ball_scoring_variations(client, auth_headers):
         },
         headers=auth_headers
     )
-    assert sq2_res.json()["match_status"] == "innings1"
+    assert sq2_res.status_code == 200
+    assert sq2_res.json()["match_status"] == "ready"
+
+    # Start the match
+    start_res = client.post(
+        f"/api/v1/matches/{match_id}/start",
+        json={
+            "striker_id": p_virat,
+            "non_striker_id": p_rohit,
+            "bowler_id": p_bumrah
+        },
+        headers=auth_headers
+    )
+    assert start_res.status_code == 200
+    assert start_res.json()["status"] == "live"
 
     # Set initial striker and bowler
     # (FastAPI backend will auto-initialize/sync caches as we post balls)

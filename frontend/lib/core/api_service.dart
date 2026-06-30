@@ -716,6 +716,29 @@ class ApiService {
     return await _dio.post('/matches/$matchId/undo');
   }
 
+  Future<Response> startMatch(String matchId, String strikerId, String nonStrikerId, String bowlerId) async {
+    return await _dio.post(
+      '/matches/$matchId/start',
+      data: {
+        'striker_id': strikerId,
+        'non_striker_id': nonStrikerId,
+        'bowler_id': bowlerId,
+      },
+    );
+  }
+
+  Future<Response> getActiveSession() async {
+    return await _dio.get('/matches/active-session');
+  }
+
+  Future<Response> pauseMatch(String matchId) async {
+    return await _dio.post('/matches/$matchId/pause');
+  }
+
+  Future<Response> resumeMatch(String matchId) async {
+    return await _dio.post('/matches/$matchId/resume');
+  }
+
   // TOURNAMENTS
   Future<Response> getTournaments() async {
     return await _dio.get('/tournaments/');

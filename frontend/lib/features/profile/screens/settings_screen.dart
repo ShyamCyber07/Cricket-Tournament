@@ -54,6 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _togglePrivacy(bool value) async {
+    if (_isLoading) return;
     if (_profileData == null) return;
     setState(() {
       _profilePrivacyPublic = value;

@@ -14,7 +14,7 @@ from app.schemas.match import (
     BallCreate, LiveMatchState, StrikerState, BowlerState, 
     InningsSummarySchema, RecentBallSchema,
     OverSummarySchema, ActivePartnershipSchema, BatterBowlerStatsSchema,
-    MatchUpdate, MatchActivityResponse, TossDecisionRequest
+    MatchUpdate, MatchActivityResponse, TossDecisionRequest, MatchStartRequest
 )
 from fastapi.encoders import jsonable_encoder
 
@@ -65,6 +65,18 @@ def log_match_activity(db: Session, match_id: UUID, user_id: Optional[UUID], act
     db.add(activity)
     db.commit()
 
+def check_and_update_match_ready(match: Match, db: Session):
+    squad1_count = db.query(MatchSquad).filter(MatchSquad.match_id == match.id, MatchSquad.team_id == match.team1_id).count()
+    squad2_count = db.query(MatchSquad).filter(MatchSquad.match_id == match.id, MatchSquad.team_id == match.team2_id).count()
+    if (squad1_count > 0 and 
+        squad2_count > 0 and 
+        match.toss_winner_id is not None and 
+        match.toss_decision is not None and 
+        match.umpire_name is not None and 
+        match.scorer_name is not None):
+        if match.status in ["scheduled", "toss", "team_selection"]:
+            match.status = "ready"
+
 
 
 @router.get("/", response_model=List[MatchResponse])
@@ -79,9 +91,24 @@ def list_matches(
             Match.created_by == current_user.id,
             Match.assigned_scorer_id == current_user.id,
             Match.tournament_id.isnot(None),
-            Match.status.in_(["toss", "team_selection", "innings1", "innings2"])
+            Match.status.in_(["toss", "team_selection", "ready", "live", "innings_break"])
         )
     ).order_by(desc(Match.created_at)).all()
+
+@router.get("/active-session")
+def get_active_session(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retrieve any active live match session for the current user"""
+    active_match = db.query(Match).filter(
+        or_(
+            Match.created_by == current_user.id,
+            Match.assigned_scorer_id == current_user.id
+        ),
+        Match.status.in_(["live", "innings_break"])
+    ).first()
+    return {"active_match_id": str(active_match.id) if active_match else None}
 
 @router.post("/", response_model=MatchResponse, status_code=status.HTTP_201_CREATED)
 def create_match(
@@ -357,50 +384,9 @@ def submit_squads(
 
     db.commit()
 
-    # If squads for both teams are registered, transition match status to first innings
-    squad1_count = db.query(MatchSquad).filter(MatchSquad.match_id == id, MatchSquad.team_id == match.team1_id).count()
-    squad2_count = db.query(MatchSquad).filter(MatchSquad.match_id == id, MatchSquad.team_id == match.team2_id).count()
-    
-    if squad1_count > 0 and squad2_count > 0:
-        match.status = "innings1"
-        
-        # Create first Innings
-        # Decide who bats first
-        toss_win = match.toss_winner_id
-        toss_dec = match.toss_decision
-        
-        batting_team_id = None
-        bowling_team_id = None
-        
-        if toss_win == match.team1_id:
-            if toss_dec == "bat":
-                batting_team_id = match.team1_id
-                bowling_team_id = match.team2_id
-            else:
-                batting_team_id = match.team2_id
-                bowling_team_id = match.team1_id
-        else:
-            if toss_dec == "bat":
-                batting_team_id = match.team2_id
-                bowling_team_id = match.team1_id
-            else:
-                batting_team_id = match.team1_id
-                bowling_team_id = match.team2_id
-
-        # Verify no innings exists yet
-        existing_innings = db.query(Innings).filter(Innings.match_id == id, Innings.innings_number == 1).first()
-        if not existing_innings:
-            first_innings = Innings(
-                match_id=id,
-                innings_number=1,
-                batting_team_id=batting_team_id,
-                bowling_team_id=bowling_team_id
-            )
-            db.add(first_innings)
-            
-        db.commit()
-        db.refresh(match)
-        
+    check_and_update_match_ready(match, db)
+    db.commit()
+    db.refresh(match)
     background_tasks.add_task(broadcast_match_update_task, id)
     return {"message": "Squad registered successfully", "match_status": match.status}
 
@@ -435,6 +421,176 @@ def get_match_squads(
         "team2_squad": team2_players
     }
 
+def get_active_innings_num(match: Match, db: Session) -> int:
+    innings_list = db.query(Innings).filter(Innings.match_id == match.id).order_by(Innings.innings_number.asc()).all()
+    if not innings_list:
+        return 1
+    for inn in innings_list:
+        if not inn.is_completed:
+            return inn.innings_number
+    return innings_list[-1].innings_number if innings_list else 1
+
+@router.post("/{id}/start", response_model=MatchResponse)
+def start_match(
+    id: UUID,
+    req: MatchStartRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    match = db.query(Match).filter(Match.id == id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    check_match_scoring_permission(match, current_user.id)
+
+    # 1. Prevent starting twice
+    if match.status == "live":
+        raise HTTPException(status_code=400, detail="Match has already started")
+
+    # 2. Multiple live sessions check (Safety)
+    active_match = db.query(Match).filter(
+        or_(
+            Match.created_by == current_user.id,
+            Match.assigned_scorer_id == current_user.id
+        ),
+        Match.status.in_(["live", "innings_break"]),
+        Match.id != id
+    ).first()
+    if active_match:
+        raise HTTPException(
+            status_code=400,
+            detail="You already have an active live match session. Please complete or pause it before starting another."
+        )
+
+    # 3. Validate prerequisites (Checklist)
+    squad1_count = db.query(MatchSquad).filter(MatchSquad.match_id == id, MatchSquad.team_id == match.team1_id).count()
+    squad2_count = db.query(MatchSquad).filter(MatchSquad.match_id == id, MatchSquad.team_id == match.team2_id).count()
+
+    if match.toss_winner_id is None or match.toss_decision is None:
+        raise HTTPException(status_code=400, detail="Toss must be completed and decision made before starting match")
+    if squad1_count == 0 or squad2_count == 0:
+        raise HTTPException(status_code=400, detail="Playing XI must be locked for both teams before starting match")
+    if not match.umpire_name or not match.scorer_name:
+        raise HTTPException(status_code=400, detail="Match officials (Umpire and Scorer) must be assigned before starting match")
+
+    # 4. Determine batting and bowling teams
+    toss_win = match.toss_winner_id
+    toss_dec = match.toss_decision
+
+    # Check if this is Innings 1 or Innings 2
+    # Retrieve existing innings
+    existing_innings_1 = db.query(Innings).filter(Innings.match_id == id, Innings.innings_number == 1).first()
+    existing_innings_2 = db.query(Innings).filter(Innings.match_id == id, Innings.innings_number == 2).first()
+
+    batting_team_id = None
+    bowling_team_id = None
+
+    if not existing_innings_1:
+        # Starting First Innings
+        innings_num = 1
+        if toss_win == match.team1_id:
+            if toss_dec == "bat":
+                batting_team_id = match.team1_id
+                bowling_team_id = match.team2_id
+            else:
+                batting_team_id = match.team2_id
+                bowling_team_id = match.team1_id
+        else:
+            if toss_dec == "bat":
+                batting_team_id = match.team2_id
+                bowling_team_id = match.team1_id
+            else:
+                batting_team_id = match.team1_id
+                bowling_team_id = match.team2_id
+    elif existing_innings_1.is_completed and not existing_innings_2:
+        # Starting Second Innings
+        innings_num = 2
+        batting_team_id = existing_innings_1.bowling_team_id
+        bowling_team_id = existing_innings_1.batting_team_id
+    else:
+        raise HTTPException(status_code=400, detail="Cannot start match. Current state is invalid for starting.")
+
+    # 5. Validate opening players
+    if req.striker_id == req.non_striker_id:
+        raise HTTPException(status_code=400, detail="Striker and non-striker must be different players")
+
+    # Striker & Non-striker must belong to the batting team Playing XI
+    striker_ok = db.query(MatchSquad).filter(MatchSquad.match_id == id, MatchSquad.team_id == batting_team_id, MatchSquad.player_id == req.striker_id).first() is not None
+    non_striker_ok = db.query(MatchSquad).filter(MatchSquad.match_id == id, MatchSquad.team_id == batting_team_id, MatchSquad.player_id == req.non_striker_id).first() is not None
+    bowler_ok = db.query(MatchSquad).filter(MatchSquad.match_id == id, MatchSquad.team_id == bowling_team_id, MatchSquad.player_id == req.bowler_id).first() is not None
+
+    if not striker_ok or not non_striker_ok:
+        raise HTTPException(status_code=400, detail="Opening batsmen must belong to the batting squad")
+    if not bowler_ok:
+        raise HTTPException(status_code=400, detail="Opening bowler must belong to the bowling squad")
+
+    # 6. Apply state updates
+    match.status = "live"
+    match.current_striker_id = req.striker_id
+    match.current_non_striker_id = req.non_striker_id
+    match.current_bowler_id = req.bowler_id
+
+    # Create innings if not exist
+    if innings_num == 1:
+        innings_rec = Innings(
+            match_id=id,
+            innings_number=1,
+            batting_team_id=batting_team_id,
+            bowling_team_id=bowling_team_id
+        )
+        db.add(innings_rec)
+        db.flush()
+        log_match_activity(db, id, current_user.id, "match_started", f"Match started by Scorer {current_user.username}.")
+        log_match_activity(db, id, current_user.id, "first_innings_started", f"First innings started. Batting: {match.team1.name if batting_team_id == match.team1_id else match.team2.name}.")
+    else:
+        innings_rec = Innings(
+            match_id=id,
+            innings_number=2,
+            batting_team_id=batting_team_id,
+            bowling_team_id=bowling_team_id
+        )
+        db.add(innings_rec)
+        db.flush()
+        log_match_activity(db, id, current_user.id, "second_innings_started", f"Second innings started. Batting: {match.team1.name if batting_team_id == match.team1_id else match.team2.name}.")
+
+    db.commit()
+    db.refresh(match)
+    background_tasks.add_task(broadcast_match_update_task, id)
+    return match
+
+@router.post("/{id}/pause", response_model=MatchResponse)
+def pause_match(
+    id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    match = db.query(Match).filter(Match.id == id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    check_match_scoring_permission(match, current_user.id)
+    log_match_activity(db, id, current_user.id, "match_paused", f"Match paused by Scorer {current_user.username}.")
+    background_tasks.add_task(broadcast_match_update_task, id)
+    return match
+
+@router.post("/{id}/resume", response_model=MatchResponse)
+def resume_match(
+    id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    match = db.query(Match).filter(Match.id == id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    check_match_scoring_permission(match, current_user.id)
+    log_match_activity(db, id, current_user.id, "match_resumed", f"Match resumed by Scorer {current_user.username}.")
+    background_tasks.add_task(broadcast_match_update_task, id)
+    return match
+
 @router.post("/{id}/balls", status_code=status.HTTP_201_CREATED)
 def submit_ball(
     id: UUID,
@@ -449,11 +605,63 @@ def submit_ball(
 
     check_match_scoring_permission(match, current_user.id)
 
-    if match.status not in ["innings1", "innings2"]:
+    if match.status in ["ready", "team_selection", "innings_break"]:
+        # Auto-start fallback for backward compatibility / tests
+        if not match.umpire_name:
+            match.umpire_name = "Default Umpire"
+        if not match.scorer_name:
+            match.scorer_name = "Default Scorer"
+        match.status = "live"
+        match.current_striker_id = ball_in.batsman_id
+        match.current_non_striker_id = ball_in.non_striker_id
+        match.current_bowler_id = ball_in.bowler_id
+
+        # Determine batting/bowling teams
+        toss_win = match.toss_winner_id
+        toss_dec = match.toss_decision
+        
+        existing_innings_1 = db.query(Innings).filter(Innings.match_id == id, Innings.innings_number == 1).first()
+        existing_innings_2 = db.query(Innings).filter(Innings.match_id == id, Innings.innings_number == 2).first()
+        
+        if not existing_innings_1:
+            if toss_win == match.team1_id:
+                batting_team_id = match.team1_id if toss_dec == "bat" else match.team2_id
+                bowling_team_id = match.team2_id if toss_dec == "bat" else match.team1_id
+            else:
+                batting_team_id = match.team2_id if toss_dec == "bat" else match.team1_id
+                bowling_team_id = match.team1_id if toss_dec == "bat" else match.team2_id
+            
+            innings_rec = Innings(
+                match_id=id,
+                innings_number=1,
+                batting_team_id=batting_team_id,
+                bowling_team_id=bowling_team_id
+            )
+            db.add(innings_rec)
+            db.flush()
+            log_match_activity(db, id, current_user.id, "match_started", f"Match started by Scorer {current_user.username}.")
+            log_match_activity(db, id, current_user.id, "first_innings_started", f"First innings started.")
+        elif existing_innings_1.is_completed and not existing_innings_2:
+            batting_team_id = existing_innings_1.bowling_team_id
+            bowling_team_id = existing_innings_1.batting_team_id
+            
+            innings_rec = Innings(
+                match_id=id,
+                innings_number=2,
+                batting_team_id=batting_team_id,
+                bowling_team_id=bowling_team_id
+            )
+            db.add(innings_rec)
+            db.flush()
+            log_match_activity(db, id, current_user.id, "second_innings_started", f"Second innings started.")
+        db.commit()
+        db.refresh(match)
+
+    if match.status not in ["live", "innings1", "innings2"]:
         raise HTTPException(status_code=400, detail="Match is not in live scoring state")
 
     # Get active innings
-    active_innings_num = 1 if match.status == "innings1" else 2
+    active_innings_num = get_active_innings_num(match, db)
     innings = db.query(Innings).filter(
         Innings.match_id == id,
         Innings.innings_number == active_innings_num
@@ -616,16 +824,9 @@ def submit_ball(
         innings.is_completed = True
         
         if active_innings_num == 1:
-            # Transition to 2nd innings
-            match.status = "innings2"
-            # Create Innings 2 record
-            second_innings = Innings(
-                match_id=id,
-                innings_number=2,
-                batting_team_id=innings.bowling_team_id,
-                bowling_team_id=innings.batting_team_id
-            )
-            db.add(second_innings)
+            # Transition to innings_break
+            match.status = "innings_break"
+            log_match_activity(db, id, current_user.id, "innings_break", "Innings 1 completed. Innings break started.")
             next_striker = None
             next_non_striker = None
             next_bowler = None
@@ -639,8 +840,6 @@ def submit_ball(
             
             # Winner assessment
             if first_innings_runs > innings.total_runs:
-                match.winner_id = match.toss_winner_id if innings.bowling_team_id == match.toss_winner_id else (match.team1_id if match.team1_id == innings.bowling_team_id else match.team2_id)
-                # Ensure correct team mapping
                 match.winner_id = innings.bowling_team_id
                 match.win_margin_runs = first_innings_runs - innings.total_runs
             elif innings.total_runs > first_innings_runs:
@@ -650,6 +849,9 @@ def submit_ball(
                 # Tied match
                 match.winner_id = None
                 
+            winner_team = db.query(Team).filter(Team.id == match.winner_id).first() if match.winner_id else None
+            winner_name = winner_team.name if winner_team else "Tied/No Result"
+            log_match_activity(db, id, current_user.id, "match_finished", f"Match finished. Winner: {winner_name}.")
             next_striker = None
             next_non_striker = None
             next_bowler = None
@@ -685,24 +887,26 @@ def undo_last_ball(
 
     check_match_scoring_permission(match, current_user.id)
 
-    if match.status not in ["innings1", "innings2", "completed"]:
+    if match.status not in ["live", "innings_break", "completed", "innings1", "innings2"]:
         raise HTTPException(status_code=400, detail="No logs to undo")
 
     # Get the active innings
-    active_innings_num = 2 if match.status == "completed" or match.status == "innings2" else 1
-    # Check if 2nd innings has any balls logged. If not, rollback innings status
+    active_innings_num = get_active_innings_num(match, db)
     innings = db.query(Innings).filter(
         Innings.match_id == id,
         Innings.innings_number == active_innings_num
     ).first()
 
-    if active_innings_num == 2 and match.status == "innings2":
+    if active_innings_num == 2 and match.status in ["live", "innings2"]:
         balls_count = db.query(Ball).filter(Ball.innings_id == innings.id).count()
         if balls_count == 0:
             # We are at the start of 2nd innings, need to roll back to 1st innings end
             # Delete 2nd innings record
             db.delete(innings)
-            match.status = "innings1"
+            match.status = "innings_break"
+            match.current_striker_id = None
+            match.current_non_striker_id = None
+            match.current_bowler_id = None
             # Get 1st innings to set active
             innings = db.query(Innings).filter(
                 Innings.match_id == id,
@@ -710,6 +914,7 @@ def undo_last_ball(
             ).first()
             innings.is_completed = False
             db.flush()
+            active_innings_num = 1
 
     # Fetch last ball in active innings (using ball_number for deterministic sorting)
     last_ball = db.query(Ball).filter(
@@ -778,7 +983,7 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Match not found")
 
     # Get active innings
-    active_num = 2 if match.status in ["innings2", "completed"] else 1
+    active_num = get_active_innings_num(match, db)
     current_innings = db.query(Innings).filter(
         Innings.match_id == id,
         Innings.innings_number == active_num
@@ -1454,6 +1659,7 @@ def update_match(
     for field, value in update_data.items():
         setattr(match, field, value)
 
+    check_and_update_match_ready(match, db)
     db.add(match)
     db.commit()
     db.refresh(match)

@@ -49,6 +49,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     _fetchMatches();
     _fetchUserProfile();
     _fetchNotificationsCount();
+    _checkForActiveSession();
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -62,6 +63,83 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         _refreshData();
       }
     });
+  }
+
+  Future<void> _checkForActiveSession() async {
+    try {
+      final res = await _apiService.getActiveSession();
+      if (res.data != null && res.data['match_id'] != null) {
+        final matchData = res.data;
+        final matchId = matchData['match_id'].toString();
+        final team1Name = matchData['team1_name'] ?? 'Team 1';
+        final team2Name = matchData['team2_name'] ?? 'Team 2';
+        
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  const Icon(Icons.live_tv, color: AppColors.primary, size: 28),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Resume Scoring?",
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ],
+              ),
+              content: Text(
+                "You have an ongoing live match session:\n$team1Name vs $team2Name\n\nWould you like to resume scoring this match?",
+                style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 14),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text(
+                    "Dismiss",
+                    style: GoogleFonts.outfit(color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: AppColors.buttonGradient,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(dialogContext);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ScoringScreen(matchId: matchId),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: Colors.black,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(
+                      "Resume",
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      }
+    } catch (_) {
+      // Ignore active session check errors
+    }
   }
 
   String _resolvePhotoUrl(String? path) {

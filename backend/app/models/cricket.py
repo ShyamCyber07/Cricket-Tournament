@@ -176,6 +176,9 @@ class Match(Base):
     current_non_striker_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="SET NULL"), nullable=True)
     current_bowler_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="SET NULL"), nullable=True)
     
+    umpire_name = Column(String, nullable=True)
+    scorer_name = Column(String, nullable=True)
+    
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
