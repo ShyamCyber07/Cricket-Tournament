@@ -151,6 +151,7 @@ class LiveMatchState(BaseModel):
     tournament_name: Optional[str] = None
     tournament_logo_url: Optional[str] = None
     toss_winner_name: Optional[str] = None
+    toss_winner_id: Optional[UUID] = None
     toss_decision: Optional[str] = None
     team1_logo_url: Optional[str] = None
     team2_logo_url: Optional[str] = None

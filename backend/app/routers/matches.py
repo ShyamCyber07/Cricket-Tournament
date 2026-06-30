@@ -1248,6 +1248,7 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
         tournament_name=tournament_name,
         tournament_logo_url=tournament_logo_url,
         toss_winner_name=toss_winner_name,
+        toss_winner_id=match.toss_winner_id,
         toss_decision=toss_decision,
         team1_logo_url=team1_logo_url,
         team2_logo_url=team2_logo_url,

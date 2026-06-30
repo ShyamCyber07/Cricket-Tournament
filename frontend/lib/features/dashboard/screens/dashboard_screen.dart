@@ -509,7 +509,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     // Separate matches into categories
     final liveMatches = _matches.where((m) {
       final status = m['status'];
-      return status == 'innings1' || status == 'innings2' || status == 'team_selection';
+      return status == 'innings1' || status == 'innings2' || status == 'team_selection' || 
+             status == 'toss' || status == 'ready' || status == 'live' || status == 'innings_break';
     }).toList();
 
     final upcomingMatches = _matches.where((m) => m['status'] == 'scheduled').toList();
@@ -969,10 +970,18 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   Widget _buildLiveMatchCard(dynamic match) {
     return _buildSpringyButton(
       onTap: () async {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => ScoringScreen(matchId: match['id'])),
-        );
+        final status = match['status'];
+        if (status == 'toss' || status == 'team_selection' || status == 'ready') {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => MatchCenterScreen(matchId: match['id'])),
+          );
+        } else {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => ScoringScreen(matchId: match['id'])),
+          );
+        }
         _fetchMatches();
       },
       child: Container(
