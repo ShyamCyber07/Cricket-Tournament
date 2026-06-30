@@ -155,6 +155,9 @@ class LiveMatchState(BaseModel):
     team1_logo_url: Optional[str] = None
     team2_logo_url: Optional[str] = None
     
+    umpire_name: Optional[str] = None
+    scorer_name: Optional[str] = None
+    
     striker: Optional[StrikerState] = None
     non_striker: Optional[StrikerState] = None
     bowler: Optional[BowlerState] = None

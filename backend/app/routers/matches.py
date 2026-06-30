@@ -1251,6 +1251,8 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
         toss_decision=toss_decision,
         team1_logo_url=team1_logo_url,
         team2_logo_url=team2_logo_url,
+        umpire_name=match.umpire_name,
+        scorer_name=match.scorer_name,
         
         striker=striker_state,
         non_striker=non_striker_state,

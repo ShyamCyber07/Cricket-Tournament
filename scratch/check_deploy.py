@@ -7,7 +7,12 @@ import sys
 
 url_login = "https://cricket-tournament-production.up.railway.app/api/v1/auth/login"
 url_logs = "https://cricket-tournament-production.up.railway.app/api/v1/admin/system-logs"
-target_sha = "60d9220"
+import subprocess
+
+try:
+    target_sha = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()[:7]
+except Exception:
+    target_sha = "0b27311"
 
 print(f"Target commit SHA prefix: {target_sha}")
 
