@@ -659,6 +659,26 @@ class ApiService {
     );
   }
 
+  Future<Response> initiateToss(String matchId) async {
+    return await _dio.post('/matches/$matchId/toss/initiate');
+  }
+
+  Future<Response> submitTossDecision(String matchId, String decision) async {
+    return await _dio.post(
+      '/matches/$matchId/toss/decision',
+      data: {'toss_decision': decision},
+    );
+  }
+
+  Future<Response> resetToss(String matchId) async {
+    return await _dio.post('/matches/$matchId/toss/reset');
+  }
+
+  Future<Response> getMatchActivities(String matchId) async {
+    return await _dio.get('/matches/$matchId/activities');
+  }
+
+
   Future<Response> submitSquad(String matchId, String teamId, List<Map<String, dynamic>> players) async {
     return await _dio.post(
       '/matches/$matchId/squads',

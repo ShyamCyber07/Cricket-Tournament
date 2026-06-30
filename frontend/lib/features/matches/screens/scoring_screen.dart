@@ -11,6 +11,7 @@ import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
 import 'squad_selection_screen.dart';
+import 'package:cricket_scorer/features/matches/widgets/animated_coin.dart';
 
 class ScoringScreen extends StatefulWidget {
   final String matchId;
@@ -490,6 +491,8 @@ class _ScoringScreenState extends State<ScoringScreen> {
   bool _isDisposed = false;
 
   String? _currentUserId;
+  String? _currentUserRole;
+  List<dynamic> _matchActivities = [];
 
   bool get _isViewerMode {
     if (_liveState == null) return true; // Default to true (read-only) before loading
@@ -509,13 +512,15 @@ class _ScoringScreenState extends State<ScoringScreen> {
     _activeNonStrikerId = widget.nonStrikerId ?? "";
     _activeBowlerId = widget.bowlerId ?? "";
 
-    // Resolve current user ID from AuthBloc
+    // Resolve current user ID and role from AuthBloc
     final authState = context.read<AuthBloc>().state;
     if (authState is AuthAuthenticated) {
       _currentUserId = authState.user['id']?.toString();
+      _currentUserRole = authState.user['role']?.toString();
     }
 
     _fetchLiveState();
+    _fetchMatchActivities();
     _initWebSocket();
   }
 
@@ -734,12 +739,210 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
       // Check for missing players and prompt selection
       await _checkAndPromptSelections();
+      _fetchMatchActivities();
     } catch (e) {
       setState(() => _isLoading = false);
       _showSnackBar("Error fetching live score: $e", AppColors.error);
     }
   }
 
+  Future<void> _fetchMatchActivities() async {
+    try {
+      final res = await _apiService.getMatchActivities(widget.matchId);
+      if (mounted) {
+        setState(() {
+          _matchActivities = res.data as List<dynamic>? ?? [];
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching match activities: $e");
+    }
+  }
+
+  Widget _buildMatchActivitiesSection() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: AppColors.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.history_toggle_off_rounded, color: AppColors.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      "MATCH TIMELINE & ACTIVITIES",
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textSecondary,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+                _buildResetTossButton(),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_matchActivities.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                child: Center(
+                  child: Text(
+                    "No match activities logged yet.",
+                    style: GoogleFonts.outfit(color: Colors.white30, fontSize: 13),
+                  ),
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _matchActivities.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final act = _matchActivities[index];
+                  final desc = act['description']?.toString() ?? '';
+                  final timeStr = act['created_at']?.toString() ?? '';
+                  final actionType = act['action_type']?.toString() ?? '';
+                  
+                  String formattedTime = '';
+                  try {
+                    final parsed = DateTime.parse(timeStr).toLocal();
+                    formattedTime = "${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}";
+                  } catch (_) {}
+
+                  IconData icon = Icons.info_outline;
+                  Color iconColor = Colors.white54;
+                  if (actionType.contains('toss_initiated')) {
+                    icon = Icons.monetization_on_outlined;
+                    iconColor = Colors.amber;
+                  } else if (actionType.contains('toss_decision')) {
+                    icon = Icons.sports_cricket_rounded;
+                    iconColor = AppColors.primary;
+                  } else if (actionType.contains('toss_reset')) {
+                    icon = Icons.restore_rounded;
+                    iconColor = Colors.redAccent;
+                  }
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: iconColor.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(icon, color: iconColor, size: 16),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              desc,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                color: Colors.white.withOpacity(0.9),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            if (formattedTime.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                formattedTime,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  color: Colors.white38,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResetTossButton() {
+    if (_liveState == null) return const SizedBox.shrink();
+    final creatorId = _liveState?['created_by']?.toString();
+    final tournamentOrganizerId = _liveState?['tournament_organizer_id']?.toString();
+    
+    final isOrganizer = _currentUserId == tournamentOrganizerId || (_currentUserId == creatorId && tournamentOrganizerId == null);
+    final isAdmin = _currentUserRole == 'admin';
+    final hasToss = _liveState?['toss_winner_name'] != null;
+    final status = _liveState?['status']?.toString();
+
+    if (hasToss && (isOrganizer || isAdmin) && (status == 'scheduled' || status == 'toss' || status == 'team_selection')) {
+      return TextButton.icon(
+        onPressed: _showResetTossConfirmation,
+        icon: const Icon(Icons.restore_rounded, size: 14, color: Colors.redAccent),
+        label: Text(
+          "RESET TOSS",
+          style: GoogleFonts.outfit(
+            fontSize: 11,
+            color: Colors.redAccent,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  void _showResetTossConfirmation() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text("Reset Toss?", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          content: Text(
+            "This will clear the toss results and revert the match status to scheduled. Are you sure you want to proceed?",
+            style: GoogleFonts.outfit(color: AppColors.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text("CANCEL", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                setState(() => _isLoading = true);
+                try {
+                  await _apiService.resetToss(widget.matchId);
+                  _showSnackBar("Toss reset successfully.", AppColors.primary);
+                  await _fetchLiveState();
+                } catch (e) {
+                  setState(() => _isLoading = false);
+                  _showSnackBar("Failed to reset toss: $e", AppColors.error);
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+              child: const Text("RESET"),
+            ),
+          ],
+        );
+      },
+    );
+  }
   Future<void> _promptTossSelection() async {
     if (_liveState == null) return;
     if (_isDialogActive) return;
@@ -749,11 +952,20 @@ class _ScoringScreenState extends State<ScoringScreen> {
     final team2Id = _liveState!['team2_id'].toString();
     final team1Name = _liveState!['team1_name'].toString();
     final team2Name = _liveState!['team2_name'].toString();
+    final team1Logo = _liveState!['team1_logo_url']?.toString() ?? '';
+    final team2Logo = _liveState!['team2_logo_url']?.toString() ?? '';
 
-    String selectedTossWinner = team1Id;
+    final team1Initials = team1Name.substring(0, team1Name.length < 3 ? team1Name.length : 3).toUpperCase();
+    final team2Initials = team2Name.substring(0, team2Name.length < 3 ? team2Name.length : 3).toUpperCase();
+
+    // Dialog state variables
+    bool isCoinFlipping = false;
+    bool isTossCompleted = false;
+    String? tossWinnerId;
     String selectedTossDecision = "bat";
-
+    int winnerSide = 1;
     bool isSubmitting = false;
+
     final screenContext = context;
 
     try {
@@ -763,102 +975,242 @@ class _ScoringScreenState extends State<ScoringScreen> {
         builder: (dialogContext) {
           return StatefulBuilder(
             builder: (statefulContext, setDialogState) {
+              final winningTeamName = (tossWinnerId == team1Id) ? team1Name : team2Name;
+
               return AlertDialog(
-                scrollable: true,
                 backgroundColor: AppColors.surface,
-                title: Text(
-                  "Toss Selection",
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                title: Center(
+                  child: Text(
+                    "Match Toss Setup",
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
+                  ),
                 ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("Who won the toss?", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-                    const SizedBox(height: 8),
-                    DropdownButton<String>(
-                      value: selectedTossWinner,
-                      dropdownColor: AppColors.surface,
-                      isExpanded: true,
-                      items: [
-                        DropdownMenuItem(value: team1Id, child: Text(team1Name)),
-                        DropdownMenuItem(value: team2Id, child: Text(team2Name)),
+                content: Container(
+                  width: MediaQuery.of(dialogContext).size.width * 0.85,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Team representation headers
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              children: [
+                                _buildTossTeamAvatar(team1Logo, team1Initials, Colors.amber),
+                                const SizedBox(height: 6),
+                                Text(
+                                  team1Name,
+                                  style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                            child: Text(
+                              "VS",
+                              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w900, color: AppColors.primary),
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                _buildTossTeamAvatar(team2Logo, team2Initials, Colors.cyan),
+                                const SizedBox(height: 6),
+                                Text(
+                                  team2Name,
+                                  style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      
+                      // Animated Coin flip block
+                      Center(
+                        child: AnimatedCoin(
+                          team1Logo: team1Logo,
+                          team1Initials: team1Initials,
+                          team2Logo: team2Logo,
+                          team2Initials: team2Initials,
+                          isFlipping: isCoinFlipping,
+                          winnerSide: winnerSide,
+                          onAnimationComplete: () {
+                            setDialogState(() {
+                              isCoinFlipping = false;
+                              isTossCompleted = true;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Toss outcome state transitions
+                      if (!isCoinFlipping && !isTossCompleted) ...[
+                        ElevatedButton(
+                          onPressed: () async {
+                            setDialogState(() {
+                              isSubmitting = true;
+                            });
+                            try {
+                              final res = await _apiService.initiateToss(widget.matchId);
+                              final freshData = res.data;
+                              tossWinnerId = freshData['toss_winner_id'].toString();
+                              winnerSide = (tossWinnerId == team1Id) ? 1 : 2;
+                              
+                              setDialogState(() {
+                                isCoinFlipping = true;
+                                isSubmitting = false;
+                              });
+                            } catch (e) {
+                              setDialogState(() {
+                                isSubmitting = false;
+                              });
+                              _showSnackBar("Toss initiation failed: $e", AppColors.error);
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: isSubmitting
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                              : Text("SPIN COIN", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14)),
+                        ),
                       ],
-                      onChanged: (val) {
-                        if (val != null) {
-                           setDialogState(() {
-                            selectedTossWinner = val;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Text("Toss winner elected to:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ChoiceChip(
-                            label: const Text("BAT FIRST"),
-                            selected: selectedTossDecision == "bat",
-                            onSelected: (selected) {
-                              if (selected) {
-                                setDialogState(() {
-                                  selectedTossDecision = "bat";
-                                });
-                              }
-                            },
+
+                      if (isCoinFlipping) ...[
+                        Center(
+                          child: Text(
+                            "Coin is in the air...",
+                            style: GoogleFonts.outfit(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ChoiceChip(
-                            label: const Text("BOWL FIRST"),
-                            selected: selectedTossDecision == "bowl",
-                            onSelected: (selected) {
-                              if (selected) {
-                                setDialogState(() {
-                                  selectedTossDecision = "bowl";
-                                });
-                              }
-                            },
+                      ],
+
+                      if (isTossCompleted) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                          ),
+                          child: Text(
+                            "🎉 $winningTeamName won the toss!",
+                            style: GoogleFonts.outfit(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
+                            textAlign: TextAlign.center,
                           ),
                         ),
-                      ],
-                    ),
-                  ],
-                ),
-                actions: [
-                  ElevatedButton(
-                    onPressed: () async {
-                      if (isSubmitting) return;
-                      isSubmitting = true;
-                      Navigator.pop(statefulContext);
-                      setState(() => _isLoading = true);
-                      try {
-                        await _apiService.submitToss(widget.matchId, selectedTossWinner, selectedTossDecision);
-                        if (mounted) {
-                          Navigator.pushReplacement(
-                            screenContext,
-                            MaterialPageRoute(
-                              builder: (context) => SquadSelectionScreen(
-                                matchId: widget.matchId,
-                                team1Id: team1Id,
-                                team2Id: team2Id,
-                                team1Name: team1Name,
-                                team2Name: team2Name,
+                        const SizedBox(height: 20),
+                        Text(
+                          "Elected to:",
+                          style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ChoiceChip(
+                                label: const Text("BAT FIRST"),
+                                selected: selectedTossDecision == "bat",
+                                selectedColor: AppColors.primary,
+                                labelStyle: GoogleFonts.outfit(
+                                  color: selectedTossDecision == "bat" ? Colors.black : Colors.white70,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    setDialogState(() {
+                                      selectedTossDecision = "bat";
+                                    });
+                                  }
+                                },
                               ),
                             ),
-                          );
-                        }
-                      } catch (e) {
-                        setState(() => _isLoading = false);
-                        _showSnackBar("Error submitting toss: $e", AppColors.error);
-                      }
-                    },
-                    child: const Text("Submit & Proceed"),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ChoiceChip(
+                                label: const Text("BOWL FIRST"),
+                                selected: selectedTossDecision == "bowl",
+                                selectedColor: AppColors.primary,
+                                labelStyle: GoogleFonts.outfit(
+                                  color: selectedTossDecision == "bowl" ? Colors.black : Colors.white70,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    setDialogState(() {
+                                      selectedTossDecision = "bowl";
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: () async {
+                            if (isSubmitting) return;
+                            setDialogState(() {
+                              isSubmitting = true;
+                            });
+                            try {
+                              await _apiService.submitTossDecision(widget.matchId, selectedTossDecision);
+                              Navigator.pop(statefulContext);
+                              
+                              if (mounted) {
+                                Navigator.pushReplacement(
+                                  screenContext,
+                                  MaterialPageRoute(
+                                    builder: (context) => SquadSelectionScreen(
+                                      matchId: widget.matchId,
+                                      team1Id: team1Id,
+                                      team2Id: team2Id,
+                                      team1Name: team1Name,
+                                      team2Name: team2Name,
+                                    ),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              setDialogState(() {
+                                isSubmitting = false;
+                              });
+                              _showSnackBar("Failed to save toss selection: $e", AppColors.error);
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: isSubmitting
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                              : Text("Proceed to Lineups", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14)),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
+                ),
               );
             },
           );
@@ -867,6 +1219,43 @@ class _ScoringScreenState extends State<ScoringScreen> {
     } finally {
       _isDialogActive = false;
     }
+  }
+
+  Widget _buildTossTeamAvatar(String logoUrl, String initials, Color shadowColor) {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white24, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: shadowColor.withOpacity(0.2),
+            blurRadius: 10,
+            spreadRadius: 1,
+          )
+        ],
+      ),
+      child: Center(
+        child: logoUrl.isNotEmpty
+            ? ClipOval(
+                child: Image.network(
+                  logoUrl,
+                  width: 54,
+                  height: 54,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Text(
+                    initials,
+                    style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ),
+              )
+            : Text(
+                initials,
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+      ),
+    );
   }
 
   Future<void> _checkAndPromptSelections() async {
@@ -1950,6 +2339,8 @@ class _ScoringScreenState extends State<ScoringScreen> {
                                       target: _liveState!['target'] as int?,
                                       overLimit: _liveState!['over_limit'] as int? ?? 20,
                                     ),
+                                    const SizedBox(height: 16),
+                                    _buildMatchActivitiesSection(),
                                     const Spacer(flex: 2),
                                   ],
                                 ),
@@ -2410,6 +2801,9 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
                 // 6. Match Info Card
                 _buildMatchInfoCard(),
+                const SizedBox(height: 16),
+
+                _buildMatchActivitiesSection(),
                 const SizedBox(height: 16),
 
                 // 7. Scorecard Section (Expandable)

@@ -246,3 +246,22 @@ class MatchUpdate(BaseModel):
     win_margin_wickets: Optional[int] = None
     assigned_scorer_id: Optional[UUID] = None
 
+
+class MatchActivityResponse(BaseModel):
+    id: UUID
+    match_id: UUID
+    user_id: Optional[UUID] = None
+    action_type: str
+    description: str
+    created_at: datetime
+    user_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class TossDecisionRequest(BaseModel):
+    toss_decision: str  # bat, bowl
+
+
+

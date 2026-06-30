@@ -343,3 +343,19 @@ class JoinRequest(Base):
     # Relationships
     team = relationship("Team")
     user = relationship("User", foreign_keys=[user_id])
+
+
+class MatchActivity(Base):
+    __tablename__ = "match_activities"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    match_id = Column(UUID(as_uuid=True), ForeignKey("matches.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action_type = Column(String, nullable=False)
+    description = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    match = relationship("Match")
+    user = relationship("User")
+

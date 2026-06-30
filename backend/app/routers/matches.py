@@ -8,13 +8,13 @@ from uuid import UUID
 from app.core.database import get_db, SessionLocal
 from app.routers.auth import get_current_user
 from app.models.user import User
-from app.models.cricket import Match, Team, Player, MatchSquad, Innings, Ball
+from app.models.cricket import Match, Team, Player, MatchSquad, Innings, Ball, MatchActivity
 from app.schemas.match import (
     MatchCreate, MatchResponse, TossSubmit, SquadSubmit, 
     BallCreate, LiveMatchState, StrikerState, BowlerState, 
     InningsSummarySchema, RecentBallSchema,
     OverSummarySchema, ActivePartnershipSchema, BatterBowlerStatsSchema,
-    MatchUpdate
+    MatchUpdate, MatchActivityResponse, TossDecisionRequest
 )
 from fastapi.encoders import jsonable_encoder
 
@@ -53,6 +53,18 @@ def check_match_scoring_permission(match, current_user_id):
         authorized_users.add(match.tournament.organizer_id)
     if current_user_id not in authorized_users:
         raise HTTPException(status_code=403, detail="Not authorized to manage/score this match")
+
+
+def log_match_activity(db: Session, match_id: UUID, user_id: Optional[UUID], action_type: str, description: str):
+    activity = MatchActivity(
+        match_id=match_id,
+        user_id=user_id,
+        action_type=action_type,
+        description=description
+    )
+    db.add(activity)
+    db.commit()
+
 
 
 @router.get("/", response_model=List[MatchResponse])
@@ -130,8 +142,157 @@ def submit_toss(
     db.commit()
     db.refresh(match)
     
+    winner_name = match.toss_winner.name if match.toss_winner else "Unknown"
+    log_match_activity(
+        db,
+        match_id=match.id,
+        user_id=current_user.id,
+        action_type="toss_decision",
+        description=f"{winner_name} won the toss and elected to {toss.toss_decision} first."
+    )
+
     background_tasks.add_task(broadcast_match_update_task, id)
     return match
+
+
+@router.post("/{id}/toss/initiate", response_model=MatchResponse)
+def initiate_toss(
+    id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    match = db.query(Match).filter(Match.id == id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    check_match_scoring_permission(match, current_user.id)
+
+    if match.toss_winner_id is not None:
+        raise HTTPException(status_code=400, detail="Toss has already been executed for this match")
+
+    import random
+    match.toss_winner_id = random.choice([match.team1_id, match.team2_id])
+    match.toss_decision = None
+    match.status = "toss"
+    db.commit()
+    db.refresh(match)
+
+    winner_name = match.toss_winner.name if match.toss_winner else "Unknown"
+    log_match_activity(
+        db,
+        match_id=match.id,
+        user_id=current_user.id,
+        action_type="toss_initiated",
+        description=f"Toss initiated by {current_user.username}. Secure backend selected winner: {winner_name}."
+    )
+
+    background_tasks.add_task(broadcast_match_update_task, id)
+    return match
+
+
+@router.post("/{id}/toss/decision", response_model=MatchResponse)
+def submit_toss_decision(
+    id: UUID,
+    req: TossDecisionRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    match = db.query(Match).filter(Match.id == id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    check_match_scoring_permission(match, current_user.id)
+
+    if match.toss_winner_id is None:
+        raise HTTPException(status_code=400, detail="Toss has not been initiated/executed yet")
+
+    if req.toss_decision not in ["bat", "bowl"]:
+        raise HTTPException(status_code=400, detail="Decision must be 'bat' or 'bowl'")
+
+    match.toss_decision = req.toss_decision
+    match.status = "team_selection"
+    db.commit()
+    db.refresh(match)
+
+    winner_name = match.toss_winner.name if match.toss_winner else "Unknown"
+    log_match_activity(
+        db,
+        match_id=match.id,
+        user_id=current_user.id,
+        action_type="toss_decision",
+        description=f"{winner_name} won the toss and elected to {req.toss_decision} first."
+    )
+
+    background_tasks.add_task(broadcast_match_update_task, id)
+    return match
+
+
+@router.post("/{id}/toss/reset", response_model=MatchResponse)
+def reset_toss(
+    id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    match = db.query(Match).filter(Match.id == id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    is_admin = current_user.role == "admin"
+    if match.tournament is not None:
+        is_organizer = match.tournament.organizer_id == current_user.id
+    else:
+        is_organizer = match.created_by == current_user.id
+
+    if not (is_organizer or is_admin):
+        raise HTTPException(status_code=403, detail="Only organizers or admins can reset the toss")
+
+    match.toss_winner_id = None
+    match.toss_decision = None
+    match.status = "scheduled"
+    db.commit()
+    db.refresh(match)
+
+    log_match_activity(
+        db,
+        match_id=match.id,
+        user_id=current_user.id,
+        action_type="toss_reset",
+        description=f"Toss reset by {current_user.username}. Status reverted to scheduled."
+    )
+
+    background_tasks.add_task(broadcast_match_update_task, id)
+    return match
+
+
+@router.get("/{id}/activities", response_model=List[MatchActivityResponse])
+def get_match_activities(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    match = db.query(Match).filter(Match.id == id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    activities = db.query(MatchActivity).filter(MatchActivity.match_id == id).order_by(MatchActivity.created_at.asc()).all()
+    
+    res = []
+    for act in activities:
+        act_dict = {
+            "id": act.id,
+            "match_id": act.match_id,
+            "user_id": act.user_id,
+            "action_type": act.action_type,
+            "description": act.description,
+            "created_at": act.created_at,
+            "user_name": act.user.username if act.user else None
+        }
+        res.append(act_dict)
+    return res
+
 
 @router.post("/{id}/squads", status_code=status.HTTP_200_OK)
 def submit_squads(
