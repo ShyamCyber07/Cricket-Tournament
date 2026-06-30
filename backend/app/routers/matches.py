@@ -108,7 +108,14 @@ def get_active_session(
         ),
         Match.status.in_(["live", "innings_break"])
     ).first()
-    return {"active_match_id": str(active_match.id) if active_match else None}
+    if active_match:
+        return {
+            "active_match_id": str(active_match.id),
+            "match_id": str(active_match.id),
+            "team1_name": active_match.team1.name,
+            "team2_name": active_match.team2.name,
+        }
+    return {"active_match_id": None, "match_id": None}
 
 @router.post("/", response_model=MatchResponse, status_code=status.HTTP_201_CREATED)
 def create_match(
