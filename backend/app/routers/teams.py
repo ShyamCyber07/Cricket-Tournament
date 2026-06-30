@@ -675,29 +675,42 @@ def upload_team_logo(
     team = db.query(Team).filter(Team.id == id).first()
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
-    # Check authorization (captain or admin)
+    
+    # Check authorization (captain, creator, or admin)
+    is_creator = team.created_by == current_user.id
     is_captain = db.query(TeamMember).filter(
         TeamMember.team_id == id,
         TeamMember.user_id == current_user.id,
         TeamMember.role == "captain",
         TeamMember.status == "active"
     ).first()
-    if not is_captain and current_user.role != "admin":
+    if not is_captain and not is_creator and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to manage this team")
 
     ext = file.filename.split(".")[-1].lower()
     if ext not in ["jpg", "jpeg", "png", "gif", "webp"]:
         raise HTTPException(status_code=400, detail="Invalid file type. Only image files are allowed.")
 
+    # Validate maximum file size (5MB)
+    MAX_FILE_SIZE = 5 * 1024 * 1024
+    try:
+        content = file.file.read()
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="File size exceeds the 5MB limit.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read file content: {str(e)}")
+
     filename = f"team_{team.id}_{uuid.uuid4().hex}.jpg"
 
     try:
-        content = file.file.read()
         processed_content = crop_and_resize_image(content)
         
         # Delete old logo if it exists
         if team.logo_url:
-            delete_image(team.logo_url)
+            try:
+                delete_image(team.logo_url)
+            except Exception:
+                pass
             
         url = upload_image(processed_content, filename, folder="teams")
     except Exception as e:
@@ -708,6 +721,40 @@ def upload_team_logo(
     db.commit()
     db.refresh(team)
     return {"url": url, "logo_url": url}
+
+
+@router.delete("/{id}/logo", response_model=TeamResponse)
+def delete_team_logo(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    team = db.query(Team).filter(Team.id == id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+        
+    # Check authorization (captain, creator, or admin)
+    is_creator = team.created_by == current_user.id
+    is_captain = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.role == "captain",
+        TeamMember.status == "active"
+    ).first()
+    if not is_captain and not is_creator and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to manage this team")
+
+    if team.logo_url:
+        try:
+            delete_image(team.logo_url)
+        except Exception:
+            pass
+        team.logo_url = None
+        db.add(team)
+        db.commit()
+        db.refresh(team)
+        
+    return team
 
 
 # --- Team Membership Endpoints ---

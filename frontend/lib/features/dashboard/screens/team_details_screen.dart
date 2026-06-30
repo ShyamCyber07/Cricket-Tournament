@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,12 +6,14 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
+import 'package:cricket_scorer/core/app_config.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_edit_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_history_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cricket_scorer/features/auth/bloc/auth_bloc.dart';
 import 'package:cricket_scorer/features/auth/bloc/auth_state.dart';
 import 'package:cricket_scorer/core/event_bus.dart';
+import 'package:image_picker/image_picker.dart';
 
 class TeamDetailsScreen extends StatefulWidget {
   final String teamId;
@@ -79,6 +82,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
   }
 
   String? _currentUserId;
+  String? _currentUserGlobalRole;
   String? _myMemberRole;
   String? _myMemberStatus;
 
@@ -86,6 +90,15 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
   bool get _isVC => _myMemberRole?.toLowerCase() == 'vice_captain';
   bool get _isActiveMember => _myMemberStatus?.toLowerCase() == 'active';
   bool get _isSquadLocked => _team != null && _team['is_squad_locked'] == true;
+
+  bool get _canManageTeam {
+    if (_team == null) return false;
+    final isCaptain = _myMemberRole?.toLowerCase() == 'captain' || widget.userRole.toLowerCase() == 'captain';
+    final isCreator = _team!['created_by']?.toString() == _currentUserId;
+    final isAdmin = _currentUserGlobalRole?.toLowerCase() == 'admin';
+    final isOrganizer = _currentUserGlobalRole?.toLowerCase() == 'organizer';
+    return isCaptain || isCreator || isAdmin || isOrganizer;
+  }
 
   Future<void> _loadDetails() async {
     setState(() => _isLoading = true);
@@ -105,9 +118,11 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
       }).toList();
 
       String? currentUserId;
+      String? currentUserGlobalRole;
       try {
         final profileRes = await _apiService.getProfile();
         currentUserId = profileRes.data['id']?.toString();
+        currentUserGlobalRole = profileRes.data['role']?.toString();
       } catch (_) {}
 
       dynamic myMemberObj;
@@ -134,6 +149,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
         _matches = filteredMatches;
         _activities = activities;
         _currentUserId = currentUserId;
+        _currentUserGlobalRole = currentUserGlobalRole;
         if (myMemberObj != null) {
           _myMemberRole = myMemberObj['role'];
           _myMemberStatus = myMemberObj['status'];
@@ -153,7 +169,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
         _isLoading = false;
       });
       // Recreate tab controller if length changed
-      final int expectedLength = _isCaptain ? 5 : 4;
+      final int expectedLength = _canManageTeam ? 5 : 4;
       if (_tabController.length != expectedLength) {
         _updateTabController(expectedLength);
       }
@@ -436,7 +452,65 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
             "Team Configuration",
             style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          Center(
+            child: Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                Container(
+                  width: 90,
+                  height: 90,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.04),
+                    border: Border.all(color: AppColors.primary, width: 1.5),
+                  ),
+                  child: _teamLogoUrl != null && _teamLogoUrl!.isNotEmpty
+                      ? ClipOval(
+                          child: Image.network(
+                            _resolvePhotoUrl(_teamLogoUrl),
+                            width: 86,
+                            height: 86,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                _buildInitialsLogo(_settingsNameController.text.isEmpty ? "Team" : _settingsNameController.text, 86),
+                          ),
+                        )
+                      : _buildInitialsLogo(_settingsNameController.text.isEmpty ? "Team" : _settingsNameController.text, 86),
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: GestureDetector(
+                    onTap: _showLogoSettingsOptions,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.primary,
+                      ),
+                      child: const Icon(
+                        Icons.camera_alt_rounded,
+                        color: Colors.black,
+                        size: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton(
+              onPressed: _showLogoSettingsOptions,
+              child: Text(
+                _teamLogoUrl != null && _teamLogoUrl!.isNotEmpty ? "Change Logo" : "Upload Logo",
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           TextFormField(
             controller: _settingsNameController,
             style: const TextStyle(color: Colors.white),
@@ -2041,7 +2115,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
             const Tab(text: "Members"),
             const Tab(text: "Squad"),
             const Tab(text: "Activity"),
-            if (_isCaptain) const Tab(text: "Settings"),
+            if (_canManageTeam) const Tab(text: "Settings"),
           ],
         ),
       ),
@@ -2054,7 +2128,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                 _buildMembersTab(),
                 _buildSquadTab(),
                 _buildActivityTab(),
-                if (_isCaptain) _buildSettingsTab(),
+                if (_canManageTeam) _buildSettingsTab(),
               ],
             ),
     );
@@ -2213,4 +2287,115 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
             ),
     );
   }
+
+  String _resolvePhotoUrl(String? path) {
+    if (path == null || path.isEmpty) return "";
+    if (path.startsWith("http")) return path;
+    final uri = Uri.parse(AppConfig.baseUrl);
+    final host = "${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}";
+    return "$host$path";
+  }
+
+  Widget _buildInitialsLogo(String name, double size) {
+    final initials = name.trim().split(RegExp(r'\s+'))
+        .take(2)
+        .map((e) => e.isNotEmpty ? e[0].toUpperCase() : '')
+        .join();
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.secondary.withOpacity(0.15),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initials.isEmpty ? "?" : initials,
+        style: GoogleFonts.outfit(
+          fontWeight: FontWeight.bold,
+          color: AppColors.secondary,
+          fontSize: size * 0.4,
+        ),
+      ),
+    );
+  }
+
+  void _showLogoSettingsOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xff090c15),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded, color: AppColors.primary),
+              title: Text("Choose from Gallery", style: GoogleFonts.outfit(color: Colors.white)),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                final picker = ImagePicker();
+                final picked = await picker.pickImage(source: ImageSource.gallery);
+                if (picked != null) {
+                  final file = File(picked.path);
+                  final size = await file.length();
+                  if (size > 5 * 1024 * 1024) {
+                    _showSnackBar("File size exceeds 5MB limit", AppColors.error);
+                    return;
+                  }
+                  final ext = picked.path.split('.').last.toLowerCase();
+                  if (!['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) {
+                    _showSnackBar("Supported formats: JPG, JPEG, PNG, GIF, WEBP", AppColors.error);
+                    return;
+                  }
+                  setState(() => _isSavingSettings = true);
+                  try {
+                    final res = await _apiService.uploadTeamLogo(widget.teamId, picked.path);
+                    setState(() {
+                      _teamLogoUrl = res.data['logo_url'];
+                    });
+                    PaintingBinding.instance.imageCache.clear();
+                    PaintingBinding.instance.imageCache.clearLiveImages();
+                    _showSnackBar("Team logo updated!", AppColors.primary);
+                    _loadDetails();
+                    AppEventBus().fire(TeamRefreshedEvent());
+                  } catch (e) {
+                    _showSnackBar("Failed to upload logo: $e", AppColors.error);
+                  } finally {
+                    setState(() => _isSavingSettings = false);
+                  }
+                }
+              },
+            ),
+            if (_teamLogoUrl != null && _teamLogoUrl!.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.delete_rounded, color: AppColors.error),
+                title: Text("Remove Logo", style: GoogleFonts.outfit(color: Colors.white)),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  setState(() => _isSavingSettings = true);
+                  try {
+                    await _apiService.deleteTeamLogo(widget.teamId);
+                    setState(() {
+                      _teamLogoUrl = null;
+                    });
+                    PaintingBinding.instance.imageCache.clear();
+                    PaintingBinding.instance.imageCache.clearLiveImages();
+                    _showSnackBar("Team logo removed!", AppColors.primary);
+                    _loadDetails();
+                    AppEventBus().fire(TeamRefreshedEvent());
+                  } catch (e) {
+                    _showSnackBar("Failed to remove logo: $e", AppColors.error);
+                  } finally {
+                    setState(() => _isSavingSettings = false);
+                  }
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
+

@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AnimatedCoin extends StatefulWidget {
   final String team1Logo;
@@ -29,10 +32,13 @@ class AnimatedCoin extends StatefulWidget {
 class _AnimatedCoinState extends State<AnimatedCoin> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
+  bool _soundEnabled = true;
+  Timer? _spinSoundTimer;
 
   @override
   void initState() {
     super.initState();
+    _loadSoundSetting();
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2500),
@@ -43,32 +49,68 @@ class _AnimatedCoinState extends State<AnimatedCoin> with SingleTickerProviderSt
 
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
+        _playLandingSound();
         widget.onAnimationComplete();
       }
     });
+  }
+
+  Future<void> _loadSoundSetting() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _soundEnabled = prefs.getBool('sound_effects_enabled') ?? true;
+    });
+  }
+
+  void _playSpinSound() {
+    if (!_soundEnabled) return;
+    int count = 0;
+    _spinSoundTimer?.cancel();
+    _spinSoundTimer = Timer.periodic(const Duration(milliseconds: 120), (timer) {
+      if (count >= 20 || !_controller.isAnimating) {
+        timer.cancel();
+        return;
+      }
+      SystemSound.play(SystemSoundType.click);
+      count++;
+    });
+  }
+
+  void _playLandingSound() {
+    _spinSoundTimer?.cancel();
+    if (!_soundEnabled) return;
+    SystemSound.play(SystemSoundType.click);
+    HapticFeedback.vibrate();
   }
 
   @override
   void didUpdateWidget(covariant AnimatedCoin oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isFlipping && !oldWidget.isFlipping) {
-      _controller.reset();
-      _controller.forward();
+      _loadSoundSetting().then((_) {
+        _controller.reset();
+        _controller.forward();
+        _playSpinSound();
+      });
     }
   }
 
   @override
   void dispose() {
+    _spinSoundTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Priority: If both teams have logos, render the actual team logos on each side.
+    // If a logo is unavailable, automatically fall back to team initials.
+    final bool useLogos = widget.team1Logo.isNotEmpty && widget.team2Logo.isNotEmpty;
+
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, child) {
-        // Multi-rotation spin
         double rotationCount = 8.0; // 8 full spins
         double targetAngle = rotationCount * 2 * math.pi;
         if (widget.winnerSide == 2) {
@@ -76,9 +118,6 @@ class _AnimatedCoinState extends State<AnimatedCoin> with SingleTickerProviderSt
         }
 
         double angle = _animation.value * targetAngle;
-        
-        // Determine which side is facing the user
-        // Normalized angle between 0 and 2*pi
         double normAngle = angle % (2 * math.pi);
         bool isFront = normAngle < (math.pi / 2) || normAngle > (3 * math.pi / 2);
 
@@ -88,11 +127,11 @@ class _AnimatedCoinState extends State<AnimatedCoin> with SingleTickerProviderSt
             ..rotateY(angle),
           alignment: Alignment.center,
           child: isFront
-              ? _buildSide(widget.team1Logo, widget.team1Initials, Colors.amber, "HEADS")
+              ? _buildSide(useLogos ? widget.team1Logo : "", widget.team1Initials, Colors.amber, "HEADS")
               : Transform(
                   transform: Matrix4.identity()..rotateY(math.pi),
                   alignment: Alignment.center,
-                  child: _buildSide(widget.team2Logo, widget.team2Initials, Colors.cyan, "TAILS"),
+                  child: _buildSide(useLogos ? widget.team2Logo : "", widget.team2Initials, Colors.cyan, "TAILS"),
                 ),
         );
       },
@@ -125,7 +164,6 @@ class _AnimatedCoinState extends State<AnimatedCoin> with SingleTickerProviderSt
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Inner decorative ring
           Container(
             width: 120,
             height: 120,
@@ -134,7 +172,6 @@ class _AnimatedCoinState extends State<AnimatedCoin> with SingleTickerProviderSt
               border: Border.all(color: Colors.white24, width: 2),
             ),
           ),
-          // Logo or initials
           Center(
             child: logoUrl.isNotEmpty
                 ? ClipOval(
@@ -168,7 +205,6 @@ class _AnimatedCoinState extends State<AnimatedCoin> with SingleTickerProviderSt
                     ),
                   ),
           ),
-          // Bottom label text
           Positioned(
             bottom: 12,
             child: Container(

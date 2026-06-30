@@ -6,6 +6,7 @@ import 'package:cricket_scorer/features/auth/bloc/auth_bloc.dart';
 import 'package:cricket_scorer/features/auth/bloc/auth_event.dart';
 import 'package:cricket_scorer/features/profile/screens/edit_profile_screen.dart';
 import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -19,6 +20,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _profilePrivacyPublic = true;
   bool _pushNotificationsEnabled = true;
   bool _emailNotificationsEnabled = true;
+  bool _soundEffectsEnabled = true;
   bool _isLoading = false;
   Map<String, dynamic>? _profileData;
 
@@ -26,6 +28,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadPrivacySettings();
+    _loadSoundSettings();
+  }
+
+  Future<void> _loadSoundSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _soundEffectsEnabled = prefs.getBool('sound_effects_enabled') ?? true;
+    });
   }
 
   Future<void> _loadPrivacySettings() async {
@@ -405,6 +415,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       activeColor: AppColors.primary,
                       title: const Text("Email Notifications", style: TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: const Text("Receive digest summary reports of match and team updates"),
+                    ),
+                    const Divider(color: Color(0x14FFFFFF)),
+                    SwitchListTile(
+                      value: _soundEffectsEnabled,
+                      onChanged: (val) async {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setBool('sound_effects_enabled', val);
+                        setState(() => _soundEffectsEnabled = val);
+                      },
+                      activeColor: AppColors.primary,
+                      title: const Text("Sound Effects", style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: const Text("Play audio feedback during toss coin spins"),
                     ),
                   ],
                 ),

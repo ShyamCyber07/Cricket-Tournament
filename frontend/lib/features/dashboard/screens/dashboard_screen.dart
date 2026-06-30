@@ -8,6 +8,7 @@ import 'package:cricket_scorer/features/auth/bloc/auth_bloc.dart';
 import 'package:cricket_scorer/features/auth/bloc/auth_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cricket_scorer/features/matches/screens/match_setup_screen.dart';
+import 'package:cricket_scorer/features/matches/screens/match_center_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_management_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/my_teams_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/universal_search_screen.dart';
@@ -479,19 +480,26 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               ),
             ),
             const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Hey, ${_currentUser['display_name'] ?? _currentUser['full_name']?.split(' ')[0] ?? 'Player'}",
-                  style: GoogleFonts.outfit(fontSize: 14, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
-                ),
-                Text(
-                  "Scorer Dashboard",
-                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-              ],
-            )
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    "Hey, ${_currentUser['display_name'] ?? _currentUser['full_name']?.split(' ')[0] ?? 'Player'}",
+                    style: GoogleFonts.outfit(fontSize: 14, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                  Text(
+                    "Scorer Dashboard",
+                    style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
         actions: [
@@ -717,31 +725,6 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(height: 16),
-                _buildSpringyButton(
-                  onTap: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const MatchSetupScreen()),
-                    );
-                    _fetchMatches();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      "Start Match Setup",
-                      style: GoogleFonts.outfit(
-                        color: Colors.black,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -761,7 +744,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       onTap: () async {
         await Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => ScoringScreen(matchId: match['id'])),
+          MaterialPageRoute(builder: (context) => MatchCenterScreen(matchId: match['id'])),
         );
         _fetchMatches();
       },
@@ -861,19 +844,41 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.location_on_outlined, size: 14, color: AppColors.textSecondary),
-                    const SizedBox(width: 4),
-                    Text(
-                      match['venue'] ?? 'Main Ground',
-                      style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.bold),
-                    ),
-                  ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.location_on_outlined, size: 14, color: AppColors.textSecondary),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          match['venue'] ?? 'Main Ground',
+                          style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                Text(
-                  "Starts: Scheduled",
-                  style: GoogleFonts.outfit(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => MatchCenterScreen(matchId: match['id'])),
+                    );
+                    _fetchMatches();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.black,
+                  ),
+                  child: Text(
+                    "Start Match Setup",
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12),
+                  ),
                 ),
               ],
             )

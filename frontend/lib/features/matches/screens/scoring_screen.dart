@@ -11,6 +11,7 @@ import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
 import 'squad_selection_screen.dart';
+import 'match_center_screen.dart';
 import 'package:cricket_scorer/features/matches/widgets/animated_coin.dart';
 
 class ScoringScreen extends StatefulWidget {
@@ -667,31 +668,16 @@ class _ScoringScreenState extends State<ScoringScreen> {
           _currentUserId != tournamentOrganizerId &&
           _currentUserId != assignedScorerId;
       
-      if (status == 'scheduled') {
+      if (status == 'scheduled' || status == 'toss' || status == 'team_selection') {
         setState(() {
           _liveState = data;
           _isLoading = false;
         });
-        if (!isViewer) {
-          _promptTossSelection();
-        }
-        return;
-      } else if (status == 'team_selection') {
-        setState(() {
-          _liveState = data;
-          _isLoading = false;
-        });
-        if (!isViewer && mounted) {
+        if (mounted) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (context) => SquadSelectionScreen(
-                matchId: widget.matchId,
-                team1Id: data['team1_id'].toString(),
-                team2Id: data['team2_id'].toString(),
-                team1Name: data['team1_name'].toString(),
-                team2Name: data['team2_name'].toString(),
-              ),
+              builder: (context) => MatchCenterScreen(matchId: widget.matchId),
             ),
           );
         }

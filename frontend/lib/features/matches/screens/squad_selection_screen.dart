@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'scoring_screen.dart';
+import 'playing_xi_lock_screen.dart';
 
 class SquadSelectionScreen extends StatefulWidget {
   final String matchId;
@@ -122,31 +123,25 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
 
       await _apiService.submitSquad(widget.matchId, widget.team2Id, squad2List);
 
-      // 3. Squads submitted. Fetch Live Match details to determine who is batting first
-      final liveMatchRes = await _apiService.getLiveMatch(widget.matchId);
-      final liveState = liveMatchRes.data;
-
-      final battingTeamName = liveState['current_innings']['batting_team_name'];
-      final isTeam1Batting = (battingTeamName == widget.team1Name);
-
-      final battingPlayers = isTeam1Batting ? _team1Players : _team2Players;
-      final bowlingPlayers = isTeam1Batting ? _team2Players : _team1Players;
-
-      final selectedBattingIds = isTeam1Batting ? _selectedTeam1 : _selectedTeam2;
-      final selectedBowlingIds = isTeam1Batting ? _selectedTeam2 : _selectedTeam1;
-
-      final activeBattingList =
-          battingPlayers.where((p) => selectedBattingIds.contains(p['id'].toString())).toList();
-      final activeBowlingList =
-          bowlingPlayers.where((p) => selectedBowlingIds.contains(p['id'].toString())).toList();
+      final activeSquad1 = _team1Players.where((p) => _selectedTeam1.contains(p['id'].toString())).toList();
+      final activeSquad2 = _team2Players.where((p) => _selectedTeam2.contains(p['id'].toString())).toList();
 
       setState(() => _isLoading = false);
 
       if (mounted) {
-        _promptMatchStarters(
-          battingTeamName: battingTeamName,
-          battingPlayers: activeBattingList,
-          bowlingPlayers: activeBowlingList,
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PlayingXILockScreen(
+              matchId: widget.matchId,
+              team1Id: widget.team1Id,
+              team2Id: widget.team2Id,
+              team1Name: widget.team1Name,
+              team2Name: widget.team2Name,
+              squad1: activeSquad1,
+              squad2: activeSquad2,
+            ),
+          ),
         );
       }
     } catch (e) {

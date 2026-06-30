@@ -416,6 +416,10 @@ class ApiService {
     return await _dio.post('/teams/$teamId/upload-logo', data: formData);
   }
 
+  Future<Response> deleteTeamLogo(String teamId) async {
+    return await _dio.delete('/teams/$teamId/logo');
+  }
+
   Future<Response> uploadTournamentLogo(String tournamentId, String filePath) async {
     final fileName = filePath.split('/').last;
     final formData = FormData.fromMap({

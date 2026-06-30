@@ -6,6 +6,7 @@ import 'package:cricket_scorer/core/app_config.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:cricket_scorer/core/event_bus.dart';
 
 class TeamManagementScreen extends StatefulWidget {
   const TeamManagementScreen({super.key});
@@ -367,13 +368,66 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                   children: [
                     GestureDetector(
                       onTap: () async {
-                        final picker = ImagePicker();
-                        final picked = await picker.pickImage(source: ImageSource.gallery);
-                        if (picked != null) {
-                          setDialogState(() {
-                            selectedLogoFile = File(picked.path);
-                          });
-                        }
+                        showModalBottomSheet(
+                          context: context,
+                          backgroundColor: const Color(0xff090c15),
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                          ),
+                          builder: (sheetContext) => SafeArea(
+                            child: Wrap(
+                              children: [
+                                ListTile(
+                                  leading: const Icon(Icons.photo_library_rounded, color: AppColors.primary),
+                                  title: Text("Choose from Gallery", style: GoogleFonts.outfit(color: Colors.white)),
+                                  onTap: () async {
+                                    Navigator.pop(sheetContext);
+                                    final picker = ImagePicker();
+                                    final picked = await picker.pickImage(source: ImageSource.gallery);
+                                    if (picked != null) {
+                                      final file = File(picked.path);
+                                      final size = await file.length();
+                                      if (size > 5 * 1024 * 1024) {
+                                        _showSnackBar("File size exceeds 5MB limit", AppColors.error);
+                                        return;
+                                      }
+                                      final ext = picked.path.split('.').last.toLowerCase();
+                                      if (!['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) {
+                                        _showSnackBar("Supported formats: JPG, JPEG, PNG, GIF, WEBP", AppColors.error);
+                                        return;
+                                      }
+                                      setDialogState(() {
+                                        selectedLogoFile = File(picked.path);
+                                      });
+                                    }
+                                  },
+                                ),
+                                if ((currentLogoUrl != null && currentLogoUrl.toString().isNotEmpty) || selectedLogoFile != null)
+                                  ListTile(
+                                    leading: const Icon(Icons.delete_rounded, color: AppColors.error),
+                                    title: Text("Remove Logo", style: GoogleFonts.outfit(color: Colors.white)),
+                                    onTap: () async {
+                                      Navigator.pop(sheetContext);
+                                      setDialogState(() {
+                                        selectedLogoFile = null;
+                                      });
+                                      if (currentLogoUrl != null && currentLogoUrl.toString().isNotEmpty) {
+                                        try {
+                                          await _apiService.deleteTeamLogo(teamId);
+                                          PaintingBinding.instance.imageCache.clear();
+                                          PaintingBinding.instance.imageCache.clearLiveImages();
+                                          _showSnackBar("Team logo removed!", AppColors.primary);
+                                          team['logo_url'] = null;
+                                        } catch (e) {
+                                          _showSnackBar("Failed to remove logo: $e", AppColors.error);
+                                        }
+                                      }
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
                       },
                       child: Container(
                         width: 80,
@@ -393,11 +447,11 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                                   fit: BoxFit.cover,
                                 ),
                               )
-                            : (currentLogoUrl != null && currentLogoUrl.toString().isNotEmpty
+                            : (team['logo_url'] != null && team['logo_url'].toString().isNotEmpty
                                 ? ClipRRect(
                                     borderRadius: BorderRadius.circular(40),
                                     child: Image.network(
-                                      _resolvePhotoUrl(currentLogoUrl),
+                                      _resolvePhotoUrl(team['logo_url']),
                                       width: 80,
                                       height: 80,
                                       fit: BoxFit.cover,
@@ -467,15 +521,17 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                     Navigator.pop(context); // close dialog
                     setState(() => _isLoading = true);
                     try {
-                      // Send UUID(int=0) to clear captain if null
                       final capId = selectedCaptainId ?? '00000000-0000-0000-0000-000000000000';
                       await _apiService.updateTeam(teamId, _nameController.text.trim(), captainId: capId);
                       if (selectedLogoFile != null) {
                         await _apiService.uploadTeamLogo(teamId, selectedLogoFile!.path);
+                        PaintingBinding.instance.imageCache.clear();
+                        PaintingBinding.instance.imageCache.clearLiveImages();
                       }
                       _showSnackBar("Team updated successfully!", AppColors.primary);
                       _nameController.clear();
                       _fetchTeams();
+                      AppEventBus().fire(TeamRefreshedEvent());
                     } catch (e) {
                       setState(() => _isLoading = false);
                       String errMsg = e.toString();
