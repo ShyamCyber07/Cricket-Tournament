@@ -1276,16 +1276,31 @@ def update_match(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    if match.created_by != current_user.id and current_user.role != "admin":
+    is_authorized = (
+        match.created_by == current_user.id or
+        current_user.role == "admin" or
+        (match.tournament and match.tournament.organizer_id == current_user.id)
+    )
+    if not is_authorized:
         raise HTTPException(status_code=403, detail="Not authorized to edit this match")
 
     update_data = match_in.model_dump(exclude_unset=True)
+    
+    status_changed = False
+    if "status" in update_data and update_data["status"] != match.status:
+        status_changed = True
+
     for field, value in update_data.items():
         setattr(match, field, value)
 
     db.add(match)
     db.commit()
     db.refresh(match)
+
+    if status_changed and match.status == "abandoned" and match.tournament_id:
+        from app.routers.tournaments import check_and_progress_tournament
+        check_and_progress_tournament(match.tournament_id, db)
+
     return match
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)

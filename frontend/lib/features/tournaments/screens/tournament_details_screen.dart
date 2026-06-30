@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:cricket_scorer/features/matches/screens/scoring_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
+import 'package:intl/intl.dart';
 
 class TournamentDetailsScreen extends StatefulWidget {
   final String tournamentId;
@@ -1331,8 +1332,10 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
   Widget _buildFixturesTab() {
     final upcoming = _dashboardData['upcoming_matches'] as List<dynamic>? ?? [];
     final completed = _dashboardData['completed_matches'] as List<dynamic>? ?? [];
+    
+    final allMatches = [...upcoming, ...completed];
 
-    if (upcoming.isEmpty && completed.isEmpty) {
+    if (allMatches.isEmpty) {
       return Center(
         child: Text(
           "No fixtures generated yet.",
@@ -1341,35 +1344,88 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
       );
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        if (upcoming.isNotEmpty) ...[
-          Text("Upcoming Matches", style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: upcoming.length,
-            itemBuilder: (context, idx) {
-              return _buildMatchCard(upcoming[idx], isActionable: true);
-            },
-          ),
-          const SizedBox(height: 20),
+    final List<dynamic> leagueMatches = [];
+    final List<dynamic> semiFinalMatches = [];
+    final List<dynamic> finalMatches = [];
+
+    for (final m in allMatches) {
+      final stage = (m['tournament_stage'] ?? 'league').toString().toLowerCase();
+      if (stage.contains('semi')) {
+        semiFinalMatches.add(m);
+      } else if (stage == 'final' || stage == 'f') {
+        finalMatches.add(m);
+      } else {
+        leagueMatches.add(m);
+      }
+    }
+
+    int compareMatches(dynamic a, dynamic b) {
+      try {
+        final dateA = DateTime.parse(a['match_date']);
+        final dateB = DateTime.parse(b['match_date']);
+        return dateA.compareTo(dateB);
+      } catch (_) {
+        return 0;
+      }
+    }
+    
+    leagueMatches.sort(compareMatches);
+    semiFinalMatches.sort(compareMatches);
+    finalMatches.sort(compareMatches);
+
+    return RefreshIndicator(
+      onRefresh: _fetchData,
+      color: AppColors.primary,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          if (leagueMatches.isNotEmpty) ...[
+            _buildStageHeader("League Stage Matches"),
+            const SizedBox(height: 12),
+            ...leagueMatches.map((m) => _buildMatchCard(m, isActionable: m['status'] != 'completed' && m['status'] != 'abandoned')),
+            const SizedBox(height: 24),
+          ],
+          if (semiFinalMatches.isNotEmpty) ...[
+            _buildStageHeader("Semi-Final Matchups"),
+            const SizedBox(height: 12),
+            ...semiFinalMatches.map((m) => _buildMatchCard(m, isActionable: m['status'] != 'completed' && m['status'] != 'abandoned')),
+            const SizedBox(height: 24),
+          ],
+          if (finalMatches.isNotEmpty) ...[
+            _buildStageHeader("The Grand Final"),
+            const SizedBox(height: 12),
+            ...finalMatches.map((m) => _buildMatchCard(m, isActionable: m['status'] != 'completed' && m['status'] != 'abandoned')),
+            const SizedBox(height: 24),
+          ],
         ],
-        if (completed.isNotEmpty) ...[
-          Text("Completed / Abandoned Matches", style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: completed.length,
-            itemBuilder: (context, idx) {
-              return _buildMatchCard(completed[idx], isActionable: false);
-            },
+      ),
+    );
+  }
+
+  Widget _buildStageHeader(String title) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.emoji_events_rounded, color: AppColors.primary, size: 16),
+          const SizedBox(width: 8),
+          Text(
+            title.toUpperCase(),
+            style: GoogleFonts.outfit(
+              color: AppColors.primary,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              letterSpacing: 1.5,
+            ),
           ),
         ],
-      ],
+      ),
     );
   }
 
@@ -1877,6 +1933,21 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  if (_currentUser != null &&
+                      (_currentUser!['id'].toString() == (_dashboardData['summary']?['organizer_id']?.toString()) ||
+                       _currentUser!['role'] == 'admin')) ...[
+                    IconButton(
+                      icon: const Icon(Icons.calendar_month_outlined, color: AppColors.accent),
+                      tooltip: "Reschedule",
+                      onPressed: () => _rescheduleMatch(match),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.block_flipped, color: AppColors.error),
+                      tooltip: "Abandon",
+                      onPressed: () => _confirmAbandonMatch(match),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   ElevatedButton.icon(
                     onPressed: () async {
                       await Navigator.push(
@@ -1921,6 +1992,180 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _rescheduleMatch(dynamic match) async {
+    final currentMatchDate = DateTime.parse(match['match_date']).toLocal();
+    DateTime selectedDate = currentMatchDate;
+    TimeOfDay selectedTime = TimeOfDay.fromDateTime(currentMatchDate);
+    final TextEditingController venueController = TextEditingController(text: match['venue'] ?? 'Main Ground');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "Reschedule Match",
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: Colors.white,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    ListTile(
+                      leading: const Icon(Icons.calendar_today_rounded, color: AppColors.primary),
+                      title: const Text("Select Date"),
+                      subtitle: Text(DateFormat('dd MMM yyyy').format(selectedDate)),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2026),
+                          lastDate: DateTime(2030),
+                        );
+                        if (picked != null) {
+                          setSheetState(() => selectedDate = picked);
+                        }
+                      },
+                    ),
+                    const Divider(color: Color(0x14FFFFFF)),
+                    ListTile(
+                      leading: const Icon(Icons.access_time_rounded, color: AppColors.primary),
+                      title: const Text("Select Time"),
+                      subtitle: Text(selectedTime.format(context)),
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: selectedTime,
+                        );
+                        if (picked != null) {
+                          setSheetState(() => selectedTime = picked);
+                        }
+                      },
+                    ),
+                    const Divider(color: Color(0x14FFFFFF)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: venueController,
+                      decoration: const InputDecoration(
+                        labelText: "Venue / Ground Name",
+                        prefixIcon: Icon(Icons.location_on_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        setState(() => _isLoading = true);
+                        try {
+                          final finalDateTime = DateTime(
+                            selectedDate.year,
+                            selectedDate.month,
+                            selectedDate.day,
+                            selectedTime.hour,
+                            selectedTime.minute,
+                          ).toUtc();
+                          
+                          await _apiService.updateMatch(match['id'].toString(), {
+                            'match_date': finalDateTime.toIso8601String(),
+                            'venue': venueController.text.trim(),
+                          });
+                          
+                          _showSnackBar("Match rescheduled successfully!", AppColors.primary);
+                          _fetchData();
+                        } catch (e) {
+                          setState(() => _isLoading = false);
+                          _showSnackBar("Failed to reschedule match: $e", AppColors.error);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text("Save Changes"),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _confirmAbandonMatch(dynamic match) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text(
+            "Abandon Match",
+            style: GoogleFonts.outfit(color: AppColors.error, fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            "Are you sure you want to abandon this match? It will be marked abandoned and cannot be scored. This action will progress the tournament.",
+            style: GoogleFonts.outfit(color: Colors.white),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                setState(() => _isLoading = true);
+                try {
+                  await _apiService.updateMatch(match['id'].toString(), {
+                    'status': 'abandoned',
+                  });
+                  _showSnackBar("Match marked as abandoned.", AppColors.primary);
+                  _fetchData();
+                } catch (e) {
+                  setState(() => _isLoading = false);
+                  _showSnackBar("Failed to abandon match: $e", AppColors.error);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text("Abandon"),
+            ),
+          ],
+        );
+      },
     );
   }
 }

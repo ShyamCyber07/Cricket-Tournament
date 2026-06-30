@@ -1047,6 +1047,14 @@ class ApiService {
     return await _dio.delete('/auth/delete-account');
   }
 
+  Future<Response> updateMatch(String matchId, Map<String, dynamic> data) async {
+    return await _dio.put('/matches/$matchId', data: data);
+  }
+
+  Future<Response> deleteMatch(String matchId) async {
+    return await _dio.delete('/matches/$matchId');
+  }
+
   Future<Response> testConnection() async {
     final uri = Uri.parse(AppConfig.baseUrl);
     final hostUrl = "${uri.scheme}://${uri.host}:${uri.port}/";
