@@ -84,6 +84,9 @@ def test_league_fixtures_and_nrr_math(client, auth_headers):
     fig_res = client.post(f"/api/v1/tournaments/{tour_id}/fixtures/generate", json={"home_away": False, "over_limit": 1}, headers=auth_headers)
     assert fig_res.status_code == 201
 
+    pub_res = client.post(f"/api/v1/tournaments/{tour_id}/fixtures/publish", headers=auth_headers)
+    assert pub_res.status_code == 200
+
     # Fetch dashboard to verify upcoming match generated
     dash = client.get(f"/api/v1/tournaments/{tour_id}/dashboard").json()
     assert len(dash["upcoming_matches"]) == 1
@@ -178,6 +181,7 @@ def test_hybrid_tournament_progression(client, auth_headers):
 
     # Generate league fixtures (6 matches)
     client.post(f"/api/v1/tournaments/{tour_id}/fixtures/generate", json={"home_away": False, "over_limit": 1}, headers=auth_headers)
+    client.post(f"/api/v1/tournaments/{tour_id}/fixtures/publish", headers=auth_headers)
 
     # Let's abandon all matches to complete the league stage quickly
     # (abandoned matches count as completed for progression, both get 1 point)

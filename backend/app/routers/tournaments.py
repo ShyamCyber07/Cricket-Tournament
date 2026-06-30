@@ -6,6 +6,7 @@ from sqlalchemy import func, and_, or_
 from uuid import UUID
 import uuid
 import os
+import math
 from PIL import Image
 import io
 from pydantic import BaseModel
@@ -13,7 +14,7 @@ from pydantic import BaseModel
 from app.core.storage import upload_image, delete_image
 
 from app.core.database import get_db
-from app.routers.auth import get_current_user
+from app.routers.auth import get_current_user, get_current_user_optional
 from app.models.user import User
 from app.models.cricket import (
     Tournament, Team, TournamentTeam, Match, Innings, TeamPlayer, Player, Ball, MatchSquad,
@@ -32,6 +33,16 @@ class FixtureGenerateRequest(BaseModel):
     venue: str = "Main Ground"
     over_limit: int = 20
     match_type: str = "T20"
+
+class ManualFixtureRequest(BaseModel):
+    team1_id: UUID
+    team2_id: UUID
+    match_date: datetime
+    venue: str = "Main Ground"
+    match_type: str = "T20"
+    over_limit: int = 20
+    tournament_stage: Optional[str] = "league"
+    bracket_code: Optional[str] = None
 
 def get_points_table_logic(id: UUID, db: Session) -> List[PointsTableEntry]:
     tour = db.query(Tournament).filter(Tournament.id == id).first()
@@ -279,6 +290,70 @@ def remove_team_from_tournament(
     db.commit()
     return {"message": "Team deregistered successfully"}
 
+def get_seed_order(n: int):
+    p = int(math.ceil(math.log2(n)))
+    m = 2**p
+    
+    seeds = [1]
+    while len(seeds) < m:
+        next_seeds = []
+        s = len(seeds) * 2
+        for x in seeds:
+            next_seeds.append(x)
+            next_seeds.append(s + 1 - x)
+        seeds = next_seeds
+    return seeds, m
+
+def get_stage_name(m: int) -> str:
+    if m == 2:
+        return "final"
+    elif m == 4:
+        return "semi_final"
+    elif m == 8:
+        return "quarter_final"
+    elif m == 16:
+        return "pre_quarter"
+    return f"round_of_{m}"
+
+def get_bracket_code(m: int, idx: int) -> str:
+    if m == 2:
+        return "F"
+    elif m == 4:
+        return f"SF{idx + 1}"
+    elif m == 8:
+        return f"QF{idx + 1}"
+    elif m == 16:
+        return f"PQF{idx + 1}"
+    return f"R{m}_{idx + 1}"
+
+def get_branch_winner(tournament, stage_m, match_idx, db):
+    code = get_bracket_code(stage_m, match_idx)
+    stage_name = get_stage_name(stage_m)
+    match = db.query(Match).filter(
+        Match.tournament_id == tournament.id,
+        Match.tournament_stage == stage_name,
+        Match.bracket_code == code
+    ).first()
+    
+    if match:
+        return match.winner_id or match.team1_id
+        
+    teams = tournament.teams
+    n = len(teams)
+    if n < 2:
+        return None
+    first_m = 2**int(math.ceil(math.log2(n)))
+    
+    seeds, _ = get_seed_order(n)
+    subtree_size = first_m // stage_m
+    start_idx = match_idx * subtree_size
+    subtree_seeds = seeds[start_idx : start_idx + subtree_size]
+    
+    for seed in subtree_seeds:
+        if seed <= n:
+            return teams[seed - 1].id
+    return None
+
 @router.post("/{id}/fixtures/generate", status_code=status.HTTP_201_CREATED)
 def generate_fixtures(
     id: UUID,
@@ -302,7 +377,7 @@ def generate_fixtures(
     over_limit = req.over_limit if req else 20
     match_type = req.match_type if (req and req.match_type) else "T20"
 
-    # Delete existing scheduled matches for this tournament to regenerate
+    # Delete existing matches in scheduled status
     db.query(Match).filter(Match.tournament_id == id, Match.status == "scheduled").delete()
 
     created_matches = []
@@ -336,36 +411,135 @@ def generate_fixtures(
             
     elif tour.format == "Knockout":
         n = len(teams)
-        if n not in [2, 4, 8]:
-            raise HTTPException(status_code=400, detail="Knockout format requires exactly 2, 4, or 8 teams registered")
-            
-        pairs = []
-        for i in range(n // 2):
-            pairs.append((teams[i], teams[n - 1 - i]))
-            
-        stage = "quarter_final" if n == 8 else ("semi_final" if n == 4 else "final")
+        # Determine initial bracket size m
+        seeds, m = get_seed_order(n)
+        stage = get_stage_name(m)
         
-        for idx, (team_a, team_b) in enumerate(pairs):
-            code = f"QF{idx + 1}" if n == 8 else (f"SF{idx + 1}" if n == 4 else "F")
-            db_match = Match(
-                tournament_id=id,
-                team1_id=team_a.id,
-                team2_id=team_b.id,
-                match_date=current_match_date,
-                venue=venue,
-                status="scheduled",
-                match_type=match_type,
-                over_limit=over_limit,
-                tournament_stage=stage,
-                bracket_code=code
-            )
-            db.add(db_match)
-            created_matches.append(db_match)
-            current_match_date += timedelta(days=1)
+        # Seeding pairs
+        for i in range(0, m, 2):
+            seed_a, seed_b = seeds[i], seeds[i+1]
+            idx_a, idx_b = seed_a - 1, seed_b - 1
+            
+            if idx_a < n and idx_b < n:
+                # Generate match
+                code = get_bracket_code(m, i // 2)
+                db_match = Match(
+                    tournament_id=id,
+                    team1_id=teams[idx_a].id,
+                    team2_id=teams[idx_b].id,
+                    match_date=current_match_date,
+                    venue=venue,
+                    status="scheduled",
+                    match_type=match_type,
+                    over_limit=over_limit,
+                    tournament_stage=stage,
+                    bracket_code=code
+                )
+                db.add(db_match)
+                created_matches.append(db_match)
+                current_match_date += timedelta(days=1)
 
+    tour.status = "fixtures_draft"
+    db.commit()
+    return {"message": f"Generated {len(created_matches)} matches successfully as draft"}
+
+@router.post("/{id}/fixtures/publish")
+def publish_fixtures(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tour = db.query(Tournament).filter(Tournament.id == id).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+        
+    if tour.organizer_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the organizer can publish fixtures")
+        
+    if tour.status != "fixtures_draft":
+        raise HTTPException(status_code=400, detail=f"Tournament is not in draft state. Current status: {tour.status}")
+        
     tour.status = "ongoing"
     db.commit()
-    return {"message": f"Generated {len(created_matches)} matches successfully"}
+    return {"message": "Fixtures published successfully"}
+
+@router.post("/{id}/fixtures/manual", status_code=status.HTTP_201_CREATED)
+def create_manual_fixture(
+    id: UUID,
+    req: ManualFixtureRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tour = db.query(Tournament).filter(Tournament.id == id).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+        
+    if tour.organizer_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the organizer can add manual fixtures")
+
+    registered_team_ids = {t.id for t in tour.teams}
+    if req.team1_id not in registered_team_ids or req.team2_id not in registered_team_ids:
+        raise HTTPException(status_code=400, detail="One or both teams are not registered in this tournament")
+
+    match_date_start = datetime.combine(req.match_date.date(), datetime.min.time()).replace(tzinfo=timezone.utc)
+    match_date_end = match_date_start + timedelta(days=1)
+
+    ground_conflict = db.query(Match).filter(
+        Match.venue == req.venue,
+        Match.match_date >= match_date_start,
+        Match.match_date < match_date_end,
+        Match.status != "abandoned"
+    ).first()
+    if ground_conflict:
+        raise HTTPException(status_code=400, detail=f"Ground conflict: Venue '{req.venue}' is already booked on this day.")
+
+    team1_conflict = db.query(Match).filter(
+        (Match.team1_id == req.team1_id) | (Match.team2_id == req.team1_id),
+        Match.match_date >= match_date_start,
+        Match.match_date < match_date_end,
+        Match.status != "abandoned"
+    ).first()
+    if team1_conflict:
+        raise HTTPException(status_code=400, detail="Team conflict: Team 1 already has a match scheduled on this day.")
+
+    team2_conflict = db.query(Match).filter(
+        (Match.team1_id == req.team2_id) | (Match.team2_id == req.team2_id),
+        Match.match_date >= match_date_start,
+        Match.match_date < match_date_end,
+        Match.status != "abandoned"
+    ).first()
+    if team2_conflict:
+        raise HTTPException(status_code=400, detail="Team conflict: Team 2 already has a match scheduled on this day.")
+
+    duplicate = db.query(Match).filter(
+        (
+            ((Match.team1_id == req.team1_id) & (Match.team2_id == req.team2_id)) |
+            ((Match.team1_id == req.team2_id) & (Match.team2_id == req.team1_id))
+        ),
+        Match.tournament_id == id,
+        Match.tournament_stage == req.tournament_stage,
+        Match.bracket_code == req.bracket_code,
+        Match.status != "abandoned"
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=400, detail="Duplicate fixture: These teams are already scheduled to play in this stage.")
+
+    db_match = Match(
+        tournament_id=id,
+        team1_id=req.team1_id,
+        team2_id=req.team2_id,
+        match_date=req.match_date,
+        venue=req.venue,
+        status="scheduled",
+        match_type=req.match_type,
+        over_limit=req.over_limit,
+        tournament_stage=req.tournament_stage,
+        bracket_code=req.bracket_code
+    )
+    db.add(db_match)
+    db.commit()
+    db.refresh(db_match)
+    return db_match
 
 @router.get("/{id}/points-table", response_model=List[PointsTableEntry])
 def get_points_table(id: UUID, db: Session = Depends(get_db)):
@@ -436,22 +610,32 @@ def get_tournament_leaderboards(id: UUID, db: Session = Depends(get_db)):
     )
 
 @router.get("/{id}/dashboard")
-def get_tournament_dashboard(id: UUID, db: Session = Depends(get_db)):
+def get_tournament_dashboard(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
     tour = db.query(Tournament).filter(Tournament.id == id).first()
     if not tour:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    # Completed or abandoned matches
-    completed_matches = db.query(Match).filter(
-        Match.tournament_id == id,
-        Match.status.in_(["completed", "abandoned"])
-    ).order_by(Match.match_date.desc()).all()
+    is_organizer = current_user is not None and (tour.organizer_id == current_user.id or current_user.role == "admin")
 
-    # Upcoming scheduled/toss/squad matches
-    upcoming_matches = db.query(Match).filter(
-        Match.tournament_id == id,
-        ~Match.status.in_(["completed", "abandoned"])
-    ).order_by(Match.match_date.asc()).all()
+    if tour.status == "fixtures_draft" and not is_organizer:
+        completed_matches = []
+        upcoming_matches = []
+    else:
+        # Completed or abandoned matches
+        completed_matches = db.query(Match).filter(
+            Match.tournament_id == id,
+            Match.status.in_(["completed", "abandoned"])
+        ).order_by(Match.match_date.desc()).all()
+
+        # Upcoming scheduled/toss/squad matches
+        upcoming_matches = db.query(Match).filter(
+            Match.tournament_id == id,
+            ~Match.status.in_(["completed", "abandoned"])
+        ).order_by(Match.match_date.asc()).all()
 
     points_table = get_points_table_logic(id, db)
     leaderboards = get_tournament_leaderboards(id, db)
@@ -525,126 +709,119 @@ def check_and_progress_tournament(tournament_id: UUID, db: Session):
         return
 
     elif tour.format == "Knockout":
-        # Knockout progression: QF -> SF -> F
-        if "quarter_final" in stages and not any(s == "semi_final" for s in stages):
-            # QF finished, generate SF
-            qf_matches = [m for m in active_matches if m.tournament_stage == "quarter_final"]
-            if len(qf_matches) == 4:
-                qf1 = next((m for m in qf_matches if m.bracket_code == "QF1"), None)
-                qf2 = next((m for m in qf_matches if m.bracket_code == "QF2"), None)
-                qf3 = next((m for m in qf_matches if m.bracket_code == "QF3"), None)
-                qf4 = next((m for m in qf_matches if m.bracket_code == "QF4"), None)
-                
-                if qf1 and qf2 and qf3 and qf4:
-                    ref = qf_matches[0]
-                    sf1 = Match(
-                        tournament_id=tournament_id,
-                        team1_id=qf1.winner_id or qf1.team1_id,
-                        team2_id=qf2.winner_id or qf2.team1_id,
-                        match_date=datetime.now(timezone.utc) + timedelta(days=1),
-                        venue=ref.venue,
-                        status="scheduled",
-                        match_type=ref.match_type,
-                        over_limit=ref.over_limit,
-                        tournament_stage="semi_final",
-                        bracket_code="SF1"
-                    )
-                    sf2 = Match(
-                        tournament_id=tournament_id,
-                        team1_id=qf3.winner_id or qf3.team1_id,
-                        team2_id=qf4.winner_id or qf4.team1_id,
-                        match_date=datetime.now(timezone.utc) + timedelta(days=1),
-                        venue=ref.venue,
-                        status="scheduled",
-                        match_type=ref.match_type,
-                        over_limit=ref.over_limit,
-                        tournament_stage="semi_final",
-                        bracket_code="SF2"
-                    )
-                    db.add(sf1)
-                    db.add(sf2)
-                    db.commit()
-            
-        elif "semi_final" in stages and not any(s == "final" for s in stages):
-            # SF finished, generate Final
-            sf_matches = [m for m in active_matches if m.tournament_stage == "semi_final"]
-            sf1 = next((m for m in sf_matches if m.bracket_code == "SF1"), None)
-            sf2 = next((m for m in sf_matches if m.bracket_code == "SF2"), None)
-            
-            if sf1 and sf2:
-                ref = sf_matches[0]
-                final_match = Match(
-                    tournament_id=tournament_id,
-                    team1_id=sf1.winner_id or sf1.team1_id,
-                    team2_id=sf2.winner_id or sf2.team1_id,
-                    match_date=datetime.now(timezone.utc) + timedelta(days=2),
-                    venue=ref.venue,
-                    status="scheduled",
-                    match_type=ref.match_type,
-                    over_limit=ref.over_limit,
-                    tournament_stage="final",
-                    bracket_code="F"
-                )
-                db.add(final_match)
-                db.commit()
-            
-        elif "final" in stages:
-            # Final finished, tournament complete!
-            final_match = next((m for m in active_matches if m.tournament_stage == "final" and m.bracket_code == "F"), None)
+        current_stage = stages[0] if stages else "final"
+        stage_to_m = {
+            "pre_quarter": 16,
+            "quarter_final": 8,
+            "semi_final": 4,
+            "final": 2
+        }
+        m_curr = stage_to_m.get(current_stage, 2)
+        
+        if m_curr == 2:
+            final_match = db.query(Match).filter(
+                Match.tournament_id == tournament_id,
+                Match.tournament_stage == "final",
+                Match.bracket_code == "F"
+            ).first()
             if final_match:
                 tour.winner_id = final_match.winner_id or final_match.team1_id
                 tour.status = "completed"
                 db.add(tour)
                 db.commit()
+            return
+            
+        m_next = m_curr // 2
+        next_stage_name = get_stage_name(m_next)
+        
+        exists = db.query(Match).filter(
+            Match.tournament_id == tournament_id,
+            Match.tournament_stage == next_stage_name
+        ).first()
+        if exists:
+            return
+            
+        ref = active_matches[0]
+        for k in range(m_next // 2):
+            team_a_id = get_branch_winner(tour, m_curr, 2*k, db)
+            team_b_id = get_branch_winner(tour, m_curr, 2*k + 1, db)
+            
+            if team_a_id and team_b_id:
+                code = get_bracket_code(m_next, k)
+                sf_match = Match(
+                    tournament_id=tournament_id,
+                    team1_id=team_a_id,
+                    team2_id=team_b_id,
+                    match_date=datetime.now(timezone.utc) + timedelta(days=1),
+                    venue=ref.venue,
+                    status="scheduled",
+                    match_type=ref.match_type,
+                    over_limit=ref.over_limit,
+                    tournament_stage=next_stage_name,
+                    bracket_code=code
+                )
+                db.add(sf_match)
+        db.commit()
 
     elif tour.format == "League + Knockout":
-        # Hybrid progression: League -> SF -> Final
         if all(m.tournament_stage == "league" for m in active_matches):
-            # League finished, generate SF
             standings = get_points_table_logic(tour.id, db)
-            if len(standings) < 4:
-                # Fallback: not enough teams, complete the tournament early
+            if len(standings) < 2:
                 if standings:
                     tour.winner_id = standings[0].team_id
                 tour.status = "completed"
                 db.add(tour)
                 db.commit()
                 return
-                
-            # Top 4 teams qualify
-            t1, t2, t3, t4 = standings[0].team_id, standings[1].team_id, standings[2].team_id, standings[3].team_id
             
             ref = active_matches[0]
-            sf1 = Match(
-                tournament_id=tournament_id,
-                team1_id=t1,
-                team2_id=t4,
-                match_date=datetime.now(timezone.utc) + timedelta(days=1),
-                venue=ref.venue,
-                status="scheduled",
-                match_type=ref.match_type,
-                over_limit=ref.over_limit,
-                tournament_stage="semi_final",
-                bracket_code="SF1"
-            )
-            sf2 = Match(
-                tournament_id=tournament_id,
-                team1_id=t2,
-                team2_id=t3,
-                match_date=datetime.now(timezone.utc) + timedelta(days=1),
-                venue=ref.venue,
-                status="scheduled",
-                match_type=ref.match_type,
-                over_limit=ref.over_limit,
-                tournament_stage="semi_final",
-                bracket_code="SF2"
-            )
-            db.add(sf1)
-            db.add(sf2)
-            db.commit()
+            if len(standings) < 4:
+                final_match = Match(
+                    tournament_id=tournament_id,
+                    team1_id=standings[0].team_id,
+                    team2_id=standings[1].team_id,
+                    match_date=datetime.now(timezone.utc) + timedelta(days=1),
+                    venue=ref.venue,
+                    status="scheduled",
+                    match_type=ref.match_type,
+                    over_limit=ref.over_limit,
+                    tournament_stage="final",
+                    bracket_code="F"
+                )
+                db.add(final_match)
+                db.commit()
+            else:
+                t1, t2, t3, t4 = standings[0].team_id, standings[1].team_id, standings[2].team_id, standings[3].team_id
+                
+                sf1 = Match(
+                    tournament_id=tournament_id,
+                    team1_id=t1,
+                    team2_id=t4,
+                    match_date=datetime.now(timezone.utc) + timedelta(days=1),
+                    venue=ref.venue,
+                    status="scheduled",
+                    match_type=ref.match_type,
+                    over_limit=ref.over_limit,
+                    tournament_stage="semi_final",
+                    bracket_code="SF1"
+                )
+                sf2 = Match(
+                    tournament_id=tournament_id,
+                    team1_id=t2,
+                    team2_id=t3,
+                    match_date=datetime.now(timezone.utc) + timedelta(days=1),
+                    venue=ref.venue,
+                    status="scheduled",
+                    match_type=ref.match_type,
+                    over_limit=ref.over_limit,
+                    tournament_stage="semi_final",
+                    bracket_code="SF2"
+                )
+                db.add(sf1)
+                db.add(sf2)
+                db.commit()
             
         elif "semi_final" in stages and not any(s == "final" for s in stages):
-            # SF finished, generate Final
             sf_matches = [m for m in active_matches if m.tournament_stage == "semi_final"]
             sf1 = next((m for m in sf_matches if m.bracket_code == "SF1"), None)
             sf2 = next((m for m in sf_matches if m.bracket_code == "SF2"), None)
@@ -667,7 +844,6 @@ def check_and_progress_tournament(tournament_id: UUID, db: Session):
                 db.commit()
             
         elif "final" in stages:
-            # Final finished, tournament complete!
             final_match = next((m for m in active_matches if m.tournament_stage == "final" and m.bracket_code == "F"), None)
             if final_match:
                 tour.winner_id = final_match.winner_id or final_match.team1_id

@@ -35,6 +35,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
   List<dynamic> _requests = [];
   List<dynamic> _myTeams = [];
   List<dynamic> _activities = [];
+  bool _showBracketView = false;
 
   @override
   void initState() {
@@ -942,13 +943,21 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          _buildDashboardTab(status, winnerName),
-          _buildStandingsTab(),
-          _buildFixturesTab(),
-          _buildTeamsTab(status, summary),
+          if (status.toString().toLowerCase() == 'fixtures_draft')
+            _buildDraftBanner(summary),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildDashboardTab(status, winnerName),
+                _buildStandingsTab(),
+                _buildFixturesTab(),
+                _buildTeamsTab(status, summary),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1335,11 +1344,78 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
     
     final allMatches = [...upcoming, ...completed];
 
+    final summary = _dashboardData['summary'] ?? {};
+    final format = (summary['format'] ?? '').toString().toLowerCase();
+    final isKnockoutFormat = format.contains('knockout') || format.contains('hybrid');
+
+    final organizerId = summary['organizer_id']?.toString();
+    final isOrganizer = _currentUser != null &&
+        (_currentUser!['id'].toString() == organizerId || _currentUser!['role'] == 'admin');
+
     if (allMatches.isEmpty) {
       return Center(
-        child: Text(
-          "No fixtures generated yet.",
-          style: GoogleFonts.outfit(color: AppColors.textSecondary),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              "No fixtures generated yet.",
+              style: GoogleFonts.outfit(color: AppColors.textSecondary),
+            ),
+            if (isOrganizer) ...[
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _showCreateManualFixtureSheet,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text("Create Manual Fixture"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.black,
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    if (_showBracketView && isKnockoutFormat) {
+      return RefreshIndicator(
+        onRefresh: _fetchData,
+        color: AppColors.primary,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ChoiceChip(
+                    label: Text("List View", style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
+                    selected: !_showBracketView,
+                    selectedColor: AppColors.primary,
+                    backgroundColor: AppColors.surface,
+                    onSelected: (val) {
+                      if (val) setState(() => _showBracketView = false);
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  ChoiceChip(
+                    label: Text("Bracket View", style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
+                    selected: _showBracketView,
+                    selectedColor: AppColors.primary,
+                    backgroundColor: AppColors.surface,
+                    onSelected: (val) {
+                      if (val) setState(() => _showBracketView = true);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildBracketView(),
+            ],
+          ),
         ),
       );
     }
@@ -1380,6 +1456,51 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
         padding: const EdgeInsets.all(16),
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
+          if (isOrganizer || isKnockoutFormat) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (isKnockoutFormat)
+                  Row(
+                    children: [
+                      ChoiceChip(
+                        label: Text("List View", style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
+                        selected: !_showBracketView,
+                        selectedColor: AppColors.primary,
+                        backgroundColor: AppColors.surface,
+                        onSelected: (val) {
+                          if (val) setState(() => _showBracketView = false);
+                        },
+                      ),
+                      const SizedBox(width: 12),
+                      ChoiceChip(
+                        label: Text("Bracket View", style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
+                        selected: _showBracketView,
+                        selectedColor: AppColors.primary,
+                        backgroundColor: AppColors.surface,
+                        onSelected: (val) {
+                          if (val) setState(() => _showBracketView = true);
+                        },
+                      ),
+                    ],
+                  )
+                else
+                  const Spacer(),
+                if (isOrganizer)
+                  ElevatedButton.icon(
+                    onPressed: _showCreateManualFixtureSheet,
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text("Add Match"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
           if (leagueMatches.isNotEmpty) ...[
             _buildStageHeader("League Stage Matches"),
             const SizedBox(height: 12),
@@ -2166,6 +2287,573 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
           ],
         );
       },
+    );
+  }
+
+  Widget _buildDraftBanner(Map<String, dynamic> summary) {
+    final organizerId = summary['organizer_id']?.toString();
+    final isOrganizer = _currentUser != null &&
+        (_currentUser!['id'].toString() == organizerId || _currentUser!['role'] == 'admin');
+
+    return Container(
+      width: double.infinity,
+      color: isOrganizer ? AppColors.accent.withOpacity(0.15) : AppColors.primary.withOpacity(0.1),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Icon(
+            isOrganizer ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
+            color: isOrganizer ? AppColors.accent : AppColors.primary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isOrganizer ? "DRAFT FIXTURES" : "FIXTURES IN DRAFT",
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: isOrganizer ? AppColors.accent : AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isOrganizer
+                      ? "These fixtures are drafts and only visible to you. Tap Publish when ready."
+                      : "The organizer has generated draft fixtures. They will appear here once published.",
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isOrganizer) ...[
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: _publishFixtures,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              child: Text(
+                "Publish",
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _publishFixtures() async {
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.publishFixtures(widget.tournamentId);
+      _showSnackBar("Fixtures published successfully!", AppColors.primary);
+      _fetchData();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar("Failed to publish fixtures: $e", AppColors.error);
+    }
+  }
+
+  void _showCreateManualFixtureSheet() {
+    final standings = _dashboardData['points_table'] as List<dynamic>? ?? [];
+    if (standings.length < 2) {
+      _showSnackBar("You need at least 2 registered teams to create a fixture.", AppColors.error);
+      return;
+    }
+
+    String? selectedTeam1Id;
+    String? selectedTeam2Id;
+    DateTime selectedDate = DateTime.now();
+    TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
+    final TextEditingController venueController = TextEditingController(text: 'Main Ground');
+    final TextEditingController overController = TextEditingController(text: '20');
+    String selectedMatchType = 'T20';
+    String selectedStage = 'league';
+    final TextEditingController bracketController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                padding: const EdgeInsets.all(24.0),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Create Manual Fixture",
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: Colors.white,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        dropdownColor: AppColors.surface,
+                        value: selectedTeam1Id,
+                        decoration: const InputDecoration(
+                          labelText: "Team 1 (Batting/Home)",
+                          prefixIcon: Icon(Icons.shield_outlined),
+                        ),
+                        items: standings.map<DropdownMenuItem<String>>((t) {
+                          return DropdownMenuItem<String>(
+                            value: t['team_id'].toString(),
+                            child: Text(t['team_name'].toString(), style: GoogleFonts.outfit(color: Colors.white)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setSheetState(() => selectedTeam1Id = val);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        dropdownColor: AppColors.surface,
+                        value: selectedTeam2Id,
+                        decoration: const InputDecoration(
+                          labelText: "Team 2 (Bowling/Away)",
+                          prefixIcon: Icon(Icons.shield_outlined),
+                        ),
+                        items: standings.map<DropdownMenuItem<String>>((t) {
+                          return DropdownMenuItem<String>(
+                            value: t['team_id'].toString(),
+                            child: Text(t['team_name'].toString(), style: GoogleFonts.outfit(color: Colors.white)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setSheetState(() => selectedTeam2Id = val);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ListTile(
+                        leading: const Icon(Icons.calendar_today_rounded, color: AppColors.primary),
+                        title: const Text("Select Date"),
+                        subtitle: Text(DateFormat('dd MMM yyyy').format(selectedDate)),
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate,
+                            firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                            lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                          );
+                          if (picked != null) {
+                            setSheetState(() => selectedDate = picked);
+                          }
+                        },
+                      ),
+                      const Divider(color: Color(0x14FFFFFF)),
+                      ListTile(
+                        leading: const Icon(Icons.access_time_rounded, color: AppColors.primary),
+                        title: const Text("Select Time"),
+                        subtitle: Text(selectedTime.format(context)),
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: selectedTime,
+                          );
+                          if (picked != null) {
+                            setSheetState(() => selectedTime = picked);
+                          }
+                        },
+                      ),
+                      const Divider(color: Color(0x14FFFFFF)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: venueController,
+                        decoration: const InputDecoration(
+                          labelText: "Venue / Ground Name",
+                          prefixIcon: Icon(Icons.location_on_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: overController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: "Overs Limit",
+                          prefixIcon: Icon(Icons.numbers_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        dropdownColor: AppColors.surface,
+                        value: selectedMatchType,
+                        decoration: const InputDecoration(
+                          labelText: "Match Format",
+                          prefixIcon: Icon(Icons.sports_cricket_outlined),
+                        ),
+                        items: ['T20', 'ODI', 'Test', '100-Ball', 'Custom']
+                            .map<DropdownMenuItem<String>>((val) {
+                          return DropdownMenuItem<String>(
+                            value: val,
+                            child: Text(val, style: GoogleFonts.outfit(color: Colors.white)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setSheetState(() => selectedMatchType = val ?? 'T20');
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        dropdownColor: AppColors.surface,
+                        value: selectedStage,
+                        decoration: const InputDecoration(
+                          labelText: "Tournament Stage",
+                          prefixIcon: Icon(Icons.emoji_events_outlined),
+                        ),
+                        items: [
+                          {'label': 'League', 'value': 'league'},
+                          {'label': 'Pre-Quarter', 'value': 'pre_quarter'},
+                          {'label': 'Quarter-Final', 'value': 'quarter_final'},
+                          {'label': 'Semi-Final', 'value': 'semi_final'},
+                          {'label': 'Final', 'value': 'final'},
+                        ].map<DropdownMenuItem<String>>((item) {
+                          return DropdownMenuItem<String>(
+                            value: item['value'],
+                            child: Text(item['label']!, style: GoogleFonts.outfit(color: Colors.white)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setSheetState(() => selectedStage = val ?? 'league');
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: bracketController,
+                        decoration: const InputDecoration(
+                          labelText: "Bracket Code (optional, e.g. QF1, SF2)",
+                          prefixIcon: Icon(Icons.code_rounded),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: () async {
+                          if (selectedTeam1Id == null || selectedTeam2Id == null) {
+                            _showSnackBar("Please select both Team 1 and Team 2.", AppColors.error);
+                            return;
+                          }
+                          if (selectedTeam1Id == selectedTeam2Id) {
+                            _showSnackBar("Team 1 and Team 2 cannot be the same team.", AppColors.error);
+                            return;
+                          }
+                          
+                          Navigator.pop(context);
+                          setState(() => _isLoading = true);
+                          try {
+                            final finalDateTime = DateTime(
+                              selectedDate.year,
+                              selectedDate.month,
+                              selectedDate.day,
+                              selectedTime.hour,
+                              selectedTime.minute,
+                            ).toUtc();
+
+                            await _apiService.createManualFixture(widget.tournamentId, {
+                              'team1_id': selectedTeam1Id,
+                              'team2_id': selectedTeam2Id,
+                              'match_date': finalDateTime.toIso8601String(),
+                              'venue': venueController.text.trim(),
+                              'over_limit': int.tryParse(overController.text) ?? 20,
+                              'match_type': selectedMatchType,
+                              'tournament_stage': selectedStage,
+                              'bracket_code': bracketController.text.trim().isEmpty ? null : bracketController.text.trim().toUpperCase(),
+                            });
+
+                            _showSnackBar("Manual match fixture created!", AppColors.primary);
+                            _fetchData();
+                          } catch (e) {
+                            setState(() => _isLoading = false);
+                            _showSnackBar("Failed to create fixture: $e", AppColors.error);
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: const Text("Create Fixture"),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildBracketView() {
+    final upcoming = _dashboardData['upcoming_matches'] as List<dynamic>? ?? [];
+    final completed = _dashboardData['completed_matches'] as List<dynamic>? ?? [];
+    final allMatches = [...upcoming, ...completed];
+    final standings = _dashboardData['points_table'] as List<dynamic>? ?? [];
+
+    Map<String, dynamic> matchMap = {};
+    for (var m in allMatches) {
+      final code = (m['bracket_code'] ?? '').toString().toUpperCase();
+      if (code.isNotEmpty) {
+        matchMap[code] = m;
+      }
+    }
+
+    final n = standings.length;
+    if (n < 2) {
+      return Center(
+        child: Text("Brackets will appear once teams are registered.", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+      );
+    }
+
+    int p = (math.log(n) / math.log(2)).ceil();
+    int initialM = math.pow(2, p).toInt();
+
+    List<int> getSeedOrderSeq(int size) {
+      List<int> seeds = [1];
+      while (seeds.length < size) {
+        List<int> next = [];
+        int s = seeds.length * 2;
+        for (var x in seeds) {
+          next.add(x);
+          next.add(s + 1 - x);
+        }
+        seeds = next;
+      }
+      return seeds;
+    }
+
+    final seeds = getSeedOrderSeq(initialM);
+
+    List<int> activeStages = [];
+    int tempM = initialM;
+    while (tempM >= 2) {
+      activeStages.add(tempM);
+      tempM = tempM ~/ 2;
+    }
+
+    Map<String, dynamic> resolveMatchup(int stageM, int matchIdx) {
+      final code = stageM == 2
+          ? "F"
+          : (stageM == 4
+              ? "SF${matchIdx + 1}"
+              : (stageM == 8
+                  ? "QF${matchIdx + 1}"
+                  : (stageM == 16 ? "PQF${matchIdx + 1}" : "R${stageM}_${matchIdx + 1}")));
+
+      if (matchMap.containsKey(code)) {
+        final m = matchMap[code];
+        return {
+          'team1_name': m['team1_name'] ?? 'TBD',
+          'team2_name': m['team2_name'] ?? 'TBD',
+          'team1_logo_url': m['team1_logo_url'],
+          'team2_logo_url': m['team2_logo_url'],
+          'status': m['status'] ?? 'scheduled',
+          'winner_name': m['winner_name'],
+          'win_description': m['status'] == 'completed'
+              ? (m['winner_name'] != null ? "${m['winner_name']} won" : "Match Tied")
+              : (m['status'] == 'abandoned' ? "Abandoned" : null),
+          'is_bye': false,
+          'match': m,
+        };
+      }
+
+      if (stageM == initialM) {
+        final seed1 = seeds[matchIdx * 2];
+        final seed2 = seeds[matchIdx * 2 + 1];
+        
+        final hasTeam1 = (seed1 - 1) < n;
+        final hasTeam2 = (seed2 - 1) < n;
+
+        if (hasTeam1 && !hasTeam2) {
+          final t1 = standings[seed1 - 1];
+          return {
+            'team1_name': t1['team_name'] ?? 'TBD',
+            'team2_name': 'BYE (Advances)',
+            'team1_logo_url': t1['logo_url'],
+            'team2_logo_url': null,
+            'status': 'bye',
+            'is_bye': true,
+          };
+        }
+      }
+
+      return {
+        'team1_name': 'TBD',
+        'team2_name': 'TBD',
+        'status': 'scheduled',
+        'is_bye': false,
+      };
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: activeStages.map((stageM) {
+          final stageName = stageM == 2
+              ? "Final"
+              : (stageM == 4
+                  ? "Semi-Finals"
+                  : (stageM == 8
+                      ? "Quarter-Finals"
+                      : (stageM == 16 ? "Pre-Quarter" : "Round of $stageM")));
+
+          final matchCount = stageM ~/ 2;
+
+          return Container(
+            width: 260,
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                  ),
+                  child: Text(
+                    stageName.toUpperCase(),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: AppColors.primary,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...List.generate(matchCount, (idx) {
+                  final matchup = resolveMatchup(stageM, idx);
+                  final isBye = matchup['is_bye'] == true;
+                  final status = matchup['status'].toString().toUpperCase();
+                  final isLive = status == 'INNINGS1' || status == 'INNINGS2' || status == 'TEAM_SELECTION';
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 24),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                isBye ? "BYE" : status,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: isBye
+                                      ? AppColors.primary
+                                      : (isLive ? AppColors.primary : AppColors.textSecondary),
+                                ),
+                              ),
+                              if (matchup['match'] != null && matchup['match']['bracket_code'] != null)
+                                Text(
+                                  matchup['match']['bracket_code'].toString(),
+                                  style: GoogleFonts.outfit(fontSize: 9, color: AppColors.accent, fontWeight: FontWeight.bold),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              _buildTeamLogo(matchup['team1_logo_url'], matchup['team1_name'], size: 24),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  matchup['team1_name'],
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: Colors.white,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              _buildTeamLogo(matchup['team2_logo_url'], matchup['team2_name'], size: 24),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  matchup['team2_name'],
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: isBye ? AppColors.primary : Colors.white,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (matchup['win_description'] != null) ...[
+                            const SizedBox(height: 12),
+                            const Divider(color: Color(0x14FFFFFF)),
+                            const SizedBox(height: 4),
+                            Text(
+                              matchup['win_description'],
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.accent,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 }

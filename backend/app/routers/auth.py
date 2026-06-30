@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 from pydantic import BaseModel
 import secrets
 import logging
 import traceback  # used by FULL TRACEBACK logs in except blocks below
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,30 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
         )
         
     return user
+
+
+def get_current_user_optional(
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None)
+) -> Optional[User]:
+    from typing import Optional as TypingOptional
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    try:
+        token = authorization.split(" ")[1]
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        user_id_str = payload.get("sub")
+        if user_id_str is None:
+            return None
+        user_id = UUID(user_id_str)
+        user = db.query(User).filter(User.id == user_id).first()
+        if user is None or not user.is_active:
+            return None
+        if user.lockout_until and user.lockout_until > get_utc_now():
+            return None
+        return user
+    except Exception:
+        return None
 
 
 def create_refresh_token(db: Session, user_id: UUID) -> str:

@@ -1047,12 +1047,12 @@ class ApiService {
     return await _dio.delete('/auth/delete-account');
   }
 
-  Future<Response> updateMatch(String matchId, Map<String, dynamic> data) async {
-    return await _dio.put('/matches/$matchId', data: data);
+  Future<Response> publishFixtures(String tournamentId) async {
+    return await _dio.post('/tournaments/$tournamentId/fixtures/publish');
   }
 
-  Future<Response> deleteMatch(String matchId) async {
-    return await _dio.delete('/matches/$matchId');
+  Future<Response> createManualFixture(String tournamentId, Map<String, dynamic> data) async {
+    return await _dio.post('/tournaments/$tournamentId/fixtures/manual', data: data);
   }
 
   Future<Response> testConnection() async {
