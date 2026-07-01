@@ -715,6 +715,7 @@ def get_tournament_dashboard(
 
     summary_data = {
         "id": str(tour.id),
+        "organizer_id": str(tour.organizer_id) if tour.organizer_id else None,
         "name": tour.name,
         "start_date": str(tour.start_date),
         "end_date": str(tour.end_date),
