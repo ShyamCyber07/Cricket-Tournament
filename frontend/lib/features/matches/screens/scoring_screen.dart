@@ -1378,6 +1378,16 @@ class _ScoringScreenState extends State<ScoringScreen> {
       return true;
     }).toList();
 
+    // Sort available batsmen by batting order
+    availableBatsmen.sort((a, b) {
+      final aOrder = a['batting_order'] as int?;
+      final bOrder = b['batting_order'] as int?;
+      if (aOrder == null && bOrder == null) return 0;
+      if (aOrder == null) return 1;
+      if (bOrder == null) return -1;
+      return aOrder.compareTo(bOrder);
+    });
+
     // Debug logging as requested:
     debugPrint("[ScoringScreen] Batting squad players loaded: $_battingSquad");
     debugPrint("[ScoringScreen] Selected striker ID: $_activeStrikerId");
@@ -1467,6 +1477,16 @@ class _ScoringScreenState extends State<ScoringScreen> {
       }
       return true;
     }).toList();
+
+    // Sort available bowlers by bowling preference
+    availableBowlers.sort((a, b) {
+      final aPref = a['bowling_preference'] as int?;
+      final bPref = b['bowling_preference'] as int?;
+      if (aPref == null && bPref == null) return 0;
+      if (aPref == null) return 1;
+      if (bPref == null) return -1;
+      return aPref.compareTo(bPref);
+    });
 
     // If all bowlers are filtered out (e.g. only 1 bowler in squad), fallback to all bowlers
     final displayBowlers = availableBowlers.isEmpty ? _bowlingSquad : availableBowlers;
@@ -1710,7 +1730,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                       value: selectedWicketType,
                       dropdownColor: AppColors.surface,
                       isExpanded: true,
-                      items: ["bowled", "caught", "lbw", "run_out", "stumped", "hit_wicket"]
+                      items: ["bowled", "caught", "lbw", "run_out", "stumped", "hit_wicket", "retired_hurt", "retired_out", "timed_out"]
                           .map((type) => DropdownMenuItem(value: type, child: Text(type.toUpperCase())))
                           .toList(),
                       onChanged: (val) {
@@ -2280,6 +2300,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                                 _buildExtraButton("NB", () => _openNoBallDialog()),
                                 _buildExtraButton("BYE", () => _openExtrasDialog("bye")),
                                 _buildExtraButton("LB", () => _openExtrasDialog("leg_bye")),
+                                _buildExtraButton("PEN", () => _openExtrasDialog("penalty")),
                               ],
                             ),
                             const SizedBox(height: 20),
@@ -2493,7 +2514,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Text(
               text,
               style: GoogleFonts.outfit(
@@ -2770,10 +2791,11 @@ class _ScoringScreenState extends State<ScoringScreen> {
     }
 
     final extras = currentInnings != null
-        ? (currentInnings['extras_wides'] +
-            currentInnings['extras_noballs'] +
-            currentInnings['extras_byes'] +
-            currentInnings['extras_legbyes'])
+        ? ((currentInnings['extras_wides'] ?? 0) +
+            (currentInnings['extras_noballs'] ?? 0) +
+            (currentInnings['extras_byes'] ?? 0) +
+            (currentInnings['extras_legbyes'] ?? 0) +
+            (currentInnings['extras_penalty'] ?? 0))
         : 0;
 
     final tournamentStage = _liveState?['tournament_stage'];
@@ -4154,7 +4176,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
             style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
           ),
           Text(
-            "${extras['total']} (wd ${extras['wides']}, nb ${extras['no_balls']}, b ${extras['byes']}, lb ${extras['leg_byes']})",
+            "${extras['total']} (wd ${extras['wides']}, nb ${extras['no_balls']}, b ${extras['byes']}, lb ${extras['leg_byes']}, pen ${extras['penalties'] ?? 0})",
             style: GoogleFonts.outfit(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.bold),
           ),
         ],

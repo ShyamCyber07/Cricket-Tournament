@@ -103,6 +103,7 @@ class InningsSummarySchema(BaseModel):
     extras_noballs: int
     extras_byes: int
     extras_legbyes: int
+    extras_penalty: int = 0
     is_completed: bool
     dismissed_player_ids: List[UUID] = []
     last_bowler_id: Optional[UUID] = None
@@ -202,6 +203,7 @@ class ExtrasBreakdownSchema(BaseModel):
     no_balls: int
     byes: int
     leg_byes: int
+    penalties: int = 0
     total: int
 
 class FallOfWicketEntry(BaseModel):

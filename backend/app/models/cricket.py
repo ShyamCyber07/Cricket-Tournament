@@ -240,6 +240,7 @@ class Innings(Base):
     extras_legbyes = Column(Integer, default=0)
     extras_wides = Column(Integer, default=0)
     extras_noballs = Column(Integer, default=0)
+    extras_penalty = Column(Integer, default=0)
     is_completed = Column(Boolean, default=False)
 
     # Relationships

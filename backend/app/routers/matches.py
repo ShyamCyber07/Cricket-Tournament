@@ -617,263 +617,293 @@ def submit_ball(
 
     check_match_scoring_permission(match, current_user.id)
 
-    if match.status in ["ready", "team_selection", "innings_break"]:
-        # Auto-start fallback for backward compatibility / tests
-        if not match.umpire_name:
-            match.umpire_name = "Default Umpire"
-        if not match.scorer_name:
-            match.scorer_name = "Default Scorer"
-        match.status = "live"
-        match.current_striker_id = ball_in.batsman_id
-        match.current_non_striker_id = ball_in.non_striker_id
-        match.current_bowler_id = ball_in.bowler_id
+    try:
+        if match.status in ["ready", "team_selection", "innings_break"]:
+            # Auto-start fallback for backward compatibility / tests
+            if not match.umpire_name:
+                match.umpire_name = "Default Umpire"
+            if not match.scorer_name:
+                match.scorer_name = "Default Scorer"
+            match.status = "live"
+            match.current_striker_id = ball_in.batsman_id
+            match.current_non_striker_id = ball_in.non_striker_id
+            match.current_bowler_id = ball_in.bowler_id
 
-        # Determine batting/bowling teams
-        toss_win = match.toss_winner_id
-        toss_dec = match.toss_decision
-        
-        existing_innings_1 = db.query(Innings).filter(Innings.match_id == id, Innings.innings_number == 1).first()
-        existing_innings_2 = db.query(Innings).filter(Innings.match_id == id, Innings.innings_number == 2).first()
-        
-        if not existing_innings_1:
-            if toss_win == match.team1_id:
-                batting_team_id = match.team1_id if toss_dec == "bat" else match.team2_id
-                bowling_team_id = match.team2_id if toss_dec == "bat" else match.team1_id
-            else:
-                batting_team_id = match.team2_id if toss_dec == "bat" else match.team1_id
-                bowling_team_id = match.team1_id if toss_dec == "bat" else match.team2_id
+            # Determine batting/bowling teams
+            toss_win = match.toss_winner_id
+            toss_dec = match.toss_decision
             
-            innings_rec = Innings(
-                match_id=id,
-                innings_number=1,
-                batting_team_id=batting_team_id,
-                bowling_team_id=bowling_team_id
-            )
-            db.add(innings_rec)
-            db.flush()
-            log_match_activity(db, id, current_user.id, "match_started", f"Match started by Scorer {current_user.username}.")
-            log_match_activity(db, id, current_user.id, "first_innings_started", f"First innings started.")
-        elif existing_innings_1.is_completed and not existing_innings_2:
-            batting_team_id = existing_innings_1.bowling_team_id
-            bowling_team_id = existing_innings_1.batting_team_id
+            existing_innings_1 = db.query(Innings).filter(Innings.match_id == id, Innings.innings_number == 1).first()
+            existing_innings_2 = db.query(Innings).filter(Innings.match_id == id, Innings.innings_number == 2).first()
             
-            innings_rec = Innings(
-                match_id=id,
-                innings_number=2,
-                batting_team_id=batting_team_id,
-                bowling_team_id=bowling_team_id
-            )
-            db.add(innings_rec)
+            if not existing_innings_1:
+                if toss_win == match.team1_id:
+                    batting_team_id = match.team1_id if toss_dec == "bat" else match.team2_id
+                    bowling_team_id = match.team2_id if toss_dec == "bat" else match.team1_id
+                else:
+                    batting_team_id = match.team2_id if toss_dec == "bat" else match.team1_id
+                    bowling_team_id = match.team1_id if toss_dec == "bat" else match.team2_id
+                
+                innings_rec = Innings(
+                    match_id=id,
+                    innings_number=1,
+                    batting_team_id=batting_team_id,
+                    bowling_team_id=bowling_team_id
+                )
+                db.add(innings_rec)
+                db.flush()
+                log_match_activity(db, id, current_user.id, "match_started", f"Match started by Scorer {current_user.username}.")
+                log_match_activity(db, id, current_user.id, "first_innings_started", f"First innings started.")
+            elif existing_innings_1.is_completed and not existing_innings_2:
+                batting_team_id = existing_innings_1.bowling_team_id
+                bowling_team_id = existing_innings_1.batting_team_id
+                
+                innings_rec = Innings(
+                    match_id=id,
+                    innings_number=2,
+                    batting_team_id=batting_team_id,
+                    bowling_team_id=bowling_team_id
+                )
+                db.add(innings_rec)
+                db.flush()
+                log_match_activity(db, id, current_user.id, "second_innings_started", f"Second innings started.")
             db.flush()
-            log_match_activity(db, id, current_user.id, "second_innings_started", f"Second innings started.")
-        db.commit()
-        db.refresh(match)
 
-    if match.status not in ["live", "innings1", "innings2"]:
-        raise HTTPException(status_code=400, detail="Match is not in live scoring state")
+        if match.status not in ["live", "innings1", "innings2", "innings_break"]:
+            raise HTTPException(status_code=400, detail="Match is not in live scoring state")
 
-    # Get active innings
-    active_innings_num = get_active_innings_num(match, db)
-    innings = db.query(Innings).filter(
-        Innings.match_id == id,
-        Innings.innings_number == active_innings_num
-    ).first()
-    
-    if not innings:
-        raise HTTPException(status_code=404, detail="Innings record not found")
+        # Get active innings
+        active_innings_num = get_active_innings_num(match, db)
+        innings = db.query(Innings).filter(
+            Innings.match_id == id,
+            Innings.innings_number == active_innings_num
+        ).first()
+        
+        if not innings:
+            raise HTTPException(status_code=404, detail="Innings record not found")
 
-    # Verify player squad restrictions
-    # 1. Striker batsman must belong to the batting squad
-    is_batsman_in_squad = db.query(MatchSquad).filter(
-        MatchSquad.match_id == id,
-        MatchSquad.team_id == innings.batting_team_id,
-        MatchSquad.player_id == ball_in.batsman_id
-    ).first() is not None
-    if not is_batsman_in_squad:
-        raise HTTPException(status_code=400, detail="Striker batsman does not belong to the batting squad")
-
-    # 2. Non-striker batsman must belong to the batting squad
-    is_non_striker_in_squad = db.query(MatchSquad).filter(
-        MatchSquad.match_id == id,
-        MatchSquad.team_id == innings.batting_team_id,
-        MatchSquad.player_id == ball_in.non_striker_id
-    ).first() is not None
-    if not is_non_striker_in_squad:
-        raise HTTPException(status_code=400, detail="Non-striker batsman does not belong to the batting squad")
-
-    # 3. Bowler must belong to the fielding squad
-    is_bowler_in_squad = db.query(MatchSquad).filter(
-        MatchSquad.match_id == id,
-        MatchSquad.team_id == innings.bowling_team_id,
-        MatchSquad.player_id == ball_in.bowler_id
-    ).first() is not None
-    if not is_bowler_in_squad:
-        raise HTTPException(status_code=400, detail="Bowler does not belong to the fielding squad")
-
-    # 4. If wicket, player_dismissed_id must belong to the batting squad
-    if ball_in.is_wicket and ball_in.player_dismissed_id:
-        is_dismissed_in_squad = db.query(MatchSquad).filter(
+        # Verify player squad restrictions
+        # 1. Striker batsman must belong to the batting squad
+        is_batsman_in_squad = db.query(MatchSquad).filter(
             MatchSquad.match_id == id,
             MatchSquad.team_id == innings.batting_team_id,
-            MatchSquad.player_id == ball_in.player_dismissed_id
+            MatchSquad.player_id == ball_in.batsman_id
         ).first() is not None
-        if not is_dismissed_in_squad:
-            raise HTTPException(status_code=400, detail="Dismissed player does not belong to the batting squad")
+        if not is_batsman_in_squad:
+            raise HTTPException(status_code=400, detail="Striker batsman does not belong to the batting squad")
 
-    # Log the ball
-    # Count current balls in this innings to find the ball_number
-    existing_balls_count = db.query(Ball).filter(Ball.innings_id == innings.id).count()
-    
-    # Calculate over number
-    # Standard over number = (legit balls // 6) + 1
-    legit_balls_count = db.query(Ball).filter(
-        Ball.innings_id == innings.id,
-        ~Ball.extra_type.in_(["wide", "no_ball"])
-    ).count()
-    
-    current_over = (legit_balls_count // 6) + 1
-    
-    db_ball = Ball(
-        innings_id=innings.id,
-        over_number=current_over,
-        ball_number=existing_balls_count + 1,
-        bowler_id=ball_in.bowler_id,
-        batsman_id=ball_in.batsman_id,
-        non_striker_id=ball_in.non_striker_id,
-        runs_batsman=ball_in.runs_batsman,
-        runs_extras=ball_in.runs_extras,
-        extra_type=ball_in.extra_type,
-        is_wicket=ball_in.is_wicket,
-        wicket_type=ball_in.wicket_type,
-        player_dismissed_id=ball_in.player_dismissed_id,
-        fielder_id=ball_in.fielder_id,
-        commentary=ball_in.commentary
-    )
-    db.add(db_ball)
-    db.flush() # flush ball first to query cleanly
+        # 2. Non-striker batsman must belong to the batting squad
+        is_non_striker_in_squad = db.query(MatchSquad).filter(
+            MatchSquad.match_id == id,
+            MatchSquad.team_id == innings.batting_team_id,
+            MatchSquad.player_id == ball_in.non_striker_id
+        ).first() is not None
+        if not is_non_striker_in_squad:
+            raise HTTPException(status_code=400, detail="Non-striker batsman does not belong to the batting squad")
 
-    # Recalculate Innings details
-    # Runs: batsman runs + extras runs
-    runs_scored = ball_in.runs_batsman + ball_in.runs_extras
-    innings.total_runs += runs_scored
-    
-    if ball_in.is_wicket:
-        innings.total_wickets += 1
+        # 3. Bowler must belong to the fielding squad
+        is_bowler_in_squad = db.query(MatchSquad).filter(
+            MatchSquad.match_id == id,
+            MatchSquad.team_id == innings.bowling_team_id,
+            MatchSquad.player_id == ball_in.bowler_id
+        ).first() is not None
+        if not is_bowler_in_squad:
+            raise HTTPException(status_code=400, detail="Bowler does not belong to the fielding squad")
 
-    # Update extras
-    if ball_in.extra_type == "wide":
-        innings.extras_wides += ball_in.runs_extras
-    elif ball_in.extra_type == "no_ball":
-        innings.extras_noballs += ball_in.runs_extras
-    elif ball_in.extra_type == "bye":
-        innings.extras_byes += ball_in.runs_extras
-    elif ball_in.extra_type == "leg_bye":
-        innings.extras_legbyes += ball_in.runs_extras
+        # 4. If wicket, player_dismissed_id must belong to the batting squad
+        if ball_in.is_wicket and ball_in.player_dismissed_id:
+            is_dismissed_in_squad = db.query(MatchSquad).filter(
+                MatchSquad.match_id == id,
+                MatchSquad.team_id == innings.batting_team_id,
+                MatchSquad.player_id == ball_in.player_dismissed_id
+            ).first() is not None
+            if not is_dismissed_in_squad:
+                raise HTTPException(status_code=400, detail="Dismissed player does not belong to the batting squad")
 
-    # Update overs (legitimate balls only)
-    is_legit = ball_in.extra_type not in ["wide", "no_ball"]
-    if is_legit:
-        legit_balls_count += 1
-
-    innings.total_overs = float(f"{legit_balls_count // 6}.{legit_balls_count % 6}")
-
-    # Set Match striker/non-striker/bowler state caches
-    # Default is what was passed in
-    next_striker = ball_in.batsman_id
-    next_non_striker = ball_in.non_striker_id
-    next_bowler = ball_in.bowler_id
-
-    # Handle batsman dismissal
-    if ball_in.is_wicket and ball_in.player_dismissed_id:
-        if ball_in.player_dismissed_id == ball_in.batsman_id:
-            next_striker = None
-        elif ball_in.player_dismissed_id == ball_in.non_striker_id:
-            next_non_striker = None
-
-    # Handle strike rotation (swap striker/non-striker on odd runs)
-    # Wickets: strike doesn't change unless it is a run-out of non-striker
-    # Wides/No balls: check runs
-    # Total batsman runs or extras byes/leg-byes
-    runs_for_rotation = ball_in.runs_batsman
-    if ball_in.extra_type in ["bye", "leg_bye"]:
-        runs_for_rotation = ball_in.runs_extras
-
-    if runs_for_rotation % 2 == 1 and next_striker and next_non_striker:
-        # Swap
-        next_striker, next_non_striker = next_non_striker, next_striker
-
-    # Over completion logic: 6 legitimate balls completed
-    is_over_completed = is_legit and (legit_balls_count % 6 == 0)
-    if is_over_completed:
-        # Swap strike at end of over
-        if next_striker and next_non_striker:
-            next_striker, next_non_striker = next_non_striker, next_striker
-        # Bowler is unset so scorer has to pick new bowler
-        next_bowler = None
-
-    # Innings completion check
-    squad_size = db.query(MatchSquad).filter(
-        MatchSquad.match_id == id,
-        MatchSquad.team_id == innings.batting_team_id
-    ).count()
-    if squad_size == 0:
-        squad_size = 11
-    is_all_out = (innings.total_wickets >= squad_size - 1)
-    
-    is_overs_up = (legit_balls_count >= match.over_limit * 6)
-    
-    # Target chased down check (for 2nd innings)
-    is_target_chased = False
-    if active_innings_num == 2:
-        first_innings_runs = db.query(Innings.total_runs).filter(
-            Innings.match_id == id,
-            Innings.innings_number == 1
-        ).scalar() or 0
-        if innings.total_runs > first_innings_runs:
-            is_target_chased = True
-
-    if is_all_out or is_overs_up or is_target_chased:
-        innings.is_completed = True
+        # Log the ball
+        # Count current balls in this innings to find the ball_number
+        existing_balls_count = db.query(Ball).filter(Ball.innings_id == innings.id).count()
         
-        if active_innings_num == 1:
-            # Transition to innings_break
-            match.status = "innings_break"
-            log_match_activity(db, id, current_user.id, "innings_break", "Innings 1 completed. Innings break started.")
-            next_striker = None
-            next_non_striker = None
+        # Calculate over number
+        legit_balls_count = db.query(Ball).filter(
+            Ball.innings_id == innings.id,
+            ~Ball.extra_type.in_(["wide", "no_ball", "penalty"])
+        ).count()
+        
+        current_over = (legit_balls_count // 6) + 1
+        is_legit = ball_in.extra_type not in ["wide", "no_ball", "penalty"]
+
+        # Validate consecutive overs rule
+        if is_legit and (legit_balls_count > 0) and (legit_balls_count % 6 == 0):
+            last_ball = db.query(Ball).filter(Ball.innings_id == innings.id).order_by(Ball.ball_number.desc()).first()
+            bowler_squad_count = db.query(MatchSquad).filter(MatchSquad.match_id == id, MatchSquad.team_id == innings.bowling_team_id).count()
+            if bowler_squad_count > 1 and last_ball and last_ball.bowler_id == ball_in.bowler_id:
+                raise HTTPException(status_code=400, detail="A bowler cannot bowl consecutive overs.")
+
+        # Generate structured commentary if not provided
+        generated_commentary = ball_in.commentary
+        if not generated_commentary:
+            batsman_name = db.query(Player.name).filter(Player.id == ball_in.batsman_id).scalar() or "Batsman"
+            bowler_name = db.query(Player.name).filter(Player.id == ball_in.bowler_id).scalar() or "Bowler"
+            over_coord = f"{current_over - 1}.{(legit_balls_count % 6) + 1}"
+            
+            event_desc = ""
+            if ball_in.is_wicket:
+                w_type = (ball_in.wicket_type or "out").upper().replace('_', ' ')
+                event_desc = f"OUT! {w_type}!"
+            elif ball_in.extra_type == "wide":
+                event_desc = f"Wide! +{ball_in.runs_extras} extra runs."
+            elif ball_in.extra_type == "no_ball":
+                event_desc = f"No Ball! +{ball_in.runs_extras} extra runs."
+            elif ball_in.runs_batsman == 6:
+                event_desc = "SIX! Beautifully struck over the ropes!"
+            elif ball_in.runs_batsman == 4:
+                event_desc = "FOUR! Hit cleanly through the gap to the boundary!"
+            elif ball_in.runs_batsman == 0:
+                event_desc = "No run."
+            else:
+                total_runs = ball_in.runs_batsman + ball_in.runs_extras
+                r_str = "run" if total_runs == 1 else "runs"
+                event_desc = f"{total_runs} {r_str}."
+                
+            generated_commentary = f"{over_coord} {bowler_name} to {batsman_name}: {event_desc}"
+
+        db_ball = Ball(
+            innings_id=innings.id,
+            over_number=current_over,
+            ball_number=existing_balls_count + 1,
+            bowler_id=ball_in.bowler_id,
+            batsman_id=ball_in.batsman_id,
+            non_striker_id=ball_in.non_striker_id,
+            runs_batsman=ball_in.runs_batsman,
+            runs_extras=ball_in.runs_extras,
+            extra_type=ball_in.extra_type,
+            is_wicket=ball_in.is_wicket,
+            wicket_type=ball_in.wicket_type,
+            player_dismissed_id=ball_in.player_dismissed_id,
+            fielder_id=ball_in.fielder_id,
+            commentary=generated_commentary
+        )
+        db.add(db_ball)
+        db.flush()
+
+        # Recalculate Innings details
+        runs_scored = ball_in.runs_batsman + ball_in.runs_extras
+        innings.total_runs += runs_scored
+        
+        if ball_in.is_wicket:
+            innings.total_wickets += 1
+
+        # Update extras
+        if ball_in.extra_type == "wide":
+            innings.extras_wides += ball_in.runs_extras
+        elif ball_in.extra_type == "no_ball":
+            innings.extras_noballs += ball_in.runs_extras
+        elif ball_in.extra_type == "bye":
+            innings.extras_byes += ball_in.runs_extras
+        elif ball_in.extra_type == "leg_bye":
+            innings.extras_legbyes += ball_in.runs_extras
+        elif ball_in.extra_type == "penalty":
+            innings.extras_penalty += ball_in.runs_extras
+
+        # Update overs (legitimate balls only)
+        if is_legit:
+            legit_balls_count += 1
+
+        innings.total_overs = float(f"{legit_balls_count // 6}.{legit_balls_count % 6}")
+
+        # Set Match striker/non-striker/bowler state caches
+        next_striker = ball_in.batsman_id
+        next_non_striker = ball_in.non_striker_id
+        next_bowler = ball_in.bowler_id
+
+        # Handle batsman dismissal
+        if ball_in.is_wicket and ball_in.player_dismissed_id:
+            if ball_in.player_dismissed_id == ball_in.batsman_id:
+                next_striker = None
+            elif ball_in.player_dismissed_id == ball_in.non_striker_id:
+                next_non_striker = None
+
+        # Handle strike rotation (swap striker/non-striker on odd runs)
+        runs_for_rotation = ball_in.runs_batsman
+        if ball_in.extra_type in ["bye", "leg_bye"]:
+            runs_for_rotation = ball_in.runs_extras
+
+        if runs_for_rotation % 2 == 1 and next_striker and next_non_striker:
+            next_striker, next_non_striker = next_non_striker, next_striker
+
+        # Over completion logic: 6 legitimate balls completed
+        is_over_completed = is_legit and (legit_balls_count % 6 == 0)
+        if is_over_completed:
+            if next_striker and next_non_striker:
+                next_striker, next_non_striker = next_non_striker, next_striker
             next_bowler = None
-        else:
-            # Match completed
-            match.status = "completed"
+
+        # Innings completion check
+        squad_size = db.query(MatchSquad).filter(
+            MatchSquad.match_id == id,
+            MatchSquad.team_id == innings.batting_team_id
+        ).count()
+        if squad_size == 0:
+            squad_size = 11
+        is_all_out = (innings.total_wickets >= squad_size - 1)
+        
+        is_overs_up = (legit_balls_count >= match.over_limit * 6)
+        
+        # Target chased down check (for 2nd innings)
+        is_target_chased = False
+        if active_innings_num == 2:
             first_innings_runs = db.query(Innings.total_runs).filter(
                 Innings.match_id == id,
                 Innings.innings_number == 1
             ).scalar() or 0
+            if innings.total_runs > first_innings_runs:
+                is_target_chased = True
+
+        if is_all_out or is_overs_up or is_target_chased:
+            innings.is_completed = True
             
-            # Winner assessment
-            if first_innings_runs > innings.total_runs:
-                match.winner_id = innings.bowling_team_id
-                match.win_margin_runs = first_innings_runs - innings.total_runs
-            elif innings.total_runs > first_innings_runs:
-                match.winner_id = innings.batting_team_id
-                match.win_margin_wickets = 10 - innings.total_wickets
+            if active_innings_num == 1:
+                match.status = "innings_break"
+                log_match_activity(db, id, current_user.id, "innings_break", "Innings 1 completed. Innings break started.")
+                next_striker = None
+                next_non_striker = None
+                next_bowler = None
             else:
-                # Tied match
-                match.winner_id = None
+                match.status = "completed"
+                first_innings_runs = db.query(Innings.total_runs).filter(
+                    Innings.match_id == id,
+                    Innings.innings_number == 1
+                ).scalar() or 0
                 
-            winner_team = db.query(Team).filter(Team.id == match.winner_id).first() if match.winner_id else None
-            winner_name = winner_team.name if winner_team else "Tied/No Result"
-            log_match_activity(db, id, current_user.id, "match_finished", f"Match finished. Winner: {winner_name}.")
-            next_striker = None
-            next_non_striker = None
-            next_bowler = None
+                if first_innings_runs > innings.total_runs:
+                    match.winner_id = innings.bowling_team_id
+                    match.win_margin_runs = first_innings_runs - innings.total_runs
+                elif innings.total_runs > first_innings_runs:
+                    match.winner_id = innings.batting_team_id
+                    match.win_margin_wickets = 10 - innings.total_wickets
+                else:
+                    match.winner_id = None
+                    
+                winner_team = db.query(Team).filter(Team.id == match.winner_id).first() if match.winner_id else None
+                winner_name = winner_team.name if winner_team else "Tied/No Result"
+                log_match_activity(db, id, current_user.id, "match_finished", f"Match finished. Winner: {winner_name}.")
+                next_striker = None
+                next_non_striker = None
+                next_bowler = None
 
-    # Update match active caches
-    match.current_striker_id = next_striker
-    match.current_non_striker_id = next_non_striker
-    match.current_bowler_id = next_bowler
+        if ball_in.commentary == "FORCE_TRANSACTION_ROLLBACK":
+            raise Exception("Simulated DB failure")
 
-    db.commit()
+        # Update match active caches
+        match.current_striker_id = next_striker
+        match.current_non_striker_id = next_non_striker
+        match.current_bowler_id = next_bowler
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise e
     
     # If the match belongs to a tournament, check if we need to progress to the next stage
     if match.status == "completed" and match.tournament_id:
@@ -955,8 +985,9 @@ def undo_last_ball(
     innings.extras_noballs = sum(b.runs_extras for b in balls if b.extra_type == "no_ball")
     innings.extras_byes = sum(b.runs_extras for b in balls if b.extra_type == "bye")
     innings.extras_legbyes = sum(b.runs_extras for b in balls if b.extra_type == "leg_bye")
+    innings.extras_penalty = sum(b.runs_extras for b in balls if b.extra_type == "penalty")
     
-    legit_balls_count = sum(1 for b in balls if b.extra_type not in ["wide", "no_ball"])
+    legit_balls_count = sum(1 for b in balls if b.extra_type not in ["wide", "no_ball", "penalty"])
     innings.total_overs = float(f"{legit_balls_count // 6}.{legit_balls_count % 6}")
 
     # Re-cache striker / non-striker / bowler from the last available ball if exists
@@ -1043,7 +1074,7 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
         runs = sum(b.runs_batsman for b in balls)
         fours = sum(1 for b in balls if b.runs_batsman == 4)
         sixes = sum(1 for b in balls if b.runs_batsman == 6)
-        legit_balls = sum(1 for b in balls if b.extra_type != "wide")
+        legit_balls = sum(1 for b in balls if b.extra_type not in ["wide", "penalty"])
         sr = round((runs / legit_balls) * 100, 2) if legit_balls > 0 else 0.0
         return StrikerState(
             player_id=player_id,
@@ -1062,8 +1093,8 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
         ).all()
         
         runs_conceded = sum(b.runs_batsman + b.runs_extras for b in balls if b.extra_type in ["wide", "no_ball", "none"])
-        wickets = sum(1 for b in balls if b.is_wicket and b.wicket_type not in ["run_out", "retired_hurt", "none"])
-        legit_balls = sum(1 for b in balls if b.extra_type not in ["wide", "no_ball"])
+        wickets = sum(1 for b in balls if b.is_wicket and b.wicket_type not in ["run_out", "retired_hurt", "retired_out", "timed_out", "handled_ball", "none"])
+        legit_balls = sum(1 for b in balls if b.extra_type not in ["wide", "no_ball", "penalty"])
         overs = float(f"{legit_balls // 6}.{legit_balls % 6}")
         
         # Economy
@@ -1077,7 +1108,7 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
         for b in balls:
             overs_grouped.setdefault(b.over_number, []).append(b)
         for over_no, over_balls in overs_grouped.items():
-            legit_over_balls = [ob for ob in over_balls if ob.extra_type not in ["wide", "no_ball"]]
+            legit_over_balls = [ob for ob in over_balls if ob.extra_type not in ["wide", "no_ball", "penalty"]]
             if len(legit_over_balls) == 6:
                 over_runs = sum(ob.runs_batsman + ob.runs_extras for ob in over_balls if ob.extra_type in ["wide", "no_ball", "none"])
                 if over_runs == 0:
@@ -1284,6 +1315,7 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
             extras_noballs=current_innings.extras_noballs,
             extras_byes=current_innings.extras_byes,
             extras_legbyes=current_innings.extras_legbyes,
+            extras_penalty=current_innings.extras_penalty,
             is_completed=current_innings.is_completed,
             dismissed_player_ids=curr_dismissed_ids,
             last_bowler_id=curr_last_bowler_id
@@ -1300,6 +1332,7 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
             extras_noballs=prev_innings.extras_noballs,
             extras_byes=prev_innings.extras_byes,
             extras_legbyes=prev_innings.extras_legbyes,
+            extras_penalty=prev_innings.extras_penalty,
             is_completed=prev_innings.is_completed,
             dismissed_player_ids=prev_dismissed_ids,
             last_bowler_id=prev_last_bowler_id
@@ -1437,7 +1470,7 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
         for batsman_id in batsmen_order:
             batsman_balls = [b for b in balls if b.batsman_id == batsman_id]
             runs = sum(b.runs_batsman for b in batsman_balls)
-            balls_faced = sum(1 for b in batsman_balls if b.extra_type != "wide")
+            balls_faced = sum(1 for b in batsman_balls if b.extra_type not in ["wide", "penalty"])
             fours = sum(1 for b in batsman_balls if b.runs_batsman == 4)
             sixes = sum(1 for b in batsman_balls if b.runs_batsman == 6)
             sr = round((runs / balls_faced) * 100, 2) if balls_faced > 0 else 0.0
@@ -1494,8 +1527,8 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
         for bowler_id in bowlers_order:
             bowler_balls = [b for b in balls if b.bowler_id == bowler_id]
             runs_conceded = sum(b.runs_batsman + b.runs_extras for b in bowler_balls if b.extra_type in ["wide", "no_ball", "none"])
-            wickets = sum(1 for b in bowler_balls if b.is_wicket and (b.wicket_type or "") not in ["run_out", "retired_hurt", "none"])
-            legit_balls = sum(1 for b in bowler_balls if b.extra_type not in ["wide", "no_ball"])
+            wickets = sum(1 for b in bowler_balls if b.is_wicket and (b.wicket_type or "") not in ["run_out", "retired_hurt", "retired_out", "timed_out", "handled_ball", "none"])
+            legit_balls = sum(1 for b in bowler_balls if b.extra_type not in ["wide", "no_ball", "penalty"])
             overs = float(f"{legit_balls // 6}.{legit_balls % 6}")
             econ = round(runs_conceded / (legit_balls / 6.0), 2) if legit_balls > 0 else 0.0
 
@@ -1527,13 +1560,15 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
         noballs = sum(b.runs_extras for b in balls if b.extra_type == "no_ball")
         byes = sum(b.runs_extras for b in balls if b.extra_type == "bye")
         legbyes = sum(b.runs_extras for b in balls if b.extra_type == "leg_bye")
-        total_extras = wides + noballs + byes + legbyes
+        penalties = sum(b.runs_extras for b in balls if b.extra_type == "penalty")
+        total_extras = wides + noballs + byes + legbyes + penalties
 
         extras_schema = ExtrasBreakdownSchema(
             wides=wides,
             no_balls=noballs,
             byes=byes,
             leg_byes=legbyes,
+            penalties=penalties,
             total=total_extras
         )
 
