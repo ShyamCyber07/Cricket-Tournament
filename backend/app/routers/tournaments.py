@@ -32,6 +32,10 @@ def check_user_tournament_registration_limit(db: Session, tournament_id: UUID, u
     import sys
     if "pytest" in sys.modules:
         return
+    # Bypass limit check for admin users to allow testing and tournament setup by system admins
+    user = db.query(User).filter(User.id == user_id).first()
+    if user and user.role == "admin":
+        return
     # Find all teams created by this user or where they are an active captain
     team_ids_q = db.query(Team.id).filter(Team.created_by == user_id)
     member_team_ids_q = db.query(TeamMember.team_id).filter(
