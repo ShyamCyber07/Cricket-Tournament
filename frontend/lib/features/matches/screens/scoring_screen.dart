@@ -246,8 +246,8 @@ class _ScoringScreenState extends State<ScoringScreen> {
       );
     }
     return Container(
-      height: 48,
-      margin: const EdgeInsets.symmetric(vertical: 4),
+      height: 52,
+      margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -272,7 +272,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
             bg = AppColors.primary;
             fg = Colors.black;
           } else if (label == '0' || label == '•') {
-            bg = Colors.grey[850]!;
+            bg = const Color(0xFF0F172A);
             fg = Colors.white70;
           } else if (label.toLowerCase().contains('wd')) {
             bg = Colors.purple[700]!;
@@ -287,18 +287,18 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
           return Container(
             margin: const EdgeInsets.only(right: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
               color: bg,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: isWkt ? AppColors.error : const Color(0x14FFFFFF),
-                width: 1,
+                color: isWkt ? AppColors.error : const Color(0x2BFFFFFF),
+                width: 1.5,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: bg.withOpacity(0.2),
-                  blurRadius: 4,
+                  color: bg.withOpacity(0.3),
+                  blurRadius: 6,
                   offset: const Offset(0, 2),
                 )
               ],
@@ -307,19 +307,26 @@ class _ScoringScreenState extends State<ScoringScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  coord,
-                  style: GoogleFonts.outfit(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: fg.withOpacity(0.7),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    coord,
+                    style: GoogleFonts.outfit(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: fg.withOpacity(0.8),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
                   label,
                   style: GoogleFonts.outfit(
-                    fontSize: 12,
+                    fontSize: 14,
                     fontWeight: FontWeight.w900,
                     color: fg,
                   ),
@@ -2280,28 +2287,43 @@ class _ScoringScreenState extends State<ScoringScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [0, 1, 2, 3, 4, 6].map((runs) {
-                                return GestureDetector(
-                                  onTap: () => _scoreBall(runs, 0, "none"),
-                                  child: Container(
-                                    width: 50,
-                                    height: 50,
-                                    decoration: BoxDecoration(
-                                      color: runs == 4 || runs == 6
-                                          ? AppColors.primary
-                                          : const Color(0x0DFFFFFF),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: runs == 4 || runs == 6 ? Colors.transparent : const Color(0x14FFFFFF),
-                                        width: 1.5,
-                                      ),
+                                final isBoundary = runs == 4 || runs == 6;
+                                return Container(
+                                  width: 58,
+                                  height: 58,
+                                  decoration: BoxDecoration(
+                                    color: isBoundary
+                                        ? AppColors.primary
+                                        : const Color(0x0DFFFFFF),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isBoundary ? Colors.transparent : const Color(0x14FFFFFF),
+                                      width: 1.5,
                                     ),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      runs.toString(),
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: runs == 4 || runs == 6 ? Colors.black : Colors.white,
+                                    boxShadow: [
+                                      if (isBoundary)
+                                        BoxShadow(
+                                          color: AppColors.primary.withOpacity(0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 3),
+                                        )
+                                    ],
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    shape: const CircleBorder(),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: InkWell(
+                                      onTap: () => _scoreBall(runs, 0, "none"),
+                                      child: Center(
+                                        child: Text(
+                                          runs.toString(),
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w900,
+                                            color: isBoundary ? Colors.black : Colors.white,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -2451,18 +2473,36 @@ class _ScoringScreenState extends State<ScoringScreen> {
   }
 
   Widget _buildExtraButton(String text, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFF334155)),
-        ),
-        child: Text(
-          text,
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary),
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF334155)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        clipBehavior: Clip.antiAlias,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            child: Text(
+              text,
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -2672,13 +2712,18 @@ class _ScoringScreenState extends State<ScoringScreen> {
     Map<String, dynamic>? nonStriker,
     Map<String, dynamic>? bowler,
   ) {
-    final team1Name = _liveState?['team1_name'] ?? 'Team 1';
-    final team2Name = _liveState?['team2_name'] ?? 'Team 2';
+    String cleanTeamName(String name) {
+      final tourRegex = RegExp(r'_(Tour|tour)(_\d+)?$', caseSensitive: false);
+      return name.replaceAll(tourRegex, '').trim();
+    }
+
+    final team1Name = cleanTeamName(_liveState?['team1_name'] ?? 'Team 1');
+    final team2Name = cleanTeamName(_liveState?['team2_name'] ?? 'Team 2');
     final team1Id = _liveState?['team1_id']?.toString();
     final team2Id = _liveState?['team2_id']?.toString();
     final battingTeamId = currentInnings?['batting_team_id']?.toString();
     
-    final tName = _liveState?['tournament_name'] ?? 'Practice Match';
+    final tName = _liveState?['tournament_name'] ?? '';
     final mType = _liveState?['match_type'] ?? 'T20';
 
     final team1Logo = _liveState?['team1_logo_url'];
@@ -2718,7 +2763,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
       final tossWin = _liveState?['toss_winner_name'];
       final tossDec = _liveState?['toss_decision'];
       if (tossWin != null && tossDec != null) {
-        chaseText = "$tossWin won toss & elected to $tossDec first";
+        chaseText = "${cleanTeamName(tossWin)} won toss & elected to $tossDec first";
       } else {
         chaseText = "Match in progress";
       }
@@ -2730,6 +2775,24 @@ class _ScoringScreenState extends State<ScoringScreen> {
             currentInnings['extras_byes'] +
             currentInnings['extras_legbyes'])
         : 0;
+
+    final tournamentStage = _liveState?['tournament_stage'];
+    final matchNumber = _liveState?['match_number'];
+    final venue = _liveState?['venue'];
+
+    String headerSubtitle = "";
+    if (tName.isNotEmpty) {
+      headerSubtitle = tName.toUpperCase();
+      if (matchNumber != null) {
+        headerSubtitle += " • MATCH #$matchNumber";
+      }
+      if (tournamentStage != null && tournamentStage.isNotEmpty) {
+        final stageStr = tournamentStage.toString().replaceAll('_', ' ').toUpperCase();
+        headerSubtitle += " • $stageStr";
+      }
+    } else {
+      headerSubtitle = "QUICK MATCH • $mType".toUpperCase();
+    }
 
     return Card(
       child: Container(
@@ -2761,7 +2824,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                       ],
                       Expanded(
                         child: Text(
-                          "$tName • $mType".toUpperCase(),
+                          headerSubtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.outfit(
@@ -2801,6 +2864,24 @@ class _ScoringScreenState extends State<ScoringScreen> {
                 ),
               ],
             ),
+            if (venue != null && venue.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.location_on_outlined, size: 12, color: AppColors.textSecondary.withOpacity(0.7)),
+                  const SizedBox(width: 4),
+                  Text(
+                    venue,
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary.withOpacity(0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const Divider(color: Colors.white12, height: 20),
             
             // Team Scores layout

@@ -8,6 +8,8 @@ class MatchBase(BaseModel):
     match_date: datetime
     match_type: str  # T20, ODI, Test, Custom
     over_limit: int
+    tournament_stage: Optional[str] = None
+    match_number: Optional[int] = None
 
 class MatchCreate(MatchBase):
     team1_id: UUID
@@ -49,6 +51,9 @@ class SquadPlayerInfo(BaseModel):
     player_id: UUID
     is_captain: bool = False
     is_wicketkeeper: bool = False
+    is_playing_xi: bool = True
+    batting_order: Optional[int] = None
+    bowling_preference: Optional[int] = None
 
 class SquadSubmit(BaseModel):
     team_id: UUID
@@ -150,6 +155,8 @@ class LiveMatchState(BaseModel):
     
     tournament_name: Optional[str] = None
     tournament_logo_url: Optional[str] = None
+    tournament_stage: Optional[str] = None
+    match_number: Optional[int] = None
     toss_winner_name: Optional[str] = None
     toss_winner_id: Optional[UUID] = None
     toss_decision: Optional[str] = None

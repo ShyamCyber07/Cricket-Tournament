@@ -383,9 +383,11 @@ def submit_squads(
             match_id=id,
             team_id=squad.team_id,
             player_id=p.player_id,
-            is_playing_xi=True,
+            is_playing_xi=p.is_playing_xi,
             is_captain=p.is_captain,
-            is_wicketkeeper=p.is_wicketkeeper
+            is_wicketkeeper=p.is_wicketkeeper,
+            batting_order=p.batting_order,
+            bowling_preference=p.bowling_preference
         )
         db.add(db_squad)
 
@@ -415,6 +417,9 @@ def get_match_squads(
         player_dict = ms.player.to_dict()
         player_dict['is_captain'] = ms.is_captain
         player_dict['is_wicketkeeper'] = ms.is_wicketkeeper
+        player_dict['is_playing_xi'] = ms.is_playing_xi
+        player_dict['batting_order'] = ms.batting_order
+        player_dict['bowling_preference'] = ms.bowling_preference
 
         if ms.team_id == match.team1_id:
             team1_players.append(player_dict)
@@ -1254,6 +1259,8 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
         
         tournament_name=tournament_name,
         tournament_logo_url=tournament_logo_url,
+        tournament_stage=match.tournament_stage,
+        match_number=match.match_number,
         toss_winner_name=toss_winner_name,
         toss_winner_id=match.toss_winner_id,
         toss_decision=toss_decision,

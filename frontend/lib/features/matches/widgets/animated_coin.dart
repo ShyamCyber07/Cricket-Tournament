@@ -30,10 +30,10 @@ class AnimatedCoin extends StatefulWidget {
 }
 
 class _AnimatedCoinState extends State<AnimatedCoin> with SingleTickerProviderStateMixin {
+  static const _soundChannel = MethodChannel('com.cricup/sound');
   late AnimationController _controller;
   late Animation<double> _animation;
   bool _soundEnabled = true;
-  Timer? _spinSoundTimer;
 
   @override
   void initState() {
@@ -64,22 +64,16 @@ class _AnimatedCoinState extends State<AnimatedCoin> with SingleTickerProviderSt
 
   void _playSpinSound() {
     if (!_soundEnabled) return;
-    int count = 0;
-    _spinSoundTimer?.cancel();
-    _spinSoundTimer = Timer.periodic(const Duration(milliseconds: 120), (timer) {
-      if (count >= 20 || !_controller.isAnimating) {
-        timer.cancel();
-        return;
-      }
-      SystemSound.play(SystemSoundType.click);
-      count++;
+    _soundChannel.invokeMethod('playSpin').catchError((e) {
+      debugPrint("Native spin sound failed: $e");
     });
   }
 
   void _playLandingSound() {
-    _spinSoundTimer?.cancel();
     if (!_soundEnabled) return;
-    SystemSound.play(SystemSoundType.click);
+    _soundChannel.invokeMethod('playLanding').catchError((e) {
+      debugPrint("Native landing sound failed: $e");
+    });
     HapticFeedback.vibrate();
   }
 
@@ -97,7 +91,7 @@ class _AnimatedCoinState extends State<AnimatedCoin> with SingleTickerProviderSt
 
   @override
   void dispose() {
-    _spinSoundTimer?.cancel();
+    _soundChannel.invokeMethod('stopSpin').catchError((e) {});
     _controller.dispose();
     super.dispose();
   }

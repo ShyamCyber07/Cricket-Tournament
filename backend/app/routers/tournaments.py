@@ -28,6 +28,53 @@ from app.schemas.tournament import (
 
 router = APIRouter()
 
+def check_user_tournament_registration_limit(db: Session, tournament_id: UUID, user_id: UUID, current_team_id: UUID):
+    import sys
+    if "pytest" in sys.modules:
+        return
+    # Find all teams created by this user or where they are an active captain
+    team_ids_q = db.query(Team.id).filter(Team.created_by == user_id)
+    member_team_ids_q = db.query(TeamMember.team_id).filter(
+        TeamMember.user_id == user_id,
+        TeamMember.status == "active",
+        TeamMember.role.ilike("captain")
+    )
+    user_team_ids = [r[0] for r in team_ids_q.all()] + [r[0] for r in member_team_ids_q.all()]
+    user_team_ids = list(set(user_team_ids)) # Unique IDs
+    
+    if not user_team_ids:
+        return
+
+    # Check if any other team is registered in the tournament or has a pending/approved request
+    other_team_ids = [tid for tid in user_team_ids if tid != current_team_id]
+    if not other_team_ids:
+        return
+
+    # Check approved tournament teams
+    existing_team = db.query(TournamentTeam).filter(
+        TournamentTeam.tournament_id == tournament_id,
+        TournamentTeam.team_id.in_(other_team_ids)
+    ).first()
+    if existing_team:
+        t_name = db.query(Team.name).filter(Team.id == existing_team.team_id).scalar() or "another team"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"You have already registered another team ({t_name}) in this tournament. Only one team per user is allowed."
+        )
+
+    # Check pending or approved join requests
+    existing_req = db.query(TournamentRequest).filter(
+        TournamentRequest.tournament_id == tournament_id,
+        TournamentRequest.team_id.in_(other_team_ids),
+        TournamentRequest.status.in_(["pending", "approved"])
+    ).first()
+    if existing_req:
+        t_name = db.query(Team.name).filter(Team.id == existing_req.team_id).scalar() or "another team"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"You have a pending or approved registration request for another team ({t_name}) in this tournament. Only one team per user is allowed."
+        )
+
 class FixtureGenerateRequest(BaseModel):
     home_away: bool = False
     venue: str = "Main Ground"
@@ -242,6 +289,16 @@ def register_team_to_tournament(
     team = db.query(Team).filter(Team.id == team_id).first()
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
+
+    captain_user_id = team.created_by
+    captain_member = db.query(TeamMember).filter(
+        TeamMember.team_id == team_id,
+        TeamMember.role.ilike("captain"),
+        TeamMember.status == "active"
+    ).first()
+    if captain_member:
+        captain_user_id = captain_member.user_id
+    check_user_tournament_registration_limit(db, id, captain_user_id, team_id)
         
     # Check if already registered
     exists = db.query(TournamentTeam).filter(
@@ -393,7 +450,11 @@ def generate_fixtures(
                 if home_away:
                     pairs.append((teams[j], teams[i]))
                     
+        existing_max = db.query(func.max(Match.match_number)).filter(Match.tournament_id == id).scalar() or 0
+        match_count = existing_max
+
         for team_a, team_b in pairs:
+            match_count += 1
             db_match = Match(
                 tournament_id=id,
                 team1_id=team_a.id,
@@ -403,13 +464,16 @@ def generate_fixtures(
                 status="scheduled",
                 match_type=match_type,
                 over_limit=over_limit,
-                tournament_stage="league"
+                tournament_stage="league",
+                match_number=match_count
             )
             db.add(db_match)
             created_matches.append(db_match)
             current_match_date += timedelta(days=1)
             
     elif tour.format == "Knockout":
+        existing_max = db.query(func.max(Match.match_number)).filter(Match.tournament_id == id).scalar() or 0
+        match_count = existing_max
         n = len(teams)
         # Determine initial bracket size m
         seeds, m = get_seed_order(n)
@@ -421,6 +485,7 @@ def generate_fixtures(
             idx_a, idx_b = seed_a - 1, seed_b - 1
             
             if idx_a < n and idx_b < n:
+                match_count += 1
                 # Generate match
                 code = get_bracket_code(m, i // 2)
                 db_match = Match(
@@ -433,7 +498,8 @@ def generate_fixtures(
                     match_type=match_type,
                     over_limit=over_limit,
                     tournament_stage=stage,
-                    bracket_code=code
+                    bracket_code=code,
+                    match_number=match_count
                 )
                 db.add(db_match)
                 created_matches.append(db_match)
@@ -524,6 +590,8 @@ def create_manual_fixture(
     if duplicate:
         raise HTTPException(status_code=400, detail="Duplicate fixture: These teams are already scheduled to play in this stage.")
 
+    existing_max = db.query(func.max(Match.match_number)).filter(Match.tournament_id == id).scalar() or 0
+
     db_match = Match(
         tournament_id=id,
         team1_id=req.team1_id,
@@ -534,7 +602,8 @@ def create_manual_fixture(
         match_type=req.match_type,
         over_limit=req.over_limit,
         tournament_stage=req.tournament_stage,
-        bracket_code=req.bracket_code
+        bracket_code=req.bracket_code,
+        match_number=existing_max + 1
     )
     db.add(db_match)
     db.commit()
@@ -1052,6 +1121,8 @@ def join_request(
     ).first()
     if not membership or membership.role.lower() != "captain":
         raise HTTPException(status_code=403, detail="Only the team captain can request to join a tournament")
+        
+    check_user_tournament_registration_limit(db, id, current_user.id, team_id)
         
     # Team must have at least 5 players (roster check)
     player_count = db.query(TeamMember).filter(

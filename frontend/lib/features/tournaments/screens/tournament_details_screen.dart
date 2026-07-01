@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:cricket_scorer/features/matches/screens/scoring_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/scorecard_screen.dart';
+import 'package:cricket_scorer/features/matches/screens/match_center_screen.dart';
 import 'package:intl/intl.dart';
 
 class TournamentDetailsScreen extends StatefulWidget {
@@ -2071,16 +2072,34 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                   ],
                   ElevatedButton.icon(
                     onPressed: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ScoringScreen(matchId: match['id']),
-                        ),
-                      );
+                      if (status == 'innings1' || status == 'innings2' || status == 'innings_break') {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ScoringScreen(matchId: match['id']),
+                          ),
+                        );
+                      } else {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => MatchCenterScreen(matchId: match['id']),
+                          ),
+                        );
+                      }
                       _fetchData();
                     },
-                    icon: Icon(isLive ? Icons.play_arrow : Icons.sports_cricket_outlined, size: 16),
-                    label: Text(isLive ? "Resume Scoring" : "Score Match"),
+                    icon: Icon(
+                      (status == 'innings1' || status == 'innings2' || status == 'innings_break')
+                          ? Icons.play_arrow
+                          : Icons.sports_cricket_outlined,
+                      size: 16,
+                    ),
+                    label: Text(
+                      (status == 'innings1' || status == 'innings2' || status == 'innings_break')
+                          ? "Resume Scoring"
+                          : "Start Setup",
+                    ),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     ),

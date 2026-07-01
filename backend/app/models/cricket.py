@@ -170,6 +170,7 @@ class Match(Base):
     # Tournament structures
     tournament_stage = Column(String, nullable=True) # league, quarter_final, semi_final, final
     bracket_code = Column(String, nullable=True) # QF1, QF2, QF3, QF4, SF1, SF2, F
+    match_number = Column(Integer, nullable=True)
     
     # Active Scorer State Cache (nullable when not in live scoring mode)
     current_striker_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="SET NULL"), nullable=True)
@@ -216,6 +217,8 @@ class MatchSquad(Base):
     is_playing_xi = Column(Boolean, default=True)
     is_captain = Column(Boolean, default=False)
     is_wicketkeeper = Column(Boolean, default=False)
+    batting_order = Column(Integer, nullable=True)
+    bowling_preference = Column(Integer, nullable=True)
 
     # Relationships
     match = relationship("Match", back_populates="squads")
