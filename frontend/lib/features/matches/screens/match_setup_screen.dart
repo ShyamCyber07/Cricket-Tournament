@@ -102,12 +102,53 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Quick Match is frozen for future releases. Enforce route protection here.
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Quick Match"),
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.construction_rounded, size: 64, color: AppColors.secondary),
+                const SizedBox(height: 16),
+                Text(
+                  "This feature is under development.",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Quick Match is currently frozen and will be enabled in a future release.",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Go Back"),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOriginalBuild_frozen(BuildContext context) {
     if (_isLoadingTeams) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
       );
     }
-
     return Scaffold(
       appBar: AppBar(
         title: const Text("Create Match"),

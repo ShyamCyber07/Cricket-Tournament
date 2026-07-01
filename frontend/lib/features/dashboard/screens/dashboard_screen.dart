@@ -8,6 +8,7 @@ import 'package:cricket_scorer/features/auth/bloc/auth_bloc.dart';
 import 'package:cricket_scorer/features/auth/bloc/auth_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cricket_scorer/features/matches/screens/match_setup_screen.dart';
+import 'package:cricket_scorer/features/matches/screens/live_matches_screen.dart';
 import 'package:cricket_scorer/features/matches/screens/match_center_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_management_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/my_teams_screen.dart';
@@ -506,15 +507,16 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    // Separate matches into categories
+    // Separate matches into categories (excluding manually created quick matches)
     final liveMatches = _matches.where((m) {
+      if (m['tournament_id'] == null) return false;
       final status = m['status'];
       return status == 'innings1' || status == 'innings2' || status == 'team_selection' || 
              status == 'toss' || status == 'ready' || status == 'live' || status == 'innings_break';
     }).toList();
 
-    final upcomingMatches = _matches.where((m) => m['status'] == 'scheduled').toList();
-    final completedMatches = _matches.where((m) => m['status'] == 'completed').toList();
+    final upcomingMatches = _matches.where((m) => m['tournament_id'] != null && m['status'] == 'scheduled').toList();
+    final completedMatches = _matches.where((m) => m['tournament_id'] != null && m['status'] == 'completed').toList();
 
     final String userAvatar = _currentUser['profile_picture'] ?? "🏏";
     final String? photoUrl = _currentUser['profile_photo_url'];
@@ -1123,21 +1125,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 title: "Live Matches",
                 color: Colors.redAccent,
                 onTap: () {
-                  ScaffoldMessenger.of(context).clearSnackBars();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        "Live Matches module coming soon (Phase 3.4)!",
-                        style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600),
-                      ),
-                      backgroundColor: Colors.redAccent.withOpacity(0.9),
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LiveMatchesScreen()),
                   );
                 },
-                isPlaceholder: true,
-                placeholderText: "Phase 3.4",
               ),
             ),
             const SizedBox(width: 12),
@@ -1147,22 +1139,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 icon: Icons.insights_outlined,
                 title: "Statistics",
                 color: Colors.blueAccent,
-                onTap: () {
-                  ScaffoldMessenger.of(context).clearSnackBars();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        "Statistics module coming soon (Phase 3.5)!",
-                        style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600),
-                      ),
-                      backgroundColor: Colors.blueAccent.withOpacity(0.9),
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  );
-                },
+                onTap: null, // Disabled
                 isPlaceholder: true,
-                placeholderText: "Phase 3.5",
+                placeholderText: "Soon",
               ),
             ),
           ],
@@ -1189,7 +1168,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     required IconData icon,
     required String title,
     required Color color,
-    required VoidCallback onTap,
+    VoidCallback? onTap,
     bool isFullWidth = false,
     bool isPlaceholder = false,
     String? placeholderText,
@@ -1383,7 +1362,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildSpringyButton({required Widget child, required VoidCallback onTap}) {
+  Widget _buildSpringyButton({required Widget child, VoidCallback? onTap}) {
+    if (onTap == null) return child;
     return _SpringyWidget(onTap: onTap, child: child);
   }
 }
