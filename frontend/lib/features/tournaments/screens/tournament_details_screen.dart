@@ -41,7 +41,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _fetchData();
     _fetchUserProfile();
   }
@@ -956,6 +956,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
           tabs: const [
             Tab(text: "Dashboard", icon: Icon(Icons.dashboard_outlined, size: 20)),
             Tab(text: "Standings", icon: Icon(Icons.table_rows_outlined, size: 20)),
+            Tab(text: "Stats", icon: Icon(Icons.analytics_outlined, size: 20)),
             Tab(text: "Fixtures", icon: Icon(Icons.calendar_month_outlined, size: 20)),
             Tab(text: "Teams", icon: Icon(Icons.groups_outlined, size: 20)),
           ],
@@ -971,6 +972,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
               children: [
                 _buildDashboardTab(status, winnerName),
                 _buildStandingsTab(),
+                _buildTournamentStatsTab(),
                 _buildFixturesTab(),
                 _buildTeamsTab(status, summary),
               ],
@@ -1226,6 +1228,387 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTournamentStatsTab() {
+    final stats = _dashboardData['stats_and_records'] ?? {};
+    final qualified = stats['qualified_teams'] as List? ?? [];
+    final eliminated = stats['eliminated_teams'] as List? ?? [];
+    final awards = stats['awards'] ?? {};
+    final records = stats['records'] ?? {};
+    final completion = stats['completion'] ?? {};
+
+    final champion = completion['champion'];
+    final runnerUp = completion['runner_up'];
+    final summary = completion['summary'] ?? '';
+
+    return RefreshIndicator(
+      onRefresh: _fetchData,
+      color: AppColors.primary,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          // 🏆 Tournament Completion Summary
+          if (champion != null) ...[
+            Card(
+              color: const Color(0x1AFFF7C2), // Gold glass tone
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    const Icon(Icons.emoji_events_rounded, color: Color(0xFFFFD700), size: 48),
+                    const SizedBox(height: 12),
+                    Text(
+                      "🏆 TOURNAMENT CHAMPION",
+                      style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w900, color: const Color(0xFFFFD700), letterSpacing: 1),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      champion.toString().toUpperCase(),
+                      style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    if (runnerUp != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        "Runner Up: $runnerUp",
+                        style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                    if (summary.isNotEmpty) ...[
+                      const Divider(color: Colors.white10, height: 24),
+                      Text(
+                        summary,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(fontSize: 13, color: Colors.white70, height: 1.4),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // 🟢 Team Status Board (Qualified / Eliminated)
+          Text(
+            "Tournament Progress Board",
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Qualified
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 16),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "QUALIFIED / ACTIVE",
+                                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            if (qualified.isEmpty)
+                              Text("None", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary))
+                            else
+                              ...qualified.map<Widget>((t) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          t['team_name'] ?? 'Team',
+                                          style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                          ],
+                        ),
+                      ),
+                      Container(width: 1, height: 100, color: Colors.white10),
+                      const SizedBox(width: 16),
+                      // Eliminated
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.cancel_rounded, color: AppColors.error, size: 16),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "ELIMINATED",
+                                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.error),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            if (eliminated.isEmpty)
+                              Text("None", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary))
+                            else
+                              ...eliminated.map<Widget>((name) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: const BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          name.toString(),
+                                          style: GoogleFonts.outfit(fontSize: 13, color: Colors.white60),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 🎖️ Tournament Awards
+          Text(
+            "Tournament Awards",
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          _buildAwardsList(awards),
+          const SizedBox(height: 16),
+
+          // ⚡ Tournament Records
+          Text(
+            "Tournament Records",
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          _buildRecordsGrid(records),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAwardsList(Map<dynamic, dynamic> awards) {
+    final potm = awards['player_of_the_match'] ?? {};
+    final batter = awards['best_batter'] ?? {};
+    final bowler = awards['best_bowler'] ?? {};
+    final fielder = awards['best_fielder'] ?? {};
+    final partnership = awards['highest_partnership'] ?? {};
+
+    return Column(
+      children: [
+        _buildAwardTile(
+          Icons.star_rounded,
+          "Player of the Tournament",
+          potm['player_name'] ?? 'TBD',
+          potm['team_name'] ?? '',
+          details: potm['potm_awards_count'] != null && potm['potm_awards_count'] > 0
+              ? "${potm['potm_awards_count']} POTM"
+              : null,
+        ),
+        _buildAwardTile(
+          Icons.sports_cricket_rounded,
+          "Best Batter (Most Runs)",
+          batter['player_name'] ?? 'TBD',
+          batter['team_name'] ?? '',
+          details: batter['runs'] != null && batter['runs'] > 0 ? "${batter['runs']} Runs" : null,
+        ),
+        _buildAwardTile(
+          Icons.bolt_rounded,
+          "Best Bowler (Most Wickets)",
+          bowler['player_name'] ?? 'TBD',
+          bowler['team_name'] ?? '',
+          details: bowler['wickets'] != null && bowler['wickets'] > 0 ? "${bowler['wickets']} Wickets" : null,
+        ),
+        _buildAwardTile(
+          Icons.front_hand_rounded,
+          "Best Fielder (Most Dismissals)",
+          fielder['player_name'] ?? 'TBD',
+          fielder['team_name'] ?? '',
+          details: fielder['dismissals'] != null && fielder['dismissals'] > 0 ? "${fielder['dismissals']} Dismissals" : null,
+        ),
+        _buildAwardTile(
+          Icons.link_rounded,
+          "Highest Partnership",
+          partnership['runs'] != null && partnership['runs'] > 0 ? "${partnership['runs']} Runs" : 'TBD',
+          partnership['team_name'] ?? '',
+          details: partnership['batsman1'] != null
+              ? "${partnership['batsman1']} & ${partnership['batsman2']}"
+              : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAwardTile(IconData icon, String title, String name, String team, {String? details}) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: AppColors.primary, size: 20),
+        ),
+        title: Text(title, style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 2),
+            Text(
+              name,
+              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+            if (team.isNotEmpty)
+              Text(
+                team,
+                style: GoogleFonts.outfit(fontSize: 11, color: Colors.white70),
+              ),
+          ],
+        ),
+        trailing: details != null
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                ),
+                child: Text(
+                  details,
+                  style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                ),
+              )
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildRecordsGrid(Map<dynamic, dynamic> records) {
+    final highestTeam = records['highest_team_score'] ?? {};
+    final lowestTeam = records['lowest_team_score'] ?? {};
+    final fastest50 = records['fastest_fifty'] ?? {};
+    final fastest100 = records['fastest_hundred'] ?? {};
+    final sixes = records['most_sixes'] ?? {};
+    final fours = records['most_fours'] ?? {};
+    final bowling = records['best_bowling'] ?? {};
+    final econ = records['best_economy'] ?? {};
+
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+      childAspectRatio: 1.35,
+      children: [
+        _buildRecordCard(
+          "Highest Team Score",
+          highestTeam['score'] ?? 'TBD',
+          sub: highestTeam['team_name'] ?? '',
+        ),
+        _buildRecordCard(
+          "Lowest Team Score",
+          lowestTeam['score'] ?? 'TBD',
+          sub: lowestTeam['team_name'] ?? '',
+        ),
+        _buildRecordCard(
+          "Fastest Fifty (50)",
+          fastest50['balls'] != null ? "${fastest50['balls']} balls" : 'TBD',
+          sub: fastest50['player_name'] ?? '',
+        ),
+        _buildRecordCard(
+          "Fastest Hundred (100)",
+          fastest100['balls'] != null ? "${fastest100['balls']} balls" : 'TBD',
+          sub: fastest100['player_name'] ?? '',
+        ),
+        _buildRecordCard(
+          "Most Sixes",
+          sixes['count'] != null && sixes['count'] > 0 ? "${sixes['count']} Sixes" : 'TBD',
+          sub: sixes['player_name'] ?? '',
+        ),
+        _buildRecordCard(
+          "Most Fours",
+          fours['count'] != null && fours['count'] > 0 ? "${fours['count']} Fours" : 'TBD',
+          sub: fours['player_name'] ?? '',
+        ),
+        _buildRecordCard(
+          "Best Bowling Figures",
+          bowling['figures'] ?? 'TBD',
+          sub: bowling['player_name'] ?? '',
+        ),
+        _buildRecordCard(
+          "Best Economy Rate",
+          econ['economy'] != null ? "${econ['economy']} econ" : 'TBD',
+          sub: econ['player_name'] ?? '',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecordCard(String label, String value, {required String sub}) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(label, style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textSecondary)),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary),
+            ),
+            if (sub.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                sub,
+                style: GoogleFonts.outfit(fontSize: 10, color: Colors.white70),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ],
         ),
       ),

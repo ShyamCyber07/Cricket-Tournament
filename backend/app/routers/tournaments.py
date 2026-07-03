@@ -793,7 +793,8 @@ def get_tournament_dashboard(
         "points_table": points_table,
         "leaderboards": leaderboards,
         "upcoming_matches": [map_match(m) for m in upcoming_matches],
-        "completed_matches": [map_match(m) for m in completed_matches]
+        "completed_matches": [map_match(m) for m in completed_matches],
+        "stats_and_records": calculate_tournament_stats_and_records(id, db)
     }
 
 def check_and_progress_tournament(tournament_id: UUID, db: Session):
@@ -965,6 +966,414 @@ def check_and_progress_tournament(tournament_id: UUID, db: Session):
                 tour.status = "completed"
                 db.add(tour)
                 db.commit()
+
+
+def calculate_tournament_stats_and_records(tournament_id: UUID, db: Session) -> dict:
+    tour = db.query(Tournament).filter(Tournament.id == tournament_id).first()
+    if not tour:
+        return {}
+
+    matches = db.query(Match).filter(
+        Match.tournament_id == tournament_id,
+        Match.status.in_(["completed", "abandoned"])
+    ).all()
+
+    all_tournament_matches = db.query(Match).filter(Match.tournament_id == tournament_id).all()
+    
+    # 1. Qualified / Eliminated Teams
+    qualified_teams = []
+    eliminated_teams = []
+    
+    registered_teams = tour.teams
+    
+    if tour.format == "League":
+        if tour.status == "completed":
+            standings = get_points_table_logic(tournament_id, db)
+            if standings:
+                qualified_teams = [{"team_id": str(standings[0].team_id), "team_name": standings[0].team_name, "logo_url": standings[0].logo_url}]
+                for entry in standings[1:]:
+                    eliminated_teams.append(entry.team_name)
+    elif tour.format == "League + Knockout":
+        ko_team_ids = set()
+        for m in all_tournament_matches:
+            if m.tournament_stage in ["semi_final", "final"]:
+                ko_team_ids.add(m.team1_id)
+                ko_team_ids.add(m.team2_id)
+        
+        for t in registered_teams:
+            if t.id in ko_team_ids:
+                qualified_teams.append({"team_id": str(t.id), "team_name": t.name, "logo_url": t.logo_url})
+            elif len(ko_team_ids) > 0:
+                eliminated_teams.append(t.name)
+                
+        for m in matches:
+            if m.tournament_stage == "semi_final" and m.winner_id:
+                loser_id = m.team2_id if m.winner_id == m.team1_id else m.team1_id
+                loser = db.query(Team).filter(Team.id == loser_id).first()
+                if loser and loser.name not in eliminated_teams:
+                    eliminated_teams.append(loser.name)
+    else: # Knockout
+        for m in matches:
+            if m.winner_id:
+                loser_id = m.team2_id if m.winner_id == m.team1_id else m.team1_id
+                loser = db.query(Team).filter(Team.id == loser_id).first()
+                if loser and loser.name not in eliminated_teams:
+                    eliminated_teams.append(loser.name)
+        for t in registered_teams:
+            if t.name not in eliminated_teams:
+                qualified_teams.append({"team_id": str(t.id), "team_name": t.name, "logo_url": t.logo_url})
+
+    # 2. Match Awards & Records
+    player_potm_awards = {}
+    player_impact_points = {}
+    player_total_runs = {}
+    player_total_wickets = {}
+    player_total_fielding = {}
+    player_fours = {}
+    player_sixes = {}
+    
+    highest_team_score_val = 0
+    highest_team_score_entry = None
+    
+    lowest_team_score_val = 9999
+    lowest_team_score_entry = None
+    
+    highest_partnership_val = 0
+    highest_partnership_entry = None
+    
+    fastest_fifty_balls = 999
+    fastest_fifty_entry = None
+    
+    fastest_hundred_balls = 999
+    fastest_hundred_entry = None
+    
+    best_bowling_wkts = -1
+    best_bowling_runs = 9999
+    best_bowling_entry = None
+    
+    bowler_conceded_runs = {}
+    bowler_legal_balls = {}
+    
+    for m in matches:
+        if m.status != "completed":
+            continue
+            
+        match_points = {}
+        
+        for innings in m.innings:
+            if innings.total_runs > highest_team_score_val:
+                highest_team_score_val = innings.total_runs
+                opp = m.team2 if innings.batting_team_id == m.team1_id else m.team1
+                highest_team_score_entry = {
+                    "team_name": innings.batting_team.name,
+                    "opponent": opp.name if opp else "Opponent",
+                    "score": f"{innings.total_runs}/{innings.total_wickets}",
+                    "overs": innings.total_overs,
+                    "date": str(m.match_date)
+                }
+            if innings.is_completed and innings.total_runs < lowest_team_score_val:
+                lowest_team_score_val = innings.total_runs
+                opp = m.team2 if innings.batting_team_id == m.team1_id else m.team1
+                lowest_team_score_entry = {
+                    "team_name": innings.batting_team.name,
+                    "opponent": opp.name if opp else "Opponent",
+                    "score": f"{innings.total_runs}/{innings.total_wickets}",
+                    "overs": innings.total_overs,
+                    "date": str(m.match_date)
+                }
+                
+            balls = innings.balls
+            current_partnership_runs = 0
+            current_batsmen = set()
+            
+            batsman_runs = {}
+            batsman_balls = {}
+            
+            bowler_match_wkts = {}
+            bowler_match_runs = {}
+            bowler_match_legal = {}
+            
+            for b in balls:
+                striker_id = b.batsman_id
+                non_striker_id = b.non_striker_id
+                bowler_id = b.bowler_id
+                
+                if bowler_id not in bowler_match_runs:
+                    bowler_match_runs[bowler_id] = 0
+                    bowler_match_legal[bowler_id] = 0
+                    bowler_match_wkts[bowler_id] = 0
+                    
+                if b.extra_type in ["wide", "no_ball"]:
+                    bowler_match_runs[bowler_id] += (b.runs_batsman or 0) + (b.runs_extras or 0)
+                else:
+                    bowler_match_runs[bowler_id] += (b.runs_batsman or 0)
+                    bowler_match_legal[bowler_id] += 1
+                    
+                if b.is_wicket and b.wicket_type in ["bowled", "caught", "lbw", "stumped", "hit_wicket"]:
+                    bowler_match_wkts[bowler_id] += 1
+                    
+                if b.is_wicket and b.wicket_type in ["caught", "stumped", "run_out"] and b.fielder_id:
+                    fid = b.fielder_id
+                    player_total_fielding[fid] = player_total_fielding.get(fid, 0) + 1
+                    match_points[fid] = match_points.get(fid, 0) + 10
+                    
+                if striker_id not in batsman_runs:
+                    batsman_runs[striker_id] = 0
+                    batsman_balls[striker_id] = 0
+                    
+                if b.extra_type != "wide":
+                    batsman_balls[striker_id] += 1
+                    
+                batsman_runs[striker_id] += b.runs_batsman
+                
+                if b.runs_batsman == 4:
+                    player_fours[striker_id] = player_fours.get(striker_id, 0) + 1
+                elif b.runs_batsman == 6:
+                    player_sixes[striker_id] = player_sixes.get(striker_id, 0) + 1
+                
+                r_cum = batsman_runs[striker_id]
+                b_cum = batsman_balls[striker_id]
+                if r_cum >= 50 and b_cum < fastest_fifty_balls:
+                    fastest_fifty_balls = b_cum
+                    p_details = db.query(Player).filter(Player.id == striker_id).first()
+                    opp_team = m.team2 if innings.batting_team_id == m.team1_id else m.team1
+                    fastest_fifty_entry = {
+                        "player_name": p_details.name if p_details else "Player",
+                        "team_name": innings.batting_team.name,
+                        "balls": b_cum,
+                        "opponent": opp_team.name if opp_team else "Opponent",
+                        "date": str(m.match_date)
+                    }
+                if r_cum >= 100 and b_cum < fastest_hundred_balls:
+                    fastest_hundred_balls = b_cum
+                    p_details = db.query(Player).filter(Player.id == striker_id).first()
+                    opp_team = m.team2 if innings.batting_team_id == m.team1_id else m.team1
+                    fastest_hundred_entry = {
+                        "player_name": p_details.name if p_details else "Player",
+                        "team_name": innings.batting_team.name,
+                        "balls": b_cum,
+                        "opponent": opp_team.name if opp_team else "Opponent",
+                        "date": str(m.match_date)
+                    }
+                    
+                pair = frozenset([striker_id, non_striker_id])
+                if not current_batsmen:
+                    current_batsmen = pair
+                    current_partnership_runs = 0
+                
+                if pair == current_batsmen:
+                    current_partnership_runs += b.runs_batsman + b.runs_extras
+                else:
+                    if current_partnership_runs > highest_partnership_val:
+                        highest_partnership_val = current_partnership_runs
+                        p_list = list(current_batsmen)
+                        p1 = db.query(Player).filter(Player.id == p_list[0]).first()
+                        p2 = db.query(Player).filter(Player.id == p_list[1]).first() if len(p_list) > 1 else None
+                        opp_team = m.team2 if innings.batting_team_id == m.team1_id else m.team1
+                        highest_partnership_entry = {
+                            "runs": current_partnership_runs,
+                            "batsman1": p1.name if p1 else "Player 1",
+                            "batsman2": p2.name if p2 else "Player 2",
+                            "team_name": innings.batting_team.name,
+                            "opponent": opp_team.name if opp_team else "Opponent",
+                            "date": str(m.match_date)
+                        }
+                    current_batsmen = pair
+                    current_partnership_runs = b.runs_batsman + b.runs_extras
+            
+            if current_partnership_runs > highest_partnership_val and len(current_batsmen) == 2:
+                highest_partnership_val = current_partnership_runs
+                p_list = list(current_batsmen)
+                p1 = db.query(Player).filter(Player.id == p_list[0]).first()
+                p2 = db.query(Player).filter(Player.id == p_list[1]).first()
+                opp_team = m.team2 if innings.batting_team_id == m.team1_id else m.team1
+                highest_partnership_entry = {
+                    "runs": current_partnership_runs,
+                    "batsman1": p1.name if p1 else "Player 1",
+                    "batsman2": p2.name if p2 else "Player 2",
+                    "team_name": innings.batting_team.name,
+                    "opponent": opp_team.name if opp_team else "Opponent",
+                    "date": str(m.match_date)
+                }
+
+            for pid, runs in batsman_runs.items():
+                player_total_runs[pid] = player_total_runs.get(pid, 0) + runs
+                pts = runs * 1
+                if runs >= 100: pts += 40
+                elif runs >= 50: pts += 20
+                elif runs >= 30: pts += 10
+                match_points[pid] = match_points.get(pid, 0) + pts
+                
+            for pid, wkts in bowler_match_wkts.items():
+                player_total_wickets[pid] = player_total_wickets.get(pid, 0) + wkts
+                rc = bowler_match_runs[pid]
+                pts = wkts * 20
+                if wkts >= 5: pts += 25
+                elif wkts >= 3: pts += 10
+                match_points[pid] = match_points.get(pid, 0) + pts
+                
+                if wkts > best_bowling_wkts or (wkts == best_bowling_wkts and rc < best_bowling_runs):
+                    best_bowling_wkts = wkts
+                    best_bowling_runs = rc
+                    p_details = db.query(Player).filter(Player.id == pid).first()
+                    opp_team = m.team2 if innings.bowling_team_id == m.team1_id else m.team1
+                    best_bowling_entry = {
+                        "player_name": p_details.name if p_details else "Player",
+                        "team_name": innings.bowling_team.name,
+                        "figures": f"{wkts}/{rc}",
+                        "opponent": opp_team.name if opp_team else "Opponent",
+                        "date": str(m.match_date)
+                    }
+                
+                bowler_conceded_runs[pid] = bowler_conceded_runs.get(pid, 0) + rc
+                bowler_legal_balls[pid] = bowler_legal_balls.get(pid, 0) + bowler_match_legal[pid]
+                
+        if match_points:
+            best_m_pid = max(match_points, key=match_points.get)
+            player_potm_awards[best_m_pid] = player_potm_awards.get(best_m_pid, 0) + 1
+            for pid, pts in match_points.items():
+                player_impact_points[pid] = player_impact_points.get(pid, 0) + pts
+
+    best_econ_val = 999.0
+    best_econ_entry = None
+    for pid, runs in bowler_conceded_runs.items():
+        balls = bowler_legal_balls[pid]
+        if balls >= 12:
+            econ = round((runs / (balls / 6.0)), 2)
+            if econ < best_econ_val:
+                best_econ_val = econ
+                p_details = db.query(Player).filter(Player.id == pid).first()
+                t_details = p_details.teams[0] if p_details and p_details.teams else None
+                best_econ_entry = {
+                    "player_name": p_details.name if p_details else "Player",
+                    "team_name": t_details.name if t_details else "Team",
+                    "economy": econ,
+                    "overs": round(balls / 6.0, 1)
+                }
+
+    potm_name = "None"
+    potm_team = ""
+    best_potm_count = 0
+    if player_potm_awards:
+        best_potm_pid = max(player_potm_awards, key=player_potm_awards.get)
+        p_details = db.query(Player).filter(Player.id == best_potm_pid).first()
+        potm_name = p_details.name if p_details else "Player"
+        potm_team = p_details.teams[0].name if p_details and p_details.teams else "Team"
+        best_potm_count = player_potm_awards[best_potm_pid]
+        
+    best_bat_name = "None"
+    best_bat_team = ""
+    best_bat_runs = 0
+    if player_total_runs:
+        pid = max(player_total_runs, key=player_total_runs.get)
+        p_details = db.query(Player).filter(Player.id == pid).first()
+        best_bat_name = p_details.name if p_details else "Player"
+        best_bat_team = p_details.teams[0].name if p_details and p_details.teams else "Team"
+        best_bat_runs = player_total_runs[pid]
+        
+    best_bowl_name = "None"
+    best_bowl_team = ""
+    best_bowl_wkts = 0
+    if player_total_wickets:
+        pid = max(player_total_wickets, key=player_total_wickets.get)
+        p_details = db.query(Player).filter(Player.id == pid).first()
+        best_bowl_name = p_details.name if p_details else "Player"
+        best_bowl_team = p_details.teams[0].name if p_details and p_details.teams else "Team"
+        best_bowl_wkts = player_total_wickets[pid]
+        
+    best_field_name = "None"
+    best_field_team = ""
+    best_field_count = 0
+    if player_total_fielding:
+        pid = max(player_total_fielding, key=player_total_fielding.get)
+        p_details = db.query(Player).filter(Player.id == pid).first()
+        best_field_name = p_details.name if p_details else "Player"
+        best_field_team = p_details.teams[0].name if p_details and p_details.teams else "Team"
+        best_field_count = player_total_fielding[pid]
+
+    awards_dict = {
+        "player_of_the_match": {
+            "player_name": potm_name,
+            "team_name": potm_team,
+            "potm_awards_count": best_potm_count
+        },
+        "best_batter": {
+            "player_name": best_bat_name,
+            "team_name": best_bat_team,
+            "runs": best_bat_runs
+        },
+        "best_bowler": {
+            "player_name": best_bowl_name,
+            "team_name": best_bowl_team,
+            "wickets": best_bowl_wkts
+        },
+        "best_fielder": {
+            "player_name": best_field_name,
+            "team_name": best_field_team,
+            "dismissals": best_field_count
+        },
+        "highest_partnership": highest_partnership_entry
+    }
+
+    most_sixes_pid = max(player_sixes, key=player_sixes.get) if player_sixes else None
+    most_sixes_p = db.query(Player).filter(Player.id == most_sixes_pid).first() if most_sixes_pid else None
+    
+    most_fours_pid = max(player_fours, key=player_fours.get) if player_fours else None
+    most_fours_p = db.query(Player).filter(Player.id == most_fours_pid).first() if most_fours_pid else None
+
+    records_dict = {
+        "highest_team_score": highest_team_score_entry,
+        "lowest_team_score": lowest_team_score_entry if lowest_team_score_val != 9999 else None,
+        "highest_partnership": highest_partnership_entry,
+        "fastest_fifty": fastest_fifty_entry,
+        "fastest_hundred": fastest_hundred_entry,
+        "most_sixes": {
+            "player_name": most_sixes_p.name if most_sixes_p else "None",
+            "count": player_sixes.get(most_sixes_pid, 0) if most_sixes_pid else 0
+        },
+        "most_fours": {
+            "player_name": most_fours_p.name if most_fours_p else "None",
+            "count": player_fours.get(most_fours_pid, 0) if most_fours_pid else 0
+        },
+        "best_bowling": best_bowling_entry,
+        "best_economy": best_econ_entry
+    }
+
+    champion_name = tour.winner.name if tour.winner else None
+    champion_logo = tour.winner.logo_url if tour.winner else None
+    
+    runner_up_name = None
+    runner_up_logo = None
+    if tour.status == "completed" and tour.winner_id:
+        final_match = db.query(Match).filter(
+            Match.tournament_id == tournament_id,
+            Match.tournament_stage == "final",
+            Match.bracket_code == "F"
+        ).first()
+        if final_match:
+            ru_id = final_match.team2_id if final_match.winner_id == final_match.team1_id else final_match.team1_id
+            ru = db.query(Team).filter(Team.id == ru_id).first()
+            if ru:
+                runner_up_name = ru.name
+                runner_up_logo = ru.logo_url
+
+    completion_summary = ""
+    if tour.status == "completed":
+        completion_summary = f"The tournament concluded successfully. {champion_name or 'The champion'} emerged victorious."
+
+    return {
+        "qualified_teams": qualified_teams,
+        "eliminated_teams": eliminated_teams,
+        "awards": awards_dict,
+        "records": records_dict,
+        "completion": {
+            "champion": champion_name,
+            "champion_logo_url": champion_logo,
+            "runner_up": runner_up_name,
+            "runner_up_logo_url": runner_up_logo,
+            "summary": completion_summary
+        }
+    }
 
 
 # Helper to crop image to square and resize

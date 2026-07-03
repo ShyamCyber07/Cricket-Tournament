@@ -42,11 +42,20 @@ class AddPlayerRequest(BaseModel):
 class TeamStatsResponse(BaseModel):
     team_id: UUID
     team_name: str
-    matches_played: int
-    matches_won: int
-    matches_lost: int
-    matches_tied: int
-    net_run_rate: float
+    matches_played: int = 0
+    matches_won: int = 0
+    matches_lost: int = 0
+    matches_tied: int = 0
+    matches_no_result: int = 0
+    win_percentage: float = 0.0
+    highest_score: int = 0
+    lowest_score: int = 0
+    highest_chase: int = 0
+    net_run_rate: float = 0.0
+    captain_name: Optional[str] = None
+    vice_captain_name: Optional[str] = None
+    form: List[str] = []
+    trophies: List[str] = []
 
 class BulkAddPlayersRequest(BaseModel):
     player_ids: List[UUID]

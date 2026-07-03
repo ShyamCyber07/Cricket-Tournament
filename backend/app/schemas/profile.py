@@ -62,6 +62,10 @@ class BattingStats(BaseModel):
     sixes: int = 0
     fifties: int = 0
     hundreds: int = 0
+    balls: int = 0
+    not_outs: int = 0
+    thirties: int = 0
+    ducks: int = 0
 
 class BowlingStats(BaseModel):
     wickets: int = 0
@@ -69,6 +73,11 @@ class BowlingStats(BaseModel):
     economy: float = 0.0
     best_bowling_figures: str = "0/0"
     maidens: int = 0
+    matches: int = 0
+    runs: int = 0
+    three_wickets: int = 0
+    five_wickets: int = 0
+    best_bowling: str = "0/0"
 
 class FieldingStats(BaseModel):
     catches: int = 0
@@ -86,6 +95,8 @@ class CareerStatsResponse(BaseModel):
     bowling: BowlingStats
     fielding: FieldingStats
     tournament: TournamentStats
+    recent_performances: List[dict] = []
+    awards: List[str] = []
 
 class UserActivityResponse(BaseModel):
     activity_type: str

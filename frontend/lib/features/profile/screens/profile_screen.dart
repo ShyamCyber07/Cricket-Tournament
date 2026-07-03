@@ -238,16 +238,16 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildProfileDetailRow("Matches", "0 (Placeholder)", Icons.sports_cricket_outlined),
-                _buildProfileDetailRow("Runs", "0 (Placeholder)", Icons.emoji_events_outlined),
-                _buildProfileDetailRow("Wickets", "0 (Placeholder)", Icons.bolt_outlined),
-                _buildProfileDetailRow("Strike Rate", "0.0 (Placeholder)", Icons.speed_outlined),
-                _buildProfileDetailRow("Economy", "0.0 (Placeholder)", Icons.show_chart_outlined),
-                _buildProfileDetailRow("Catches", "0 (Placeholder)", Icons.front_hand_outlined),
-                _buildProfileDetailRow("Stumpings", "0 (Placeholder)", Icons.front_hand_outlined),
-                _buildProfileDetailRow("MVP Awards", "0 (Placeholder)", Icons.star_border_outlined),
-                _buildProfileDetailRow("Teams Played For", "None (Placeholder)", Icons.group_outlined),
-                _buildProfileDetailRow("Tournament History", "None (Placeholder)", Icons.history_outlined),
+                _buildProfileDetailRow("Matches", "${batting['matches_played'] ?? 0}", Icons.sports_cricket_outlined),
+                _buildProfileDetailRow("Runs", "${batting['runs'] ?? 0}", Icons.emoji_events_outlined),
+                _buildProfileDetailRow("Wickets", "${bowling['wickets'] ?? 0}", Icons.bolt_outlined),
+                _buildProfileDetailRow("Strike Rate", "${batting['strike_rate'] ?? 0.0}", Icons.speed_outlined),
+                _buildProfileDetailRow("Economy", "${bowling['economy'] ?? 0.0}", Icons.show_chart_outlined),
+                _buildProfileDetailRow("Catches", "${fielding['catches'] ?? 0}", Icons.front_hand_outlined),
+                _buildProfileDetailRow("Stumpings", "${fielding['stumpings'] ?? 0}", Icons.front_hand_outlined),
+                _buildProfileDetailRow("MVP Awards", "${(_stats!['awards'] as List?)?.length ?? 0}", Icons.star_border_outlined),
+                _buildProfileDetailRow("Teams Played For", _profile!['current_team'] ?? "None", Icons.group_outlined),
+                _buildProfileDetailRow("Tournament History", "${tournament['tournaments_played'] ?? 0} Tournaments", Icons.history_outlined),
               ],
             ),
           ),
@@ -269,13 +269,17 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               _buildStatItem("Matches", "${batting['matches_played'] ?? 0}"),
               _buildStatItem("Innings", "${batting['innings'] ?? 0}"),
               _buildStatItem("Runs", "${batting['runs'] ?? 0}"),
+              _buildStatItem("Balls Faced", "${batting['balls'] ?? 0}"),
               _buildStatItem("Highest Score", "${batting['highest_score'] ?? 0}"),
               _buildStatItem("Average", "${batting['average'] ?? 0.0}"),
               _buildStatItem("Strike Rate", "${batting['strike_rate'] ?? 0.0}"),
+              _buildStatItem("Not Outs", "${batting['not_outs'] ?? 0}"),
+              _buildStatItem("30s", "${batting['thirties'] ?? 0}"),
+              _buildStatItem("50s", "${batting['fifties'] ?? 0}"),
+              _buildStatItem("100s", "${batting['hundreds'] ?? 0}"),
+              _buildStatItem("Ducks", "${batting['ducks'] ?? 0}"),
               _buildStatItem("Fours (4s)", "${batting['fours'] ?? 0}"),
               _buildStatItem("Sixes (6s)", "${batting['sixes'] ?? 0}"),
-              _buildStatItem("Fifties (50s)", "${batting['fifties'] ?? 0}"),
-              _buildStatItem("Hundreds (100s)", "${batting['hundreds'] ?? 0}"),
             ],
           ),
           const SizedBox(height: 24),
@@ -294,11 +298,15 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             crossAxisSpacing: 8,
             childAspectRatio: 1.1,
             children: [
+              _buildStatItem("Matches", "${bowling['matches'] ?? 0}"),
               _buildStatItem("Wickets", "${bowling['wickets'] ?? 0}"),
               _buildStatItem("Overs", "${bowling['overs_bowled'] ?? 0.0}"),
+              _buildStatItem("Runs", "${bowling['runs'] ?? 0}"),
               _buildStatItem("Economy", "${bowling['economy'] ?? 0.0}"),
               _buildStatItem("Best Figures", "${bowling['best_bowling_figures'] ?? '0/0'}"),
               _buildStatItem("Maidens", "${bowling['maidens'] ?? 0}"),
+              _buildStatItem("3W Hauls", "${bowling['three_wickets'] ?? 0}"),
+              _buildStatItem("5W Hauls", "${bowling['five_wickets'] ?? 0}"),
             ],
           ),
           const SizedBox(height: 24),
@@ -344,6 +352,135 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               ),
             ],
           ),
+          const SizedBox(height: 24),
+          Text(
+            "🎖️ AWARDS & ACCOLADES",
+            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white70, letterSpacing: 1),
+          ),
+          const SizedBox(height: 12),
+          if ((_stats!['awards'] as List?)?.isEmpty ?? true)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text("No awards earned yet.", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: (_stats!['awards'] as List).map<Widget>((award) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.stars_rounded, color: AppColors.primary, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        award.toString().toUpperCase(),
+                        style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          const SizedBox(height: 24),
+          Text(
+            "⚡ PERFORMANCE TRENDS (LAST 5 INNINGS)",
+            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white70, letterSpacing: 1),
+          ),
+          const SizedBox(height: 12),
+          if ((_stats!['recent_performances'] as List?)?.isEmpty ?? true)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text("No recent batting trend data.", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+            )
+          else
+            _buildGlassCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    height: 100,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: (_stats!['recent_performances'] as List).map<Widget>((perf) {
+                        final runs = (perf['runs'] ?? 0) as int;
+                        final isNotOut = (perf['is_not_out'] ?? false) as bool;
+                        final double barHeight = runs == 0 ? 4 : (runs > 100 ? 80 : (runs * 0.8));
+                        final oppStr = perf['opponent'].toString();
+                        final oppNameShort = oppStr.length > 3 ? oppStr.substring(0, 3) : oppStr;
+                        return Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text(
+                              "$runs${isNotOut ? '*' : ''}",
+                              style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              width: 24,
+                              height: barHeight,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [AppColors.primary, AppColors.secondary],
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              oppNameShort.toUpperCase(),
+                              style: GoogleFonts.outfit(fontSize: 9, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const Divider(color: Colors.white10, height: 24),
+                  ...(_stats!['recent_performances'] as List).map<Widget>((perf) {
+                    final runs = perf['runs'] ?? 0;
+                    final balls = perf['balls_faced'] ?? 0;
+                    final wkts = perf['wickets'] ?? 0;
+                    final runsCon = perf['runs_conceded'] ?? 0;
+                    final dateStr = perf['match_date'].toString().split(' ')[0];
+                    final isNotOut = perf['is_not_out'] ?? false;
+                    
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "vs ${perf['opponent']}",
+                                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                              Text(dateStr, style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textSecondary)),
+                            ],
+                          ),
+                          Text(
+                            "Bat: $runs($balls)${isNotOut ? '*' : ''} | Bowl: $wkts/$runsCon",
+                            style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ],
+              ),
+            ),
         ],
       ),
     );

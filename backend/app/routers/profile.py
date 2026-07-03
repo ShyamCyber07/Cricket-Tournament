@@ -232,26 +232,24 @@ def update_profile(
     return current_user
 
 
-@router.get("/stats", response_model=CareerStatsResponse)
-def get_profile_stats(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    player = db.query(Player).filter(Player.user_id == current_user.id).first()
+def calculate_user_career_stats(db: Session, user_id: UUID) -> CareerStatsResponse:
+    player = db.query(Player).filter(Player.user_id == user_id).first()
     
-    # Initialize empty response structure
     batting = BattingStats()
     bowling = BowlingStats()
     fielding = FieldingStats()
     tournament = TournamentStats()
-
+    recent_performances = []
+    awards = []
+    
     if not player:
-        # User has no linked player profile. Return zero stats.
         return CareerStatsResponse(
             batting=batting,
             bowling=bowling,
             fielding=fielding,
-            tournament=tournament
+            tournament=tournament,
+            recent_performances=recent_performances,
+            awards=awards
         )
 
     # 1. Batting Statistics
@@ -259,53 +257,65 @@ def get_profile_stats(
     baseline_wickets = player.career_wickets or 0
     baseline_matches = player.matches_played or 0
 
-    # Matches played
     m_played = db.query(MatchSquad).filter(MatchSquad.player_id == player.id, MatchSquad.is_playing_xi == True).count()
     batting.matches_played = m_played + baseline_matches
 
-    # Balls faced
     balls_faced = db.query(Ball).filter(Ball.batsman_id == player.id, Ball.extra_type != "wide").count()
+    batting.balls = balls_faced
 
-    # Innings batted
     batting.innings = db.query(Ball.innings_id).filter(
         or_(Ball.batsman_id == player.id, Ball.player_dismissed_id == player.id)
     ).distinct().count()
 
-    # Runs
     runs_scored = db.query(func.sum(Ball.runs_batsman)).filter(Ball.batsman_id == player.id).scalar() or 0
     batting.runs = runs_scored + baseline_runs
 
-    # Fours & Sixes
     batting.fours = db.query(Ball).filter(Ball.batsman_id == player.id, Ball.runs_batsman == 4).count()
     batting.sixes = db.query(Ball).filter(Ball.batsman_id == player.id, Ball.runs_batsman == 6).count()
 
-    # Highest score
     innings_runs = db.query(
         Ball.innings_id,
         func.sum(Ball.runs_batsman).label("runs")
     ).filter(Ball.batsman_id == player.id).group_by(Ball.innings_id).all()
+    
     max_runs = max([r.runs for r in innings_runs]) if innings_runs else 0
     batting.highest_score = max(max_runs, player.highest_score or 0)
 
-    # Fifties and Hundreds
+    batting.thirties = sum(1 for r in innings_runs if 30 <= r.runs < 50)
     batting.fifties = sum(1 for r in innings_runs if 50 <= r.runs < 100)
     batting.hundreds = sum(1 for r in innings_runs if r.runs >= 100)
+    
+    # Ducks: innings where runs == 0 and they were dismissed
+    dismissed_innings = db.query(Ball.innings_id).filter(
+        Ball.player_dismissed_id == player.id,
+        Ball.wicket_type != "retired_hurt"
+    ).distinct().all()
+    dismissed_innings_ids = [d.innings_id for d in dismissed_innings]
+    
+    ducks_count = 0
+    for in_id in dismissed_innings_ids:
+        in_runs = db.query(func.sum(Ball.runs_batsman)).filter(
+            Ball.batsman_id == player.id,
+            Ball.innings_id == in_id
+        ).scalar() or 0
+        if in_runs == 0:
+            ducks_count += 1
+    batting.ducks = ducks_count
 
-    # Average
-    dismissed = db.query(Ball).filter(Ball.player_dismissed_id == player.id).count()
+    dismissed = db.query(Ball).filter(Ball.player_dismissed_id == player.id, Ball.wicket_type != "retired_hurt").count()
+    batting.not_outs = max(0, batting.innings - dismissed)
+
     if dismissed > 0:
         batting.average = round(batting.runs / dismissed, 2)
     else:
         batting.average = float(batting.runs)
 
-    # Strike rate
     if balls_faced > 0:
         batting.strike_rate = round((batting.runs / balls_faced) * 100, 2)
     elif player.strike_rate:
         batting.strike_rate = player.strike_rate
 
     # 2. Bowling Statistics
-    # Wickets
     wkt = db.query(Ball).filter(
         Ball.bowler_id == player.id,
         Ball.is_wicket == True,
@@ -313,12 +323,10 @@ def get_profile_stats(
     ).count()
     bowling.wickets = wkt + baseline_wickets
 
-    # Balls bowled
     balls_bowled = db.query(Ball).filter(Ball.bowler_id == player.id, ~Ball.extra_type.in_(["wide", "no_ball"])).count()
     raw_overs = balls_bowled / 6.0
     bowling.overs_bowled = round((balls_bowled // 6) + (balls_bowled % 6) / 10.0, 1)
 
-    # Conceded runs
     conceded_balls = db.query(Ball).filter(Ball.bowler_id == player.id).all()
     runs_conceded = 0
     for b in conceded_balls:
@@ -326,13 +334,13 @@ def get_profile_stats(
             runs_conceded += (b.runs_batsman or 0) + (b.runs_extras or 0)
         else:
             runs_conceded += (b.runs_batsman or 0)
+    bowling.runs = runs_conceded
 
     if raw_overs > 0:
         bowling.economy = round(runs_conceded / raw_overs, 2)
     elif player.economy:
         bowling.economy = player.economy
 
-    # Best figures
     innings_bowling = {}
     for b in conceded_balls:
         in_id = b.innings_id
@@ -351,17 +359,29 @@ def get_profile_stats(
     best_fig = "0/0"
     best_wk = -1
     best_runs = 9999
+    three_wkt_hauls = 0
+    five_wkt_hauls = 0
     for in_id, stat in innings_bowling.items():
         wk = stat["wickets"]
         r = stat["runs"]
+        if wk >= 3:
+            three_wkt_hauls += 1
+        if wk >= 5:
+            five_wkt_hauls += 1
         if wk > best_wk or (wk == best_wk and r < best_runs):
             best_wk = wk
             best_runs = r
             best_fig = f"{wk}/{r}"
     if best_wk != -1:
         bowling.best_bowling_figures = best_fig
+        bowling.best_bowling = best_fig
     else:
         bowling.best_bowling_figures = player.best_bowling_figures or "0/0"
+        bowling.best_bowling = player.best_bowling_figures or "0/0"
+
+    bowling.three_wickets = three_wkt_hauls
+    bowling.five_wickets = five_wkt_hauls
+    bowling.matches = batting.matches_played
 
     # Maidens
     over_groups = {}
@@ -407,12 +427,100 @@ def get_profile_stats(
         if matches_count > 0:
             tournament.win_percentage = round((matches_won / matches_count) * 100.0, 1)
 
+    # 5. Recent performances (Last 5 matches)
+    recent_squads = db.query(MatchSquad).filter(
+        MatchSquad.player_id == player.id,
+        MatchSquad.is_playing_xi == True
+    ).all()
+    match_ids = [s.match_id for s in recent_squads]
+    
+    if match_ids:
+        recent_matches = db.query(Match).filter(
+            Match.id.in_(match_ids),
+            Match.status == "completed"
+        ).order_by(Match.match_date.desc()).limit(5).all()
+        
+        for m in recent_matches:
+            opp_team = m.team2 if m.team1_id in team_ids else m.team1
+            opp_name = opp_team.name if opp_team else "Opponent"
+            
+            m_runs = db.query(func.sum(Ball.runs_batsman)).filter(
+                Ball.batsman_id == player.id,
+                Ball.innings_id.in_([i.id for i in m.innings])
+            ).scalar() or 0
+            
+            m_balls = db.query(func.count(Ball.id)).filter(
+                Ball.batsman_id == player.id,
+                Ball.extra_type != "wide",
+                Ball.innings_id.in_([i.id for i in m.innings])
+            ).scalar() or 0
+            
+            m_dismissed = db.query(Ball).filter(
+                Ball.player_dismissed_id == player.id,
+                Ball.wicket_type != "retired_hurt",
+                Ball.innings_id.in_([i.id for i in m.innings])
+            ).count() > 0
+            
+            m_wickets = db.query(func.count(Ball.id)).filter(
+                Ball.bowler_id == player.id,
+                Ball.is_wicket == True,
+                ~Ball.wicket_type.in_(["run_out", "retired_hurt", "none"]),
+                Ball.innings_id.in_([i.id for i in m.innings])
+            ).scalar() or 0
+            
+            conceded = db.query(Ball).filter(
+                Ball.bowler_id == player.id,
+                Ball.innings_id.in_([i.id for i in m.innings])
+            ).all()
+            m_conceded_runs = 0
+            for b in conceded:
+                if b.extra_type in ["wide", "no_ball"]:
+                    m_conceded_runs += (b.runs_batsman or 0) + (b.runs_extras or 0)
+                else:
+                    m_conceded_runs += (b.runs_batsman or 0)
+            
+            recent_performances.append({
+                "match_id": str(m.id),
+                "match_date": str(m.match_date),
+                "opponent": opp_name,
+                "runs": m_runs,
+                "balls_faced": m_balls,
+                "is_not_out": not m_dismissed,
+                "wickets": m_wickets,
+                "runs_conceded": m_conceded_runs
+            })
+
+    # 6. Awards
+    if batting.highest_score >= 100:
+        awards.append("Centurion")
+    if batting.highest_score >= 50:
+        awards.append("Half-Centurion")
+    if bowling.five_wickets > 0:
+        awards.append("Five-wicket Haul")
+    if bowling.three_wickets > 0:
+        awards.append("Three-wicket Haul")
+    if batting.runs >= 200:
+        awards.append("Run Machine")
+    if bowling.wickets >= 10:
+        awards.append("Golden Arm")
+    if batting.matches_played > 0:
+        awards.append("Tournament Veteran")
+
     return CareerStatsResponse(
         batting=batting,
         bowling=bowling,
         fielding=fielding,
-        tournament=tournament
+        tournament=tournament,
+        recent_performances=recent_performances,
+        awards=awards
     )
+
+@router.get("/stats", response_model=CareerStatsResponse)
+def get_profile_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return calculate_user_career_stats(db, current_user.id)
 
 
 @router.get("/activity", response_model=List[UserActivityResponse])
@@ -575,12 +683,7 @@ def search_players(
                     current_team_name = team.name
                     team_role = active_membership.role
                     
-            career_stats = CareerStatsResponse(
-                batting=BattingStats(matches_played=0, innings=0, runs=0, highest_score=0, average=0.0, strike_rate=0.0, fours=0, sixes=0, fifties=0, hundreds=0),
-                bowling=BowlingStats(wickets=0, overs_bowled=0.0, economy=0.0, best_bowling_figures="0/0", maidens=0),
-                fielding=FieldingStats(catches=0, run_outs=0, stumpings=0),
-                tournament=TournamentStats(tournaments_played=0, tournaments_won=0, finals_played=0, win_percentage=0.0)
-            )
+            career_stats = calculate_user_career_stats(db, u.id)
             
             achievements = db.query(UserAchievement).filter(UserAchievement.user_id == u.id).all()
             achievements_list = [
@@ -669,12 +772,7 @@ def get_public_profile(
             current_team_name = team.name
             team_role = active_membership.role
             
-    career_stats = CareerStatsResponse(
-        batting=BattingStats(matches_played=0, innings=0, runs=0, highest_score=0, average=0.0, strike_rate=0.0, fours=0, sixes=0, fifties=0, hundreds=0),
-        bowling=BowlingStats(wickets=0, overs_bowled=0.0, economy=0.0, best_bowling_figures="0/0", maidens=0),
-        fielding=FieldingStats(catches=0, run_outs=0, stumpings=0),
-        tournament=TournamentStats(tournaments_played=0, tournaments_won=0, finals_played=0, win_percentage=0.0)
-    )
+    career_stats = calculate_user_career_stats(db, user.id)
     
     achievements = db.query(UserAchievement).filter(UserAchievement.user_id == user.id).all()
     achievements_list = [

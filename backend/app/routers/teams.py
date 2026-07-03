@@ -412,26 +412,118 @@ def get_team_stats(id: UUID, db: Session = Depends(get_db)):
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
-    # Match count
+    # Fetch completed and abandoned matches
     matches = db.query(Match).filter(
-        (Match.team1_id == id) | (Match.team2_id == id)
-    ).all()
+        ((Match.team1_id == id) | (Match.team2_id == id)),
+        Match.status.in_(["completed", "abandoned"])
+    ).order_by(Match.match_date.desc()).all()
 
     played = 0
     won = 0
     lost = 0
     tied = 0
+    no_result = 0
+    
+    highest_score = 0
+    lowest_score = 9999
+    highest_chase = 0
+    
+    total_runs_scored = 0
+    total_overs_faced = 0.0
+    total_runs_conceded = 0
+    total_overs_bowled = 0.0
 
     for m in matches:
-        if m.status == "completed":
+        if m.status == "abandoned":
             played += 1
-            if m.winner_id == id:
-                won += 1
-            elif m.winner_id is None:
-                # No winner -> tie or no result (tied)
-                tied += 1
+            no_result += 1
+            continue
+            
+        played += 1
+        if m.winner_id == id:
+            won += 1
+        elif m.winner_id is None:
+            tied += 1
+        else:
+            lost += 1
+
+        t1_squad = db.query(MatchSquad).filter(MatchSquad.match_id == m.id, MatchSquad.team_id == m.team1_id).count() or 11
+        t2_squad = db.query(MatchSquad).filter(MatchSquad.match_id == m.id, MatchSquad.team_id == m.team2_id).count() or 11
+        own_squad_size = t1_squad if m.team1_id == id else t2_squad
+        opp_squad_size = t2_squad if m.team1_id == id else t1_squad
+
+        for innings in m.innings:
+            overs_int = int(innings.total_overs)
+            overs_balls = round((innings.total_overs - overs_int) * 10)
+            actual_fractional = overs_int + (overs_balls / 6.0)
+            
+            is_batting = innings.batting_team_id == id
+            
+            if is_batting:
+                total_runs_scored += innings.total_runs
+                highest_score = max(highest_score, innings.total_runs)
+                if innings.is_completed:
+                    lowest_score = min(lowest_score, innings.total_runs)
+                
+                # Check highest chase (won batting second)
+                if innings.innings_number == 2 and m.winner_id == id:
+                    highest_chase = max(highest_chase, innings.total_runs)
+                    
+                if innings.total_wickets >= own_squad_size - 1:
+                    total_overs_faced += float(m.over_limit)
+                else:
+                    total_overs_faced += actual_fractional
             else:
-                lost += 1
+                total_runs_conceded += innings.total_runs
+                if innings.total_wickets >= opp_squad_size - 1:
+                    total_overs_bowled += float(m.over_limit)
+                else:
+                    total_overs_bowled += actual_fractional
+
+    if lowest_score == 9999:
+        lowest_score = 0
+
+    # Win percentage
+    win_pct = round((won / played) * 100, 2) if played > 0 else 0.0
+
+    # NRR calculation
+    nrr = 0.0
+    if total_overs_faced > 0 and total_overs_bowled > 0:
+        rate_scored = total_runs_scored / total_overs_faced
+        rate_conceded = total_runs_conceded / total_overs_bowled
+        nrr = round(rate_scored - rate_conceded, 3)
+
+    # Captain and Vice Captain
+    captain = db.query(Player).filter(Player.id == team.captain_id).first()
+    captain_name = captain.name if captain else None
+    
+    vc_member = db.query(TeamMember).filter(
+        TeamMember.team_id == id,
+        TeamMember.role.ilike("vice_captain"),
+        TeamMember.status == "active"
+    ).first()
+    vice_captain_name = None
+    if vc_member and vc_member.user:
+        vice_captain_name = vc_member.user.full_name or vc_member.user.username
+
+    # Form (Last 5 completed matches result, oldest to newest)
+    form_list = []
+    completed_matches = [m for m in matches if m.status == "completed"][:5]
+    for m in completed_matches:
+        if m.winner_id == id:
+            form_list.append("W")
+        elif m.winner_id is None:
+            form_list.append("T")
+        else:
+            form_list.append("L")
+    form_list.reverse()
+
+    # Trophies
+    tournaments = db.query(Tournament).filter(
+        Tournament.winner_id == id,
+        Tournament.status == "completed"
+    ).all()
+    trophies = [t.name for t in tournaments]
 
     return TeamStatsResponse(
         team_id=id,
@@ -440,7 +532,16 @@ def get_team_stats(id: UUID, db: Session = Depends(get_db)):
         matches_won=won,
         matches_lost=lost,
         matches_tied=tied,
-        net_run_rate=0.0  # Optional NRR placeholder
+        matches_no_result=no_result,
+        win_percentage=win_pct,
+        highest_score=highest_score,
+        lowest_score=lowest_score,
+        highest_chase=highest_chase,
+        net_run_rate=nrr,
+        captain_name=captain_name,
+        vice_captain_name=vice_captain_name,
+        form=form_list,
+        trophies=trophies
     )
 
 

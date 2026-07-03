@@ -100,6 +100,8 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     return isCaptain || isCreator || isAdmin || isOrganizer;
   }
 
+  Map<String, dynamic>? _stats;
+
   Future<void> _loadDetails() async {
     setState(() => _isLoading = true);
     try {
@@ -141,6 +143,14 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
         } catch (_) {}
       }
 
+      Map<String, dynamic>? statsData;
+      try {
+        final statsRes = await _apiService.getTeamStats(widget.teamId);
+        statsData = statsRes.data;
+      } catch (e) {
+        debugPrint("Error loading team stats: $e");
+      }
+
       setState(() {
         _team = teamData;
         _teamDescription = teamData['description'] ?? '';
@@ -148,6 +158,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
         _members = allMembers;
         _matches = filteredMatches;
         _activities = activities;
+        _stats = statsData;
         _currentUserId = currentUserId;
         _currentUserGlobalRole = currentUserGlobalRole;
         if (myMemberObj != null) {
@@ -223,6 +234,22 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     final foundedYear = _team?['founded_year']?.toString() ?? 'Not Set';
     final desc = _team?['description']?.toString() ?? 'No description.';
 
+    // Statistics fields
+    final int matchesPlayed = _stats?['matches_played'] ?? 0;
+    final int won = _stats?['matches_won'] ?? 0;
+    final int lost = _stats?['matches_lost'] ?? 0;
+    final int tied = _stats?['matches_tied'] ?? 0;
+    final int noResult = _stats?['matches_no_result'] ?? 0;
+    final double winPct = _stats?['win_percentage'] ?? 0.0;
+    final double nrr = _stats?['net_run_rate'] ?? 0.0;
+    final String captain = _stats?['captain_name'] ?? 'Not Assigned';
+    final String viceCaptain = _stats?['vice_captain_name'] ?? 'Not Assigned';
+    final List<dynamic> form = _stats?['form'] ?? [];
+    final List<dynamic> trophies = _stats?['trophies'] ?? [];
+    final int highestScore = _stats?['highest_score'] ?? 0;
+    final int lowestScore = _stats?['lowest_score'] ?? 0;
+    final int highestChase = _stats?['highest_chase'] ?? 0;
+
     return RefreshIndicator(
       onRefresh: _loadDetails,
       color: AppColors.primary,
@@ -248,6 +275,41 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
             ),
           ),
           const SizedBox(height: 12),
+          
+          // 🏆 Trophies Card (if any)
+          if (trophies.isNotEmpty) ...[
+            Card(
+              color: const Color(0x1AFFF7C2), // Gold glass tone
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.emoji_events_rounded, color: Color(0xFFFFD700), size: 32),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "🏆 CHAMPIONS OF",
+                            style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w900, color: const Color(0xFFFFD700), letterSpacing: 0.5),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            trophies.join(', '),
+                            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // Team Metadata Card
           Row(
             children: [
               Expanded(
@@ -286,6 +348,142 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
               ),
             ],
           ),
+          const SizedBox(height: 12),
+
+          // Team Leadership Card
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Captain", style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary)),
+                        const SizedBox(height: 4),
+                        Text(
+                          captain,
+                          style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(width: 1, height: 36, color: Colors.white10),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Vice Captain", style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary)),
+                        const SizedBox(height: 4),
+                        Text(
+                          viceCaptain,
+                          style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 📊 Team Statistics Grid
+          Text(
+            "Team Statistics",
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          _buildGlassCard(
+            child: Column(
+              children: [
+                GridView.count(
+                  crossAxisCount: 3,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: 1.25,
+                  children: [
+                    _buildStatItemMini("Matches", "$matchesPlayed"),
+                    _buildStatItemMini("Won", "$won"),
+                    _buildStatItemMini("Lost", "$lost"),
+                    _buildStatItemMini("Win Rate", "$winPct%"),
+                    _buildStatItemMini("NRR", "${nrr >= 0 ? '+' : ''}$nrr"),
+                    _buildStatItemMini("Tied/NR", "${tied + noResult}"),
+                    _buildStatItemMini("High Score", "$highestScore"),
+                    _buildStatItemMini("Low Score", "$lowestScore"),
+                    _buildStatItemMini("Best Chase", "$highestChase"),
+                  ],
+                ),
+                
+                // Win/Loss ratio bar graph
+                if (matchesPlayed > 0) ...[
+                  const Divider(color: Colors.white10, height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("Win Ratio", style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary)),
+                      Text("$won Wins / $lost Losses", style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Row(
+                      children: [
+                        if (won > 0) Expanded(flex: won, child: Container(height: 8, color: AppColors.primary)),
+                        if (lost > 0) Expanded(flex: lost, child: Container(height: 8, color: AppColors.error)),
+                        if (tied + noResult > 0) Expanded(flex: tied + noResult, child: Container(height: 8, color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Form Guide Guide
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text("Current Form", style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
+                  if (form.isEmpty)
+                    Text("No match data", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary))
+                  else
+                    Row(
+                      children: form.map<Widget>((res) {
+                        final isWin = res == 'W';
+                        final isLoss = res == 'L';
+                        final color = isWin ? AppColors.primary : (isLoss ? AppColors.error : Colors.grey);
+                        return Container(
+                          margin: const EdgeInsets.only(left: 6),
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: color.withOpacity(0.12),
+                            border: Border.all(color: color.withOpacity(0.4)),
+                            shape: BoxShape.circle,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            res.toString(),
+                            style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w900, color: color),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                ],
+              ),
+            ),
+          ),
+
           if (_isCaptain || _isVC) ...[
             const SizedBox(height: 12),
             Card(
@@ -816,6 +1014,10 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
         ),
       ],
     );
+  }
+
+  Widget _buildStatItemMini(String label, String value) {
+    return _buildStatCard(label, value);
   }
 
   Widget _buildStatCard(String label, String value) {
