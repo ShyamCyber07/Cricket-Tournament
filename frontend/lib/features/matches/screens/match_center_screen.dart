@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:intl/intl.dart';
-import 'toss_animation.dart';
+import '../widgets/animated_coin.dart';
 import 'squad_selection_screen.dart';
 import 'officials_assignment_screen.dart';
 import 'ready_to_start_screen.dart';

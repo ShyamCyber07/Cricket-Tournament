@@ -2272,12 +2272,13 @@ class _ScoringScreenState extends State<ScoringScreen> {
                       ),
                       _buildRecentBallsHistoryList(recentBalls),
                     ],
-                  ),
+                  ],
                 ),
               ),
-              _buildScoringControlsPad(recentBalls),
-            ],
-          ),
+            ),
+            _buildScoringControlsPad(recentBalls),
+          ],
+        ),
           // Celebration Overlay
           if (_showCelebration && _celebrationText != null)
             Positioned.fill(

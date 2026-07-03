@@ -89,7 +89,7 @@ class _OfficialsAssignmentScreenState extends State<OfficialsAssignmentScreen> {
     }
     setState(() => _isSearching = true);
     try {
-      final res = await _apiService.getProfileSearch(query);
+      final res = await _apiService.searchPlayers(query);
       setState(() {
         _searchResults = res.data ?? [];
         _isSearching = false;
@@ -229,7 +229,7 @@ class _OfficialsAssignmentScreenState extends State<OfficialsAssignmentScreen> {
                         const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)))
                       else if (_searchResults.isNotEmpty)
                         Container(
-                          maxHeight: 180,
+                          constraints: const BoxConstraints(maxHeight: 180),
                           decoration: BoxDecoration(
                             color: const Color(0xFF1E222F),
                             borderRadius: BorderRadius.circular(12),
