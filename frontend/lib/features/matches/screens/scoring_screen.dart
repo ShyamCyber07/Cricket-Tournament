@@ -2343,8 +2343,9 @@ class _ScoringScreenState extends State<ScoringScreen> {
             ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildBatsmanRow(Map<String, dynamic>? player, {required bool isOnStrike}) {
     if (player == null) {
