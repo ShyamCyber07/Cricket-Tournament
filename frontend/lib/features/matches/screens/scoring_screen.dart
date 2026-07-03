@@ -2175,12 +2175,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
                                                 child: Column(
                                                   children: [
                                                     InkWell(
-                                                      onTap: _isViewerMode ? null : () => _promptNextBatsman(isStriker: true),
+                                                      onTap: _isViewerMode || (_liveState != null && _liveState!['striker'] != null) ? null : () => _promptNextBatsman(isStriker: true),
                                                       child: _buildBatsmanRow(striker, isOnStrike: true),
                                                     ),
                                                     const Divider(color: Colors.white12, height: 16),
                                                     InkWell(
-                                                      onTap: _isViewerMode ? null : () => _promptNextBatsman(isStriker: false),
+                                                      onTap: _isViewerMode || (_liveState != null && _liveState!['non_striker'] != null) ? null : () => _promptNextBatsman(isStriker: false),
                                                       child: _buildBatsmanRow(nonStriker, isOnStrike: false),
                                                     ),
                                                   ],
@@ -2194,7 +2194,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                                             child: Card(
                                               color: AppColors.surface,
                                               child: InkWell(
-                                                onTap: _isViewerMode ? null : () => _promptNextBowler(),
+                                                onTap: _isViewerMode || (_liveState != null && _liveState!['bowler'] != null) ? null : () => _promptNextBowler(),
                                                 borderRadius: BorderRadius.circular(12),
                                                 child: Padding(
                                                   padding: const EdgeInsets.all(12.0),
