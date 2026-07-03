@@ -400,6 +400,23 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
   }
 
   Future<void> _sendJoinRequest(String teamId) async {
+    final standings = _dashboardData['points_table'] as List<dynamic>? ?? [];
+    final registeredIds = standings.map((t) => t['team_id'].toString()).toSet();
+    final captainMemberships = _dashboardData['user_captained_teams'] as List<dynamic>? ?? [];
+    
+    bool userHasRegisteredTeam = captainMemberships.any((m) => registeredIds.contains(m['team']?['id']?.toString()));
+    bool userHasPendingRequest = _requests.any((r) {
+      final reqTeamId = r['team_id']?.toString();
+      final reqStatus = r['status']?.toString().toLowerCase();
+      final isCaptainedTeam = captainMemberships.any((m) => m['team']?['id']?.toString() == reqTeamId);
+      return isCaptainedTeam && reqStatus == 'pending';
+    });
+
+    if (userHasRegisteredTeam || userHasPendingRequest) {
+      _showSnackBar("A user may register ONLY ONE team in the same tournament.", AppColors.error);
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       await _apiService.sendTournamentRequest(widget.tournamentId, teamId);
@@ -2059,10 +2076,16 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                       (_currentUser!['id'].toString() == (_dashboardData['summary']?['organizer_id']?.toString()) ||
                        _currentUser!['role'] == 'admin')) ...[
                     IconButton(
-                      icon: const Icon(Icons.calendar_month_outlined, color: AppColors.accent),
-                      tooltip: "Reschedule",
-                      onPressed: () => _rescheduleMatch(match),
+                      icon: const Icon(Icons.edit_calendar_outlined, color: AppColors.accent),
+                      tooltip: "Edit Fixture",
+                      onPressed: () => _showEditFixtureSheet(match),
                     ),
+                    if (status == 'scheduled')
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+                        tooltip: "Delete Fixture",
+                        onPressed: () => _confirmDeleteMatch(match),
+                      ),
                     IconButton(
                       icon: const Icon(Icons.block_flipped, color: AppColors.error),
                       tooltip: "Abandon",
@@ -2135,11 +2158,20 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
     );
   }
 
-  Future<void> _rescheduleMatch(dynamic match) async {
+  Future<void> _showEditFixtureSheet(dynamic match) async {
+    final standings = _dashboardData['points_table'] as List<dynamic>? ?? [];
+    
     final currentMatchDate = DateTime.parse(match['match_date']).toLocal();
     DateTime selectedDate = currentMatchDate;
     TimeOfDay selectedTime = TimeOfDay.fromDateTime(currentMatchDate);
+    
+    String? selectedTeam1Id = match['team1_id']?.toString();
+    String? selectedTeam2Id = match['team2_id']?.toString();
     final TextEditingController venueController = TextEditingController(text: match['venue'] ?? 'Main Ground');
+    final TextEditingController overController = TextEditingController(text: (match['over_limit'] ?? 20).toString());
+    String selectedMatchType = match['match_type'] ?? 'T20';
+    String selectedStage = match['tournament_stage'] ?? 'league';
+    final TextEditingController bracketController = TextEditingController(text: match['bracket_code'] ?? '');
 
     showModalBottomSheet(
       context: context,
@@ -2158,106 +2190,260 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                   borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                 ),
                 padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          "Reschedule Match",
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                            color: Colors.white,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Edit Match Fixture",
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: Colors.white,
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    ListTile(
-                      leading: const Icon(Icons.calendar_today_rounded, color: AppColors.primary),
-                      title: const Text("Select Date"),
-                      subtitle: Text(DateFormat('dd MMM yyyy').format(selectedDate)),
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: selectedDate,
-                          firstDate: DateTime(2026),
-                          lastDate: DateTime(2030),
-                        );
-                        if (picked != null) {
-                          setSheetState(() => selectedDate = picked);
-                        }
-                      },
-                    ),
-                    const Divider(color: Color(0x14FFFFFF)),
-                    ListTile(
-                      leading: const Icon(Icons.access_time_rounded, color: AppColors.primary),
-                      title: const Text("Select Time"),
-                      subtitle: Text(selectedTime.format(context)),
-                      onTap: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: selectedTime,
-                        );
-                        if (picked != null) {
-                          setSheetState(() => selectedTime = picked);
-                        }
-                      },
-                    ),
-                    const Divider(color: Color(0x14FFFFFF)),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: venueController,
-                      decoration: const InputDecoration(
-                        labelText: "Venue / Ground Name",
-                        prefixIcon: Icon(Icons.location_on_outlined),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: () async {
-                        Navigator.pop(context);
-                        setState(() => _isLoading = true);
-                        try {
-                          final finalDateTime = DateTime(
-                            selectedDate.year,
-                            selectedDate.month,
-                            selectedDate.day,
-                            selectedTime.hour,
-                            selectedTime.minute,
-                          ).toUtc();
-                          
-                          await _apiService.updateMatch(match['id'].toString(), {
-                            'match_date': finalDateTime.toIso8601String(),
-                            'venue': venueController.text.trim(),
-                          });
-                          
-                          _showSnackBar("Match rescheduled successfully!", AppColors.primary);
-                          _fetchData();
-                        } catch (e) {
-                          setState(() => _isLoading = false);
-                          _showSnackBar("Failed to reschedule match: $e", AppColors.error);
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        dropdownColor: AppColors.surface,
+                        value: selectedTeam1Id,
+                        decoration: const InputDecoration(
+                          labelText: "Team 1 (Batting/Home)",
+                          prefixIcon: Icon(Icons.shield_outlined),
+                        ),
+                        items: standings.map<DropdownMenuItem<String>>((t) {
+                          return DropdownMenuItem<String>(
+                            value: t['team_id'].toString(),
+                            child: Text(t['team_name'].toString(), style: GoogleFonts.outfit(color: Colors.white)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setSheetState(() => selectedTeam1Id = val);
+                        },
                       ),
-                      child: const Text("Save Changes"),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        dropdownColor: AppColors.surface,
+                        value: selectedTeam2Id,
+                        decoration: const InputDecoration(
+                          labelText: "Team 2 (Bowling/Away)",
+                          prefixIcon: Icon(Icons.shield_outlined),
+                        ),
+                        items: standings.map<DropdownMenuItem<String>>((t) {
+                          return DropdownMenuItem<String>(
+                            value: t['team_id'].toString(),
+                            child: Text(t['team_name'].toString(), style: GoogleFonts.outfit(color: Colors.white)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setSheetState(() => selectedTeam2Id = val);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ListTile(
+                        leading: const Icon(Icons.calendar_today_rounded, color: AppColors.primary),
+                        title: const Text("Select Date"),
+                        subtitle: Text(DateFormat('dd MMM yyyy').format(selectedDate)),
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate,
+                            firstDate: DateTime(2026),
+                            lastDate: DateTime(2030),
+                          );
+                          if (picked != null) {
+                            setSheetState(() => selectedDate = picked);
+                          }
+                        },
+                      ),
+                      const Divider(color: Color(0x14FFFFFF)),
+                      ListTile(
+                        leading: const Icon(Icons.access_time_rounded, color: AppColors.primary),
+                        title: const Text("Select Time"),
+                        subtitle: Text(selectedTime.format(context)),
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: selectedTime,
+                          );
+                          if (picked != null) {
+                            setSheetState(() => selectedTime = picked);
+                          }
+                        },
+                      ),
+                      const Divider(color: Color(0x14FFFFFF)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: venueController,
+                        decoration: const InputDecoration(
+                          labelText: "Venue / Ground Name",
+                          prefixIcon: Icon(Icons.location_on_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: overController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: "Overs Limit",
+                          prefixIcon: Icon(Icons.numbers_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        dropdownColor: AppColors.surface,
+                        value: selectedMatchType,
+                        decoration: const InputDecoration(
+                          labelText: "Match Format",
+                          prefixIcon: Icon(Icons.sports_cricket_outlined),
+                        ),
+                        items: ['T20', 'ODI', 'Test', '100-Ball', 'Custom']
+                            .map<DropdownMenuItem<String>>((val) {
+                          return DropdownMenuItem<String>(
+                            value: val,
+                            child: Text(val, style: GoogleFonts.outfit(color: Colors.white)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setSheetState(() => selectedMatchType = val ?? 'T20');
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        dropdownColor: AppColors.surface,
+                        value: selectedStage,
+                        decoration: const InputDecoration(
+                          labelText: "Tournament Stage",
+                          prefixIcon: Icon(Icons.emoji_events_outlined),
+                        ),
+                        items: [
+                          {'label': 'League', 'value': 'league'},
+                          {'label': 'Pre-Quarter', 'value': 'pre_quarter'},
+                          {'label': 'Quarter-Final', 'value': 'quarter_final'},
+                          {'label': 'Semi-Final', 'value': 'semi_final'},
+                          {'label': 'Final', 'value': 'final'},
+                        ].map<DropdownMenuItem<String>>((item) {
+                          return DropdownMenuItem<String>(
+                            value: item['value'],
+                            child: Text(item['label']!, style: GoogleFonts.outfit(color: Colors.white)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setSheetState(() => selectedStage = val ?? 'league');
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: bracketController,
+                        decoration: const InputDecoration(
+                          labelText: "Bracket Code (optional, e.g. QF1, SF2)",
+                          prefixIcon: Icon(Icons.code_rounded),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: () async {
+                          if (selectedTeam1Id == null || selectedTeam2Id == null) {
+                            _showSnackBar("Please select both Team 1 and Team 2.", AppColors.error);
+                            return;
+                          }
+                          if (selectedTeam1Id == selectedTeam2Id) {
+                            _showSnackBar("Team 1 and Team 2 cannot be the same team.", AppColors.error);
+                            return;
+                          }
+                          
+                          Navigator.pop(context);
+                          setState(() => _isLoading = true);
+                          try {
+                            final finalDateTime = DateTime(
+                              selectedDate.year,
+                              selectedDate.month,
+                              selectedDate.day,
+                              selectedTime.hour,
+                              selectedTime.minute,
+                            ).toUtc();
+                            
+                            await _apiService.updateMatch(match['id'].toString(), {
+                              'team1_id': selectedTeam1Id,
+                              'team2_id': selectedTeam2Id,
+                              'match_date': finalDateTime.toIso8601String(),
+                              'venue': venueController.text.trim(),
+                              'over_limit': int.tryParse(overController.text.trim()) ?? 20,
+                              'match_type': selectedMatchType,
+                              'tournament_stage': selectedStage,
+                              'bracket_code': bracketController.text.trim().isEmpty ? null : bracketController.text.trim(),
+                            });
+                            
+                            _showSnackBar("Match fixture updated successfully!", AppColors.primary);
+                            _fetchData();
+                          } catch (e) {
+                            setState(() => _isLoading = false);
+                            _showSnackBar("Failed to update fixture: $e", AppColors.error);
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: const Text("Save Changes"),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  void _confirmDeleteMatch(dynamic match) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text(
+            "Delete Fixture",
+            style: GoogleFonts.outfit(color: AppColors.error, fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            "Are you sure you want to permanently delete this match fixture?",
+            style: GoogleFonts.outfit(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                setState(() => _isLoading = true);
+                try {
+                  await _apiService.deleteMatch(match['id'].toString());
+                  _showSnackBar("Fixture deleted successfully", AppColors.primary);
+                  _fetchData();
+                } catch (e) {
+                  setState(() => _isLoading = false);
+                  _showSnackBar("Failed to delete fixture: $e", AppColors.error);
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              child: Text("Delete", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
         );
       },
     );
@@ -2351,6 +2537,20 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
             ),
           ),
           if (isOrganizer) ...[
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: _showGenerateFixturesDialog,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.accent,
+              ),
+              child: Text(
+                "Regenerate",
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
             const SizedBox(width: 8),
             ElevatedButton(
               onPressed: _publishFixtures,

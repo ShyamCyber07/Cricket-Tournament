@@ -178,7 +178,10 @@ class Match(Base):
     current_bowler_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="SET NULL"), nullable=True)
     
     umpire_name = Column(String, nullable=True)
+    umpire2_name = Column(String, nullable=True)
     scorer_name = Column(String, nullable=True)
+    team1_squad_locked = Column(Boolean, default=False, nullable=False)
+    team2_squad_locked = Column(Boolean, default=False, nullable=False)
     
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 

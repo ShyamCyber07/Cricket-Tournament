@@ -530,6 +530,44 @@ def publish_fixtures(
         raise HTTPException(status_code=400, detail=f"Tournament is not in draft state. Current status: {tour.status}")
         
     tour.status = "ongoing"
+    
+    # Notify captains
+    import json
+    from app.models.cricket import Notification
+    matches = db.query(Match).filter(Match.tournament_id == id).all()
+    for m in matches:
+        # Team 1 Captains
+        t1_caps = db.query(TeamMember).filter(
+            TeamMember.team_id == m.team1_id,
+            TeamMember.role == "captain",
+            TeamMember.status == "active"
+        ).all()
+        for cap in t1_caps:
+            notif = Notification(
+                user_id=cap.user_id,
+                title="Match Scheduled",
+                message="Your match is scheduled. Please complete Playing XI Lock before match day.",
+                type="playing_xi_required",
+                extra_data=json.dumps({"match_id": str(m.id), "tournament_id": str(id)})
+            )
+            db.add(notif)
+            
+        # Team 2 Captains
+        t2_caps = db.query(TeamMember).filter(
+            TeamMember.team_id == m.team2_id,
+            TeamMember.role == "captain",
+            TeamMember.status == "active"
+        ).all()
+        for cap in t2_caps:
+            notif = Notification(
+                user_id=cap.user_id,
+                title="Match Scheduled",
+                message="Your match is scheduled. Please complete Playing XI Lock before match day.",
+                type="playing_xi_required",
+                extra_data=json.dumps({"match_id": str(m.id), "tournament_id": str(id)})
+            )
+            db.add(notif)
+
     db.commit()
     return {"message": "Fixtures published successfully"}
 

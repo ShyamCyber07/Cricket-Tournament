@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
-import 'scoring_screen.dart';
-import 'playing_xi_lock_screen.dart';
 
 class SquadSelectionScreen extends StatefulWidget {
   final String matchId;
@@ -11,6 +9,7 @@ class SquadSelectionScreen extends StatefulWidget {
   final String team2Id;
   final String team1Name;
   final String team2Name;
+  final String? targetTeamId; // If set, only configure this team
 
   const SquadSelectionScreen({
     super.key,
@@ -19,6 +18,7 @@ class SquadSelectionScreen extends StatefulWidget {
     required this.team2Id,
     required this.team1Name,
     required this.team2Name,
+    this.targetTeamId,
   });
 
   @override
@@ -28,11 +28,13 @@ class SquadSelectionScreen extends StatefulWidget {
 class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
+  bool _isReadOnly = false;
+  String _currentUserId = '';
+  String _currentUserRole = '';
 
   List<dynamic> _team1Players = [];
   List<dynamic> _team2Players = [];
 
-  // Selections: Map player_id to boolean
   final Set<String> _selectedTeam1 = {};
   final Set<String> _selectedTeam2 = {};
 
@@ -49,35 +51,78 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
 
   Future<void> _loadTeamPlayers() async {
     try {
+      final profileRes = await _apiService.getProfile();
+      _currentUserId = profileRes.data['id'].toString();
+      _currentUserRole = profileRes.data['role'].toString();
+
       final t1Res = await _apiService.getTeam(widget.team1Id);
       final t2Res = await _apiService.getTeam(widget.team2Id);
 
-      setState(() {
-        _team1Players = t1Res.data['players'] ?? [];
-        _team2Players = t2Res.data['players'] ?? [];
+      _team1Players = t1Res.data['players'] ?? [];
+      _team2Players = t2Res.data['players'] ?? [];
 
-        // Auto-select all by default for ease of MVP testing
-        for (var p in _team1Players) {
-          _selectedTeam1.add(p['id'].toString());
+      final targetTeamId = widget.targetTeamId;
+      if (targetTeamId != null) {
+        final targetTeamRes = targetTeamId == widget.team1Id ? t1Res : t2Res;
+        final members = targetTeamRes.data['members'] as List<dynamic>? ?? [];
+        
+        bool isCaptain = false;
+        for (var m in members) {
+          if (m['user_id']?.toString() == _currentUserId &&
+              m['role']?.toString().toLowerCase() == 'captain') {
+            isCaptain = true;
+            break;
+          }
         }
-        for (var p in _team2Players) {
-          final pId = p['id'].toString();
-          if (!_selectedTeam1.contains(pId)) {
-            _selectedTeam2.add(pId);
+        
+        final matchRes = await _apiService.getLiveMatch(widget.matchId);
+        final matchCreatorId = matchRes.data['created_by']?.toString();
+        
+        if (!isCaptain && _currentUserRole != 'admin' && _currentUserId != matchCreatorId) {
+          _isReadOnly = true;
+        }
+      }
+
+      final matchSquadsRes = await _apiService.getMatchSquads(widget.matchId);
+      final t1Squad = matchSquadsRes.data['team1_squad'] as List<dynamic>? ?? [];
+      final t2Squad = matchSquadsRes.data['team2_squad'] as List<dynamic>? ?? [];
+
+      setState(() {
+        if (t1Squad.isNotEmpty) {
+          _selectedTeam1.clear();
+          for (var p in t1Squad) {
+            final pId = p['id'].toString();
+            _selectedTeam1.add(pId);
+            if (p['is_captain'] == true) _team1CaptainId = pId;
+            if (p['is_wicketkeeper'] == true) _team1KeeperId = pId;
+          }
+        } else {
+          for (var p in _team1Players) {
+            _selectedTeam1.add(p['id'].toString());
+          }
+          if (_team1Players.isNotEmpty) {
+            _team1CaptainId = _team1Players[0]['id']?.toString();
+            _team1KeeperId = _team1Players[0]['id']?.toString();
           }
         }
 
-        if (_team1Players.isNotEmpty) {
-          _team1CaptainId = _team1Players[0]['id'];
-          _team1KeeperId = _team1Players[0]['id'];
-        }
-        
-        final availableTeam2Players = _team2Players
-            .where((p) => !_selectedTeam1.contains(p['id'].toString()))
-            .toList();
-        if (availableTeam2Players.isNotEmpty) {
-          _team2CaptainId = availableTeam2Players[0]['id'];
-          _team2KeeperId = availableTeam2Players[0]['id'];
+        if (t2Squad.isNotEmpty) {
+          _selectedTeam2.clear();
+          for (var p in t2Squad) {
+            final pId = p['id'].toString();
+            _selectedTeam2.add(pId);
+            if (p['is_captain'] == true) _team2CaptainId = pId;
+            if (p['is_wicketkeeper'] == true) _team2KeeperId = pId;
+          }
+        } else {
+          for (var p in _team2Players) {
+            _selectedTeam2.add(p['id'].toString());
+          }
+          final availableTeam2 = _team2Players.where((p) => !_selectedTeam1.contains(p['id'].toString())).toList();
+          if (availableTeam2.isNotEmpty) {
+            _team2CaptainId = availableTeam2[0]['id']?.toString();
+            _team2KeeperId = availableTeam2[0]['id']?.toString();
+          }
         }
 
         _isLoading = false;
@@ -89,194 +134,88 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
   }
 
   Future<void> _submitSquads() async {
-    if (_selectedTeam1.isEmpty || _selectedTeam2.isEmpty) {
-      _showSnackBar("Please select at least 1 player for each team squad", AppColors.error);
-      return;
-    }
-    if (_team1CaptainId == null || _team2CaptainId == null) {
-      _showSnackBar("Please select a captain for both teams", AppColors.error);
-      return;
-    }
+    final isSingleTeam = widget.targetTeamId != null;
+    final isTeam1 = (widget.targetTeamId ?? widget.team1Id) == widget.team1Id;
+    final selectionSet = isTeam1 ? _selectedTeam1 : _selectedTeam2;
+    final captainId = isTeam1 ? _team1CaptainId : _team2CaptainId;
+    final keeperId = isTeam1 ? _team1KeeperId : _team2KeeperId;
+    final teamId = isTeam1 ? widget.team1Id : widget.team2Id;
 
-    setState(() => _isLoading = true);
-
-    try {
-      // 1. Submit Squad 1
-      final squad1List = _selectedTeam1.map((pId) {
-        return {
-          "player_id": pId,
-          "is_captain": pId == _team1CaptainId,
-          "is_wicketkeeper": pId == _team1KeeperId,
-        };
-      }).toList();
-
-      await _apiService.submitSquad(widget.matchId, widget.team1Id, squad1List);
-
-      // 2. Submit Squad 2
-      final squad2List = _selectedTeam2.map((pId) {
-        return {
-          "player_id": pId,
-          "is_captain": pId == _team2CaptainId,
-          "is_wicketkeeper": pId == _team2KeeperId,
-        };
-      }).toList();
-
-      await _apiService.submitSquad(widget.matchId, widget.team2Id, squad2List);
-
-      final activeSquad1 = _team1Players.where((p) => _selectedTeam1.contains(p['id'].toString())).toList();
-      final activeSquad2 = _team2Players.where((p) => _selectedTeam2.contains(p['id'].toString())).toList();
-
-      setState(() => _isLoading = false);
-
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PlayingXILockScreen(
-              matchId: widget.matchId,
-              team1Id: widget.team1Id,
-              team2Id: widget.team2Id,
-              team1Name: widget.team1Name,
-              team2Name: widget.team2Name,
-              squad1: activeSquad1,
-              squad2: activeSquad2,
-            ),
-          ),
-        );
+    if (isSingleTeam) {
+      if (selectionSet.isEmpty) {
+        _showSnackBar("Please select at least 1 player for the squad", AppColors.error);
+        return;
       }
-    } catch (e) {
-      setState(() => _isLoading = false);
-      _showSnackBar("Error submitting squads: $e", AppColors.error);
+      if (captainId == null) {
+        _showSnackBar("Please select a captain", AppColors.error);
+        return;
+      }
+
+      setState(() => _isLoading = true);
+
+      try {
+        final squadList = selectionSet.map((pId) {
+          return {
+            "player_id": pId,
+            "is_captain": pId == captainId,
+            "is_wicketkeeper": pId == keeperId,
+          };
+        }).toList();
+
+        await _apiService.submitSquad(widget.matchId, teamId, squadList);
+        await _apiService.lockMatchSquad(widget.matchId, teamId);
+
+        _showSnackBar("Playing XI strategy submitted and locked!", AppColors.primary);
+        setState(() => _isLoading = false);
+        if (mounted) {
+          Navigator.pop(context);
+        }
+      } catch (e) {
+        setState(() => _isLoading = false);
+        _showSnackBar("Error saving squad: $e", AppColors.error);
+      }
+    } else {
+      // Configure both (legacy/quick match path)
+      if (_selectedTeam1.isEmpty || _selectedTeam2.isEmpty) {
+        _showSnackBar("Please select at least 1 player for each team squad", AppColors.error);
+        return;
+      }
+      if (_team1CaptainId == null || _team2CaptainId == null) {
+        _showSnackBar("Please select a captain for both teams", AppColors.error);
+        return;
+      }
+
+      setState(() => _isLoading = true);
+
+      try {
+        final squad1List = _selectedTeam1.map((pId) {
+          return {
+            "player_id": pId,
+            "is_captain": pId == _team1CaptainId,
+            "is_wicketkeeper": pId == _team1KeeperId,
+          };
+        }).toList();
+        await _apiService.submitSquad(widget.matchId, widget.team1Id, squad1List);
+
+        final squad2List = _selectedTeam2.map((pId) {
+          return {
+            "player_id": pId,
+            "is_captain": pId == _team2CaptainId,
+            "is_wicketkeeper": pId == _team2KeeperId,
+          };
+        }).toList();
+        await _apiService.submitSquad(widget.matchId, widget.team2Id, squad2List);
+
+        _showSnackBar("Squads submitted successfully!", AppColors.primary);
+        setState(() => _isLoading = false);
+        if (mounted) {
+          Navigator.pop(context);
+        }
+      } catch (e) {
+        setState(() => _isLoading = false);
+        _showSnackBar("Error saving squads: $e", AppColors.error);
+      }
     }
-  }
-
-  void _promptMatchStarters({
-    required String battingTeamName,
-    required List<dynamic> battingPlayers,
-    required List<dynamic> bowlingPlayers,
-  }) {
-    if (battingPlayers.length < 2 || bowlingPlayers.isEmpty) {
-      _showSnackBar(
-          "Ensure batting team has >= 2 players & bowling team has >= 1 player selected",
-          AppColors.error);
-      return;
-    }
-
-    final screenContext = context;
-    String strikerId = battingPlayers[0]['id'];
-    String nonStrikerId = battingPlayers[1]['id'];
-    String bowlerId = bowlingPlayers[0]['id'];
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (statefulContext, setDialogState) {
-            return AlertDialog(
-              scrollable: true,
-              backgroundColor: AppColors.surface,
-              title: Text(
-                "Select Openers",
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("Batting Team: $battingTeamName",
-                        style: GoogleFonts.outfit(color: AppColors.accent, fontSize: 13)),
-                    const SizedBox(height: 12),
-                    Text("Striker Batsman:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-                    DropdownButton<String>(
-                      value: strikerId,
-                      dropdownColor: AppColors.surface,
-                      isExpanded: true,
-                      items: battingPlayers.map<DropdownMenuItem<String>>((p) {
-                        return DropdownMenuItem<String>(
-                          value: p['id'].toString(),
-                          child: Text(p['name']),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setDialogState(() {
-                            strikerId = val;
-                            if (strikerId == nonStrikerId) {
-                              nonStrikerId = battingPlayers
-                                  .firstWhere((p) => p['id'].toString() != strikerId)['id']
-                                  .toString();
-                            }
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Text("Non-Striker Batsman:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-                    DropdownButton<String>(
-                      value: nonStrikerId,
-                      dropdownColor: AppColors.surface,
-                      isExpanded: true,
-                      items: battingPlayers
-                          .where((p) => p['id'].toString() != strikerId)
-                          .map<DropdownMenuItem<String>>((p) {
-                        return DropdownMenuItem<String>(
-                          value: p['id'].toString(),
-                          child: Text(p['name']),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setDialogState(() => nonStrikerId = val);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Text("Opening Bowler:", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-                    DropdownButton<String>(
-                      value: bowlerId,
-                      dropdownColor: AppColors.surface,
-                      isExpanded: true,
-                      items: bowlingPlayers.map<DropdownMenuItem<String>>((p) {
-                        return DropdownMenuItem<String>(
-                          value: p['id'].toString(),
-                          child: Text(p['name']),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setDialogState(() => bowlerId = val);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(statefulContext); // Close dialog
-                    Navigator.pushReplacement(
-                      screenContext,
-                      MaterialPageRoute(
-                        builder: (context) => ScoringScreen(
-                          matchId: widget.matchId,
-                          strikerId: strikerId,
-                          nonStrikerId: nonStrikerId,
-                          bowlerId: bowlerId,
-                        ),
-                      ),
-                    );
-                  },
-                  child: const Text("Start Scoring"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
   }
 
   void _showSnackBar(String msg, Color color) {
@@ -299,7 +238,7 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
         child: Padding(
           padding: const EdgeInsets.all(20.0),
           child: Text(
-            "No members in squad. Please invite squad members under Squad Management first.",
+            "No members in squad. Add members under Squad Management first.",
             style: GoogleFonts.outfit(color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
@@ -313,7 +252,7 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
       itemCount: players.length,
       itemBuilder: (context, index) {
         final player = players[index];
-        final pId = player['id'].toString();
+        final pId = player['id']?.toString() ?? '';
         final isSelected = selectionSet.contains(pId);
 
         return Card(
@@ -325,39 +264,37 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
                 Checkbox(
                   value: isSelected,
                   activeColor: AppColors.primary,
-                  onChanged: (val) => onSelectToggle(pId),
+                  onChanged: _isReadOnly ? null : (val) => onSelectToggle(pId),
                 ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        player['name'],
+                        player['name'] ?? 'Unknown',
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           color: isSelected ? Colors.white : AppColors.textSecondary,
                         ),
                       ),
                       Text(
-                        player['role'].toString().toUpperCase(),
+                        (player['role'] ?? 'player').toString().toUpperCase(),
                         style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary),
                       ),
                     ],
                   ),
                 ),
                 if (isSelected) ...[
-                  // Captain chip/toggle
                   GestureDetector(
-                    onTap: () => onCaptainSelect(pId == captainId ? null : pId),
+                    onTap: _isReadOnly ? null : () => onCaptainSelect(pId == captainId ? null : pId),
                     child: Chip(
                       label: Text("C", style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold)),
                       backgroundColor: pId == captainId ? AppColors.accent : Colors.white12,
                     ),
                   ),
                   const SizedBox(width: 6),
-                  // Keeper chip/toggle
                   GestureDetector(
-                    onTap: () => onKeeperSelect(pId == keeperId ? null : pId),
+                    onTap: _isReadOnly ? null : () => onKeeperSelect(pId == keeperId ? null : pId),
                     child: Chip(
                       label: Text("WK", style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold)),
                       backgroundColor: pId == keeperId ? AppColors.secondary : Colors.white12,
@@ -374,23 +311,12 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // DEBUG: Log filtering details for Team 2
-    if (!_isLoading && _team2Players.isNotEmpty) {
-      final team2Filtered = _team2Players.where((p) => !_selectedTeam1.contains(p['id'].toString())).toList();
-      debugPrint('=== SQUAD SELECTION UI DEBUG ===');
-      debugPrint('Team 2 selector - All players: ${_team2Players.length}');
-      debugPrint('Team 2 selector - Selected Team 1 IDs: $_selectedTeam1');
-      debugPrint('Team 2 selector - Filtered (excluded): ${_team2Players.length - team2Filtered.length}');
-      debugPrint('Team 2 selector - Rendered: ${team2Filtered.length}');
-      for (var p in team2Filtered) {
-        debugPrint('  RENDERED: ${p['name']} (${p['id']})');
-      }
-      debugPrint('=== END ===');
-    }
+    final showTeam1 = widget.targetTeamId == null || widget.targetTeamId == widget.team1Id;
+    final showTeam2 = widget.targetTeamId == null || widget.targetTeamId == widget.team2Id;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Squad Selection"),
+        title: Text(widget.targetTeamId != null ? "Playing XI Config" : "Squad Selection"),
       ),
       body: SafeArea(
         child: _isLoading
@@ -400,92 +326,126 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (_isReadOnly)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.error.withOpacity(0.5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline, color: AppColors.error),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "View Only: Only the team Captain can edit and lock strategy.",
+                              style: GoogleFonts.outfit(color: AppColors.error, fontSize: 13, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   Text(
-                    "Register Match Squads",
+                    widget.targetTeamId != null ? "Configure Playing XI Strategy" : "Register Match Squads",
                     style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    "Select which players are playing in this match, designating captain (C) and wicketkeeper (WK).",
+                    widget.targetTeamId != null
+                        ? "Select Playing XI, Captain (C), and Wicketkeeper (WK) for this match."
+                        : "Select players, captain (C), and wicketkeeper (WK) for both teams.",
                     style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13),
                   ),
                   const SizedBox(height: 24),
 
-                  // Team 1 Section
-                  Row(
-                    children: [
-                      const Icon(Icons.shield, color: AppColors.primary, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        widget.team1Name,
-                        style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const Divider(color: Colors.white24, height: 20),
-                  _buildRosterList(
-                    _team1Players.where((p) => !_selectedTeam2.contains(p['id'].toString())).toList(),
-                    _selectedTeam1,
-                    _team1CaptainId,
-                    _team1KeeperId,
-                    (pId) {
-                      setState(() {
-                        if (_selectedTeam1.contains(pId)) {
-                          _selectedTeam1.remove(pId);
-                        } else {
-                          _selectedTeam1.add(pId);
-                          // Sync: deselect from Team 2 if they are selected here
-                          _selectedTeam2.remove(pId);
-                          if (_team2CaptainId == pId) _team2CaptainId = null;
-                          if (_team2KeeperId == pId) _team2KeeperId = null;
-                        }
-                      });
-                    },
-                    (cId) => setState(() => _team1CaptainId = cId),
-                    (kId) => setState(() => _team1KeeperId = kId),
-                  ),
+                  if (showTeam1) ...[
+                    Row(
+                      children: [
+                        const Icon(Icons.shield, color: AppColors.primary, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          widget.team1Name,
+                          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const Divider(color: Colors.white24, height: 20),
+                    _buildRosterList(
+                      _team1Players.where((p) => !_selectedTeam2.contains(p['id'].toString())).toList(),
+                      _selectedTeam1,
+                      _team1CaptainId,
+                      _team1KeeperId,
+                      (pId) {
+                        setState(() {
+                          if (_selectedTeam1.contains(pId)) {
+                            _selectedTeam1.remove(pId);
+                          } else {
+                            _selectedTeam1.add(pId);
+                            _selectedTeam2.remove(pId);
+                            if (_team2CaptainId == pId) _team2CaptainId = null;
+                            if (_team2KeeperId == pId) _team2KeeperId = null;
+                          }
+                        });
+                      },
+                      (cId) => setState(() => _team1CaptainId = cId),
+                      (kId) => setState(() => _team1KeeperId = kId),
+                    ),
+                  ],
 
-                  const SizedBox(height: 24),
+                  if (widget.targetTeamId == null) const SizedBox(height: 24),
 
-                  // Team 2 Section
-                  Row(
-                    children: [
-                      const Icon(Icons.shield, color: AppColors.secondary, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        widget.team2Name,
-                        style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const Divider(color: Colors.white24, height: 20),
-                  _buildRosterList(
-                    _team2Players.where((p) => !_selectedTeam1.contains(p['id'].toString())).toList(),
-                    _selectedTeam2,
-                    _team2CaptainId,
-                    _team2KeeperId,
-                    (pId) {
-                      setState(() {
-                        if (_selectedTeam2.contains(pId)) {
-                          _selectedTeam2.remove(pId);
-                        } else {
-                          _selectedTeam2.add(pId);
-                          // Sync: deselect from Team 1 if they are selected here
-                          _selectedTeam1.remove(pId);
-                          if (_team1CaptainId == pId) _team1CaptainId = null;
-                          if (_team1KeeperId == pId) _team1KeeperId = null;
-                        }
-                      });
-                    },
-                    (cId) => setState(() => _team2CaptainId = cId),
-                    (kId) => setState(() => _team2KeeperId = kId),
-                  ),
+                  if (showTeam2) ...[
+                    Row(
+                      children: [
+                        const Icon(Icons.shield, color: AppColors.secondary, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          widget.team2Name,
+                          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const Divider(color: Colors.white24, height: 20),
+                    _buildRosterList(
+                      _team2Players.where((p) => !_selectedTeam1.contains(p['id'].toString())).toList(),
+                      _selectedTeam2,
+                      _team2CaptainId,
+                      _team2KeeperId,
+                      (pId) {
+                        setState(() {
+                          if (_selectedTeam2.contains(pId)) {
+                            _selectedTeam2.remove(pId);
+                          } else {
+                            _selectedTeam2.add(pId);
+                            _selectedTeam1.remove(pId);
+                            if (_team1CaptainId == pId) _team1CaptainId = null;
+                            if (_team1KeeperId == pId) _team1KeeperId = null;
+                          }
+                        });
+                      },
+                      (cId) => setState(() => _team2CaptainId = cId),
+                      (kId) => setState(() => _team2KeeperId = kId),
+                    ),
+                  ],
 
                   const SizedBox(height: 32),
-                  ElevatedButton(
-                    onPressed: _submitSquads,
-                    child: const Text("Submit Squads & Proceed"),
-                  ),
+                  if (!_isReadOnly)
+                    ElevatedButton(
+                      onPressed: _submitSquads,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: Text(
+                        widget.targetTeamId != null ? "Submit & Lock Playing XI" : "Submit Squads & Proceed",
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  const SizedBox(height: 120),
                 ],
               ),
             ),

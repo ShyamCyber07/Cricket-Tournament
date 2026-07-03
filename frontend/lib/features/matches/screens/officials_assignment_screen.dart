@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'ready_to_start_screen.dart';
 
 class OfficialsAssignmentScreen extends StatefulWidget {
   final String matchId;
@@ -11,8 +9,6 @@ class OfficialsAssignmentScreen extends StatefulWidget {
   final String team2Id;
   final String team1Name;
   final String team2Name;
-  final List<dynamic> squad1;
-  final List<dynamic> squad2;
 
   const OfficialsAssignmentScreen({
     super.key,
@@ -21,8 +17,6 @@ class OfficialsAssignmentScreen extends StatefulWidget {
     required this.team2Id,
     required this.team1Name,
     required this.team2Name,
-    required this.squad1,
-    required this.squad2,
   });
 
   @override
@@ -31,9 +25,21 @@ class OfficialsAssignmentScreen extends StatefulWidget {
 
 class _OfficialsAssignmentScreenState extends State<OfficialsAssignmentScreen> {
   final ApiService _apiService = ApiService();
-  final _umpireController = TextEditingController(text: "Not Assigned");
-  bool _isLoading = false;
-  String _currentScorerName = "Current Scorer";
+  final _umpire1Controller = TextEditingController();
+  final _umpire2Controller = TextEditingController();
+  final _scorerSearchController = TextEditingController();
+  
+  bool _isLoading = true;
+  bool _isReadOnly = false;
+  
+  String _currentUserId = '';
+  String _currentUserRole = '';
+  
+  String? _selectedScorerId;
+  String _selectedScorerName = 'Not Assigned';
+  
+  List<dynamic> _searchResults = [];
+  bool _isSearching = false;
 
   @override
   void initState() {
@@ -43,81 +49,91 @@ class _OfficialsAssignmentScreenState extends State<OfficialsAssignmentScreen> {
 
   @override
   void dispose() {
-    _umpireController.dispose();
+    _umpire1Controller.dispose();
+    _umpire2Controller.dispose();
+    _scorerSearchController.dispose();
     super.dispose();
   }
 
   Future<void> _loadInitialData() async {
     setState(() => _isLoading = true);
     try {
-      final userRes = await _apiService.getMe();
-      final username = userRes.data['full_name'] ?? userRes.data['username'] ?? 'Scorer';
+      final userRes = await _apiService.getProfile();
+      _currentUserId = userRes.data['id']?.toString() ?? '';
+      _currentUserRole = userRes.data['role']?.toString() ?? '';
       
-      String umpire = 'Not Assigned';
-      try {
-        final matchRes = await _apiService.getLiveMatch(widget.matchId);
-        umpire = matchRes.data['umpire_name'] ?? 'Not Assigned';
-        if (umpire == 'Not Assigned') {
-          final prefs = await SharedPreferences.getInstance();
-          umpire = prefs.getString('umpire_${widget.matchId}') ?? 'Not Assigned';
-        }
-      } catch (_) {
-        final prefs = await SharedPreferences.getInstance();
-        umpire = prefs.getString('umpire_${widget.matchId}') ?? 'Not Assigned';
+      final matchRes = await _apiService.getLiveMatch(widget.matchId);
+      final matchCreatorId = matchRes.data['created_by']?.toString();
+      final organizerId = matchRes.data['tournament_organizer_id']?.toString();
+
+      if (_currentUserId != matchCreatorId && _currentUserId != organizerId && _currentUserRole != 'admin') {
+        _isReadOnly = true;
       }
 
-      setState(() {
-        _currentScorerName = username;
-        _umpireController.text = umpire;
-        _isLoading = false;
-      });
+      _umpire1Controller.text = matchRes.data['umpire_name'] ?? '';
+      _umpire2Controller.text = matchRes.data['umpire2_name'] ?? '';
+      
+      _selectedScorerId = matchRes.data['assigned_scorer_id']?.toString();
+      _selectedScorerName = matchRes.data['scorer_name'] ?? 'Not Assigned';
+      
+      setState(() => _isLoading = false);
     } catch (_) {
       setState(() => _isLoading = false);
     }
   }
 
+  Future<void> _searchScorers(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() => _searchResults = []);
+      return;
+    }
+    setState(() => _isSearching = true);
+    try {
+      final res = await _apiService.getProfileSearch(query);
+      setState(() {
+        _searchResults = res.data ?? [];
+        _isSearching = false;
+      });
+    } catch (e) {
+      setState(() => _isSearching = false);
+      _showSnackBar("Search failed: $e", AppColors.error);
+    }
+  }
+
   Future<void> _assignOfficials() async {
+    if (_umpire1Controller.text.trim().isEmpty) {
+      _showSnackBar("Umpire 1 name is required", AppColors.error);
+      return;
+    }
+    if (_selectedScorerId == null) {
+      _showSnackBar("Please search and select a match Scorer", AppColors.error);
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('umpire_${widget.matchId}', _umpireController.text.trim());
-
-      // Optionally, we update the assigned scorer and officials on the backend using updateMatch.
-      final userRes = await _apiService.getMe();
-      final currentUserId = userRes.data['id']?.toString();
-      if (currentUserId != null) {
-        await _apiService.updateMatch(widget.matchId, {
-          'assigned_scorer_id': currentUserId,
-          'umpire_name': _umpireController.text.trim(),
-          'scorer_name': _currentScorerName,
-        });
-      }
+      await _apiService.updateMatch(widget.matchId, {
+        'assigned_scorer_id': _selectedScorerId,
+        'umpire_name': _umpire1Controller.text.trim(),
+        'umpire2_name': _umpire2Controller.text.trim().isEmpty ? null : _umpire2Controller.text.trim(),
+        'scorer_name': _selectedScorerName,
+      });
 
       setState(() => _isLoading = false);
+      _showSnackBar("Officials assigned successfully!", AppColors.primary);
       if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ReadyToStartScreen(
-              matchId: widget.matchId,
-              team1Id: widget.team1Id,
-              team2Id: widget.team2Id,
-              team1Name: widget.team1Name,
-              team2Name: widget.team2Name,
-              squad1: widget.squad1,
-              squad2: widget.squad2,
-              umpireName: _umpireController.text.trim(),
-              scorerName: _currentScorerName,
-            ),
-          ),
-        );
+        Navigator.pop(context);
       }
     } catch (e) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to save: $e"), backgroundColor: AppColors.error),
-      );
+      _showSnackBar("Failed to save: $e", AppColors.error);
     }
+  }
+
+  void _showSnackBar(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating),
+    );
   }
 
   @override
@@ -129,23 +145,47 @@ class _OfficialsAssignmentScreenState extends State<OfficialsAssignmentScreen> {
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-            : Padding(
+            : SingleChildScrollView(
                 padding: const EdgeInsets.all(24.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (_isReadOnly)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.error.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.error.withOpacity(0.5)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline, color: AppColors.error),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "View Only: Only the Tournament Organizer can assign officials.",
+                                style: GoogleFonts.outfit(color: AppColors.error, fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     Text(
                       "Assign Match Officials",
                       style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      "Assign the umpire and verify the scorer for this match.",
+                      "Assign the match umpires and search/select the match scorer.",
                       style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 24),
 
-                    // Scorer (Static Read-only representing logged-in user)
+                    // Scorer Section
+                    Text("Match Scorer", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white)),
+                    const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: AppColors.glassDecoration(borderRadius: BorderRadius.circular(16)),
@@ -153,68 +193,112 @@ class _OfficialsAssignmentScreenState extends State<OfficialsAssignmentScreen> {
                         children: [
                           const Icon(Icons.person, color: AppColors.primary),
                           const SizedBox(width: 16),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text("MATCH SCORER", style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textSecondary)),
-                              const SizedBox(height: 2),
-                              Text(_currentScorerName, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14)),
-                            ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text("ASSIGNED SCORER", style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textSecondary)),
+                                const SizedBox(height: 2),
+                                Text(_selectedScorerName, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white)),
+                              ],
+                            ),
                           ),
-                          const Spacer(),
-                          const Chip(
-                            label: Text("ACTIVE", style: TextStyle(fontSize: 10, color: Colors.black, fontWeight: FontWeight.bold)),
-                            backgroundColor: AppColors.primary,
-                          ),
+                          if (_selectedScorerId != null)
+                            const Icon(Icons.check_circle_rounded, color: AppColors.primary),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
 
-                    // Umpire Text Input
+                    if (!_isReadOnly) ...[
+                      TextField(
+                        controller: _scorerSearchController,
+                        style: GoogleFonts.outfit(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: "Search user by email or username",
+                          hintStyle: GoogleFonts.outfit(color: Colors.white24),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.search, color: AppColors.primary),
+                            onPressed: () => _searchScorers(_scorerSearchController.text),
+                          ),
+                        ),
+                        onSubmitted: _searchScorers,
+                      ),
+                      const SizedBox(height: 12),
+                      if (_isSearching)
+                        const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)))
+                      else if (_searchResults.isNotEmpty)
+                        Container(
+                          maxHeight: 180,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E222F),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white12),
+                          ),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: _searchResults.length,
+                            itemBuilder: (context, index) {
+                              final u = _searchResults[index];
+                              final uName = u['full_name'] ?? u['username'] ?? 'User';
+                              final uEmail = u['email'] ?? '';
+                              return ListTile(
+                                title: Text(uName, style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+                                subtitle: Text(uEmail, style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12)),
+                                onTap: () {
+                                  setState(() {
+                                    _selectedScorerId = u['id'].toString();
+                                    _selectedScorerName = uName;
+                                    _searchResults.clear();
+                                    _scorerSearchController.clear();
+                                  });
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // Umpire 1 Input
                     TextFormField(
-                      controller: _umpireController,
+                      controller: _umpire1Controller,
+                      readOnly: _isReadOnly,
                       style: GoogleFonts.outfit(color: Colors.white),
                       decoration: InputDecoration(
-                        labelText: "Match Umpire Name",
+                        labelText: "Umpire 1 Name",
                         labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
-                        prefixIcon: const Icon(Icons.group, color: AppColors.textSecondary),
-                        filled: true,
-                        fillColor: Colors.white.withOpacity(0.02),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(color: Colors.white.withOpacity(0.06), width: 1.5),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: AppColors.primary, width: 2),
-                        ),
+                        prefixIcon: const Icon(Icons.person_outline, color: AppColors.textSecondary),
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(height: 16),
 
-                    // Proceed button
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        gradient: AppColors.buttonGradient,
-                        borderRadius: BorderRadius.circular(16),
+                    // Umpire 2 Input
+                    TextFormField(
+                      controller: _umpire2Controller,
+                      readOnly: _isReadOnly,
+                      style: GoogleFonts.outfit(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: "Umpire 2 Name (Optional)",
+                        labelStyle: GoogleFonts.outfit(color: AppColors.textSecondary),
+                        prefixIcon: const Icon(Icons.person_outline, color: AppColors.textSecondary),
                       ),
-                      child: ElevatedButton(
+                    ),
+                    const SizedBox(height: 36),
+
+                    if (!_isReadOnly)
+                      ElevatedButton(
                         onPressed: _assignOfficials,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
+                          backgroundColor: AppColors.primary,
                           foregroundColor: Colors.black,
-                          elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
                         child: Text(
-                          "Save & Proceed",
+                          "Save Assignment",
                           style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),

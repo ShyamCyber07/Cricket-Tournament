@@ -332,6 +332,7 @@ class _UniversalSearchScreenState extends State<UniversalSearchScreen> with Sing
                       tournamentId: tour['id'],
                       tournamentName: tour['name'],
                     ),
+                    settings: const RouteSettings(name: 'TournamentDetailsScreen'),
                   ),
                 );
               },

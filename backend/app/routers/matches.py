@@ -8,7 +8,7 @@ from uuid import UUID
 from app.core.database import get_db, SessionLocal
 from app.routers.auth import get_current_user
 from app.models.user import User
-from app.models.cricket import Match, Team, Player, MatchSquad, Innings, Ball, MatchActivity
+from app.models.cricket import Match, Team, Player, MatchSquad, Innings, Ball, MatchActivity, TeamMember
 from app.schemas.match import (
     MatchCreate, MatchResponse, TossSubmit, SquadSubmit, 
     BallCreate, LiveMatchState, StrikerState, BowlerState, 
@@ -55,6 +55,25 @@ def check_match_scoring_permission(match, current_user_id):
         raise HTTPException(status_code=403, detail="Not authorized to manage/score this match")
 
 
+def check_match_scorer_permission(match, current_user_id, db: Session):
+    authorized = {match.created_by}
+    if match.assigned_scorer_id:
+        authorized.add(match.assigned_scorer_id)
+    elif match.tournament:
+        authorized.add(match.tournament.organizer_id)
+        
+    user = db.query(User).filter(User.id == current_user_id).first()
+    if user and user.role == "admin":
+        return
+        
+    if current_user_id not in authorized:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the assigned Scorer can perform scoring actions for this match"
+        )
+
+
+
 def log_match_activity(db: Session, match_id: UUID, user_id: Optional[UUID], action_type: str, description: str):
     activity = MatchActivity(
         match_id=match_id,
@@ -68,13 +87,19 @@ def log_match_activity(db: Session, match_id: UUID, user_id: Optional[UUID], act
 def check_and_update_match_ready(match: Match, db: Session):
     squad1_count = db.query(MatchSquad).filter(MatchSquad.match_id == match.id, MatchSquad.team_id == match.team1_id).count()
     squad2_count = db.query(MatchSquad).filter(MatchSquad.match_id == match.id, MatchSquad.team_id == match.team2_id).count()
+    
+    is_locked = True
+    if match.tournament_id is not None:
+        is_locked = match.team1_squad_locked and match.team2_squad_locked
+
     if (squad1_count > 0 and 
         squad2_count > 0 and 
+        is_locked and
         match.toss_winner_id is not None and 
         match.toss_decision is not None and 
         match.umpire_name is not None and 
         match.scorer_name is not None):
-        if match.status in ["scheduled", "toss", "team_selection"]:
+        if match.status in ["scheduled", "toss", "team_selection", "ready"]:
             match.status = "ready"
 
 
@@ -165,7 +190,7 @@ def submit_toss(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    check_match_scoring_permission(match, current_user.id)
+    check_match_scorer_permission(match, current_user.id, db)
 
     if toss.toss_winner_id not in [match.team1_id, match.team2_id]:
         raise HTTPException(status_code=400, detail="Toss winner must be one of the playing teams")
@@ -200,7 +225,11 @@ def initiate_toss(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    check_match_scoring_permission(match, current_user.id)
+    check_match_scorer_permission(match, current_user.id, db)
+
+    if match.tournament_id is not None:
+        if not match.team1_squad_locked or not match.team2_squad_locked:
+            raise HTTPException(status_code=400, detail="Both teams must complete Playing XI Lock.")
 
     if match.toss_winner_id is not None:
         raise HTTPException(status_code=400, detail="Toss has already been executed for this match")
@@ -237,7 +266,7 @@ def submit_toss_decision(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    check_match_scoring_permission(match, current_user.id)
+    check_match_scorer_permission(match, current_user.id, db)
 
     if match.toss_winner_id is None:
         raise HTTPException(status_code=400, detail="Toss has not been initiated/executed yet")
@@ -342,6 +371,21 @@ def submit_squads(
 
     check_match_scoring_permission(match, current_user.id)
 
+    # Strict Captain check: only captain (or admin or match creator) can submit squads
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if user and user.role != "admin" and match.created_by != current_user.id:
+        membership = db.query(TeamMember).filter(
+            TeamMember.team_id == squad.team_id,
+            TeamMember.user_id == current_user.id,
+            TeamMember.status == "active",
+            TeamMember.role.ilike("captain")
+        ).first()
+        if not membership:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the team captain can manage team strategy and submit Playing XI"
+            )
+
     if squad.team_id not in [match.team1_id, match.team2_id]:
         raise HTTPException(status_code=400, detail="Team is not playing in this match")
 
@@ -433,6 +477,97 @@ def get_match_squads(
         "team2_squad": team2_players
     }
 
+@router.post("/{id}/squads/{team_id}/lock", status_code=status.HTTP_200_OK)
+def lock_squad(
+    id: UUID,
+    team_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    match = db.query(Match).filter(Match.id == id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    if team_id not in [match.team1_id, match.team2_id]:
+        raise HTTPException(status_code=400, detail="Team is not playing in this match")
+
+    # Strict Captain check: only captain (or admin or match creator) can lock squads
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if user and user.role != "admin" and match.created_by != current_user.id:
+        membership = db.query(TeamMember).filter(
+            TeamMember.team_id == team_id,
+            TeamMember.user_id == current_user.id,
+            TeamMember.status == "active",
+            TeamMember.role.ilike("captain")
+        ).first()
+        if not membership:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the team captain can lock the Playing XI"
+            )
+
+    # Ensure squad is not empty
+    squad_count = db.query(MatchSquad).filter(MatchSquad.match_id == id, MatchSquad.team_id == team_id).count()
+    if squad_count == 0:
+        raise HTTPException(status_code=400, detail="Roster squad must be configured before locking Playing XI")
+
+    if team_id == match.team1_id:
+        match.team1_squad_locked = True
+    else:
+        match.team2_squad_locked = True
+
+    db.add(match)
+    db.commit()
+
+    # Send Lock Notifications
+    import json
+    from app.models.cricket import Notification
+    opponent_team_id = match.team2_id if team_id == match.team1_id else match.team1_id
+    opponent_locked = match.team2_squad_locked if team_id == match.team1_id else match.team1_squad_locked
+    
+    if not opponent_locked:
+        opp_caps = db.query(TeamMember).filter(
+            TeamMember.team_id == opponent_team_id,
+            TeamMember.role == "captain",
+            TeamMember.status == "active"
+        ).all()
+        for cap in opp_caps:
+            notif = Notification(
+                user_id=cap.user_id,
+                title="Opponent XI Locked",
+                message="Opponent Playing XI has been locked. Please lock your Playing XI.",
+                type="playing_xi_opponent_locked",
+                extra_data=json.dumps({"match_id": str(match.id)})
+            )
+            db.add(notif)
+    else:
+        all_team_ids = [match.team1_id, match.team2_id]
+        for t_id in all_team_ids:
+            caps = db.query(TeamMember).filter(
+                TeamMember.team_id == t_id,
+                TeamMember.role == "captain",
+                TeamMember.status == "active"
+            ).all()
+            for cap in caps:
+                notif = Notification(
+                    user_id=cap.user_id,
+                    title="All Playing XIs Locked",
+                    message="Both Playing XIs are locked. Waiting for officials assignment.",
+                    type="playing_xi_both_locked",
+                    extra_data=json.dumps({"match_id": str(match.id)})
+                )
+                db.add(notif)
+
+    db.commit()
+
+    check_and_update_match_ready(match, db)
+    db.commit()
+    db.refresh(match)
+    background_tasks.add_task(broadcast_match_update_task, id)
+    return {"message": "Squad locked successfully", "match_status": match.status}
+
+
 def get_active_innings_num(match: Match, db: Session) -> int:
     innings_list = db.query(Innings).filter(Innings.match_id == match.id).order_by(Innings.innings_number.asc()).all()
     if not innings_list:
@@ -454,7 +589,7 @@ def start_match(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    check_match_scoring_permission(match, current_user.id)
+    check_match_scorer_permission(match, current_user.id, db)
 
     # 1. Prevent starting twice
     if match.status == "live":
@@ -582,7 +717,7 @@ def pause_match(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    check_match_scoring_permission(match, current_user.id)
+    check_match_scorer_permission(match, current_user.id, db)
     log_match_activity(db, id, current_user.id, "match_paused", f"Match paused by Scorer {current_user.username}.")
     background_tasks.add_task(broadcast_match_update_task, id)
     return match
@@ -598,7 +733,7 @@ def resume_match(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    check_match_scoring_permission(match, current_user.id)
+    check_match_scorer_permission(match, current_user.id, db)
     log_match_activity(db, id, current_user.id, "match_resumed", f"Match resumed by Scorer {current_user.username}.")
     background_tasks.add_task(broadcast_match_update_task, id)
     return match
@@ -615,7 +750,7 @@ def submit_ball(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    check_match_scoring_permission(match, current_user.id)
+    check_match_scorer_permission(match, current_user.id, db)
 
     try:
         if match.status in ["ready", "team_selection", "innings_break"]:
@@ -927,7 +1062,7 @@ def undo_last_ball(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    check_match_scoring_permission(match, current_user.id)
+    check_match_scorer_permission(match, current_user.id, db)
 
     if match.status not in ["live", "innings_break", "completed", "innings1", "innings2"]:
         raise HTTPException(status_code=400, detail="No logs to undo")
@@ -1732,7 +1867,12 @@ def delete_match(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    if match.created_by != current_user.id and current_user.role != "admin":
+    is_authorized = (
+        match.created_by == current_user.id or
+        current_user.role == "admin" or
+        (match.tournament and match.tournament.organizer_id == current_user.id)
+    )
+    if not is_authorized:
         raise HTTPException(status_code=403, detail="Not authorized to delete this match")
 
     db.delete(match)

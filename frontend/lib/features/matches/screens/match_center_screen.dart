@@ -2,15 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
-import 'package:cricket_scorer/core/app_config.dart';
-import 'package:flutter/services.dart';
-import 'dart:math' as math;
-import 'match_presentation_screen.dart';
+import 'package:intl/intl.dart';
+import 'toss_animation.dart';
 import 'squad_selection_screen.dart';
-import 'playing_xi_lock_screen.dart';
 import 'officials_assignment_screen.dart';
 import 'ready_to_start_screen.dart';
-import '../widgets/animated_coin.dart';
 
 class MatchCenterScreen extends StatefulWidget {
   final String matchId;
@@ -28,6 +24,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   Map<String, dynamic>? _liveState;
+  
   String? _currentUserId;
   String? _currentUserRole;
 
@@ -40,18 +37,17 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
   Future<void> _fetchMatchDetails() async {
     setState(() => _isLoading = true);
     try {
-      final userRes = await _apiService.getMe();
-      _currentUserId = userRes.data['id']?.toString();
-      _currentUserRole = userRes.data['role']?.toString();
-
-      final res = await _apiService.getLiveMatch(widget.matchId);
+      final matchRes = await _apiService.getLiveMatch(widget.matchId);
+      final profileRes = await _apiService.getProfile();
       setState(() {
-        _liveState = res.data;
+        _liveState = matchRes.data;
+        _currentUserId = profileRes.data['id'].toString();
+        _currentUserRole = profileRes.data['role'].toString();
         _isLoading = false;
       });
     } catch (e) {
       setState(() => _isLoading = false);
-      _showSnackBar("Failed to load match: $e", AppColors.error);
+      _showSnackBar("Failed to load match details: $e", AppColors.error);
     }
   }
 
@@ -61,38 +57,28 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
     );
   }
 
-  String _resolvePhotoUrl(String? path) {
-    if (path == null || path.isEmpty) return "";
-    if (path.startsWith("http")) return path;
-    final uri = Uri.parse(AppConfig.baseUrl);
-    final host = "${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}";
-    return "$host$path";
-  }
-
-  Widget _buildTeamLogo(String? url, String name, {double size = 48}) {
-    if (url != null && url.isNotEmpty) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(size / 2),
-        child: Image.network(
-          _resolvePhotoUrl(url),
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _buildInitialsLogo(name, size),
-        ),
+  Widget _buildTeamLogo(String? logoUrl, String teamName, {double size = 48}) {
+    if (logoUrl != null && logoUrl.isNotEmpty) {
+      return Image.network(
+        logoUrl,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _buildInitialsLogo(teamName, size),
       );
     }
-    return _buildInitialsLogo(name, size);
+    return _buildInitialsLogo(teamName, size);
   }
 
-  Widget _buildInitialsLogo(String name, double size) {
-    final initials = name.trim().substring(0, name.length < 3 ? name.length : 3).toUpperCase();
+  Widget _buildInitialsLogo(String teamName, double size) {
+    final initials = teamName.substring(0, teamName.length < 3 ? teamName.length : 3).toUpperCase();
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: AppColors.secondary.withOpacity(0.15),
+        color: AppColors.primary.withOpacity(0.12),
         shape: BoxShape.circle,
+        border: Border.all(color: AppColors.primary.withOpacity(0.5), width: 1.5),
       ),
       alignment: Alignment.center,
       child: Text(
@@ -254,7 +240,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                           try {
                             await _apiService.submitTossDecision(widget.matchId, selectedTossDecision);
                             Navigator.pop(dialogContext);
-                            _navigateToPresentation();
+                            _fetchMatchDetails();
                           } catch (e) {
                             setDialogState(() => isSubmitting = false);
                             _showSnackBar("Failed to save toss: $e", AppColors.error);
@@ -273,15 +259,6 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
     );
   }
 
-  void _navigateToPresentation() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => MatchPresentationScreen(matchId: widget.matchId),
-      ),
-    ).then((_) => _fetchMatchDetails());
-  }
-
   Widget _buildStepItem({
     required int stepNumber,
     required String title,
@@ -289,13 +266,14 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
     required bool isCompleted,
     required bool isActive,
     VoidCallback? onTap,
+    String actionLabel = "START",
   }) {
     Color stepColor = isCompleted
         ? AppColors.primary
         : (isActive ? AppColors.secondary : AppColors.textSecondary);
 
     return Opacity(
-      opacity: isActive || isCompleted ? 1.0 : 0.5,
+      opacity: isActive || isCompleted ? 1.0 : 0.4,
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(16),
@@ -315,7 +293,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
               ),
               alignment: Alignment.center,
               child: isCompleted
-                  ? Icon(Icons.check, color: AppColors.primary, size: 18)
+                  ? const Icon(Icons.check, color: AppColors.primary, size: 18)
                   : Text("$stepNumber", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: stepColor)),
             ),
             const SizedBox(width: 16),
@@ -336,7 +314,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   textStyle: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
-                child: const Text("START"),
+                child: Text(actionLabel),
               ),
           ],
         ),
@@ -354,20 +332,26 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
 
     final team1Name = _liveState!['team1_name']?.toString() ?? 'Team A';
     final team2Name = _liveState!['team2_name']?.toString() ?? 'Team B';
+    final team1Id = _liveState!['team1_id']?.toString() ?? '';
+    final team2Id = _liveState!['team2_id']?.toString() ?? '';
     final team1Logo = _liveState!['team1_logo_url']?.toString();
     final team2Logo = _liveState!['team2_logo_url']?.toString();
     final status = _liveState!['status']?.toString() ?? 'scheduled';
 
-    bool isTossCompleted = _liveState!['toss_winner_name'] != null;
-    bool isSquadsSubmitted = status == 'team_selection' && isTossCompleted; // just simple flags to determine steps
+    final team1Locked = _liveState!['team1_squad_locked'] == true;
+    final team2Locked = _liveState!['team2_squad_locked'] == true;
+    final bothLocked = team1Locked && team2Locked;
+
+    final officialsAssigned = _liveState!['umpire_name'] != null && _liveState!['scorer_name'] != null;
+    final isTossCompleted = _liveState!['toss_winner_name'] != null;
+
+    final matchOwnerId = _liveState!['created_by']?.toString();
+    final assignedScorerId = _liveState!['assigned_scorer_id']?.toString();
+    final organizerId = _liveState!['tournament_organizer_id']?.toString();
     
-    // We determine active step
-    int activeStep = 1;
-    if (isTossCompleted) {
-      activeStep = 2;
-    }
-    // We can save other steps in SharedPreferences or local variables for UI progress representation
-    
+    final isScorer = _currentUserId == matchOwnerId || _currentUserId == assignedScorerId || _currentUserRole == 'admin';
+    final isOrganizer = _currentUserId == matchOwnerId || _currentUserId == organizerId || _currentUserRole == 'admin';
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("MATCH SETUP CENTER"),
@@ -384,7 +368,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Premium Card displaying the match summary
+              // Display match summary details
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: AppColors.glassDecoration(
@@ -454,67 +438,128 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                "Match Setup Sequence",
+                "Linear Match Setup Sequence",
                 style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
               ),
               const SizedBox(height: 12),
               
-              // Step 1: Coin Toss
+              // Step 1a: Team 1 Squad Selection
               _buildStepItem(
                 stepNumber: 1,
-                title: "Premium Coin Toss",
-                subtitle: isTossCompleted 
-                    ? "Winner: ${_liveState!['toss_winner_name']} (${_liveState!['toss_decision']?.toString().toUpperCase()} First)"
-                    : "Execute the coin flip and elect Bat/Bowl first",
-                isCompleted: isTossCompleted,
-                isActive: activeStep == 1,
-                onTap: _startTossFlow,
+                title: "Lock $team1Name Playing XI",
+                subtitle: team1Locked 
+                    ? "Finalized & Locked strategy."
+                    : "Captain must select and lock roster strategy.",
+                isCompleted: team1Locked,
+                isActive: !team1Locked,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SquadSelectionScreen(
+                        matchId: widget.matchId,
+                        team1Id: team1Id,
+                        team2Id: team2Id,
+                        team1Name: team1Name,
+                        team2Name: team2Name,
+                        targetTeamId: team1Id,
+                      ),
+                    ),
+                  ).then((_) => _fetchMatchDetails());
+                },
+                actionLabel: team1Locked ? "LOCKED" : "CONFIG",
               ),
 
-              // Step 2: Match Presentation Details
+              // Step 1b: Team 2 Squad Selection
               _buildStepItem(
                 stepNumber: 2,
-                title: "Match Presentation Summary",
-                subtitle: isTossCompleted ? "View officials, venues, and status" : "Requires completed coin toss",
-                isCompleted: false, // This is just a view page, doesn't persist state, user taps to view
-                isActive: activeStep == 2,
-                onTap: _navigateToPresentation,
+                title: "Lock $team2Name Playing XI",
+                subtitle: team2Locked 
+                    ? "Finalized & Locked strategy."
+                    : "Captain must select and lock roster strategy.",
+                isCompleted: team2Locked,
+                isActive: !team2Locked,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SquadSelectionScreen(
+                        matchId: widget.matchId,
+                        team1Id: team1Id,
+                        team2Id: team2Id,
+                        team1Name: team1Name,
+                        team2Name: team2Name,
+                        targetTeamId: team2Id,
+                      ),
+                    ),
+                  ).then((_) => _fetchMatchDetails());
+                },
+                actionLabel: team2Locked ? "LOCKED" : "CONFIG",
               ),
 
-              // Step 3: Squad Selection
+              // Step 2: Officials Assignment
               _buildStepItem(
                 stepNumber: 3,
-                title: "Squad Selection & Players",
-                subtitle: "Register match squads for both rosters",
-                isCompleted: false,
-                isActive: false, // User goes via Match Presentation screen button!
+                title: "Officials Assignment",
+                subtitle: officialsAssigned
+                    ? "Umpire 1: ${_liveState!['umpire_name']}, Scorer: ${_liveState!['scorer_name']}."
+                    : (bothLocked ? "Organizer must assign match officials." : "Requires locked team strategies."),
+                isCompleted: officialsAssigned,
+                isActive: bothLocked && !officialsAssigned,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => OfficialsAssignmentScreen(
+                        matchId: widget.matchId,
+                        team1Id: team1Id,
+                        team2Id: team2Id,
+                        team1Name: team1Name,
+                        team2Name: team2Name,
+                      ),
+                    ),
+                  ).then((_) => _fetchMatchDetails());
+                },
+                actionLabel: isOrganizer ? "ASSIGN" : "VIEW ONLY",
               ),
 
-              // Step 4: Playing XI Lock
+              // Step 3: Coin Toss
               _buildStepItem(
                 stepNumber: 4,
-                title: "Playing XI Lock",
-                subtitle: "Designate Captain, Wicketkeeper, and Lock XI",
-                isCompleted: false,
-                isActive: false,
+                title: "Coin Toss & Decision",
+                subtitle: isTossCompleted
+                    ? "Winner: ${_liveState!['toss_winner_name']} (${_liveState!['toss_decision']?.toString().toUpperCase()} First)"
+                    : (bothLocked && officialsAssigned ? "Assigned Scorer must execute the coin toss." : "Requires completed steps 1-3."),
+                isCompleted: isTossCompleted,
+                isActive: bothLocked && officialsAssigned && !isTossCompleted && isScorer,
+                onTap: _startTossFlow,
+                actionLabel: "TOSS",
               ),
 
-              // Step 5: Officials Assignment
+              // Step 4: Ready to Start
               _buildStepItem(
                 stepNumber: 5,
-                title: "Officials Assignment",
-                subtitle: "Assign match Umpires and Scorers",
-                isCompleted: false,
-                isActive: false,
-              ),
-
-              // Step 6: Ready To Start Match
-              _buildStepItem(
-                stepNumber: 6,
-                title: "Ready to Score",
-                subtitle: "Review setup checklist and start match scoring",
-                isCompleted: false,
-                isActive: false,
+                title: "Start Live Match",
+                subtitle: (status == 'live' || status == 'innings1' || status == 'innings2' || status == 'completed')
+                    ? "Live Scoring Active."
+                    : (bothLocked && officialsAssigned && isTossCompleted ? "Ready to select openers and start match." : "Requires completed coin toss."),
+                isCompleted: (status == 'live' || status == 'innings1' || status == 'innings2' || status == 'completed'),
+                isActive: bothLocked && officialsAssigned && isTossCompleted && isScorer && (status == 'ready' || status == 'team_selection' || status == 'scheduled'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ReadyToStartScreen(
+                        matchId: widget.matchId,
+                        team1Id: team1Id,
+                        team2Id: team2Id,
+                        team1Name: team1Name,
+                        team2Name: team2Name,
+                      ),
+                    ),
+                  ).then((_) => _fetchMatchDetails());
+                },
+                actionLabel: "START",
               ),
             ],
           ),

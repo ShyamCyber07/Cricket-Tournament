@@ -10,10 +10,6 @@ class ReadyToStartScreen extends StatefulWidget {
   final String team2Id;
   final String team1Name;
   final String team2Name;
-  final List<dynamic> squad1;
-  final List<dynamic> squad2;
-  final String umpireName;
-  final String scorerName;
 
   const ReadyToStartScreen({
     super.key,
@@ -22,10 +18,6 @@ class ReadyToStartScreen extends StatefulWidget {
     required this.team2Id,
     required this.team1Name,
     required this.team2Name,
-    required this.squad1,
-    required this.squad2,
-    required this.umpireName,
-    required this.scorerName,
   });
 
   @override
@@ -41,6 +33,9 @@ class _ReadyToStartScreenState extends State<ReadyToStartScreen> {
   String? _tossDecision;
   String? _umpireName;
   String? _scorerName;
+
+  List<dynamic> _squad1 = [];
+  List<dynamic> _squad2 = [];
 
   List<dynamic> _battingPlayers = [];
   List<dynamic> _bowlingPlayers = [];
@@ -63,14 +58,32 @@ class _ReadyToStartScreenState extends State<ReadyToStartScreen> {
 
       _tossWinnerId = data['toss_winner_id']?.toString();
       _tossDecision = data['toss_decision']?.toString();
-      _umpireName = data['umpire_name']?.toString() ?? widget.umpireName;
-      _scorerName = data['scorer_name']?.toString() ?? widget.scorerName;
+      _umpireName = data['umpire_name']?.toString();
+      _scorerName = data['scorer_name']?.toString();
+
+      final squadRes = await _apiService.getMatchSquads(widget.matchId);
+      _squad1 = squadRes.data['team1_squad'] as List<dynamic>? ?? [];
+      _squad2 = squadRes.data['team2_squad'] as List<dynamic>? ?? [];
 
       final isTeam1Batting = (_tossWinnerId == widget.team1Id && _tossDecision == 'bat') || 
                              (_tossWinnerId == widget.team2Id && _tossDecision == 'bowl');
       
-      _battingPlayers = isTeam1Batting ? widget.squad1 : widget.squad2;
-      _bowlingPlayers = isTeam1Batting ? widget.squad2 : widget.squad1;
+      _battingPlayers = List.from(isTeam1Batting ? _squad1 : _squad2);
+      _bowlingPlayers = List.from(isTeam1Batting ? _squad2 : _squad1);
+
+      // Sort batting players by batting_order strategy
+      _battingPlayers.sort((a, b) {
+        final aOrder = a['batting_order'] as int? ?? 999;
+        final bOrder = b['batting_order'] as int? ?? 999;
+        return aOrder.compareTo(bOrder);
+      });
+
+      // Sort bowling players by bowling_preference strategy
+      _bowlingPlayers.sort((a, b) {
+        final aPref = a['bowling_preference'] as int? ?? 999;
+        final bPref = b['bowling_preference'] as int? ?? 999;
+        return aPref.compareTo(bPref);
+      });
 
       if (_battingPlayers.length >= 2) {
         _selectedStrikerId = (_battingPlayers[0]['id'] ?? _battingPlayers[0]['player_id'])?.toString();
@@ -129,7 +142,7 @@ class _ReadyToStartScreenState extends State<ReadyToStartScreen> {
   }
 
   bool get _isTossOk => _tossWinnerId != null && _tossDecision != null;
-  bool get _isSquadsOk => widget.squad1.isNotEmpty && widget.squad2.isNotEmpty;
+  bool get _isSquadsOk => _squad1.isNotEmpty && _squad2.isNotEmpty;
   bool get _isOfficialsOk => _umpireName != null && _umpireName != 'Not Assigned' && _umpireName!.isNotEmpty && _scorerName != null && _scorerName!.isNotEmpty;
   bool get _isOpenersOk => _selectedStrikerId != null && _selectedNonStrikerId != null && _selectedBowlerId != null && _selectedStrikerId != _selectedNonStrikerId;
 
@@ -204,7 +217,7 @@ class _ReadyToStartScreenState extends State<ReadyToStartScreen> {
                           ),
                           const SizedBox(height: 12),
                           _buildChecklistItem("Toss completed & decision registered", _isTossOk),
-                          _buildChecklistItem("Playing XI locked for both teams", _isSquadsOk),
+                          _buildChecklistItem("Playing XI strategy submitted", _isSquadsOk),
                           _buildChecklistItem("Match officials assigned", _isOfficialsOk),
                           _buildChecklistItem("Opening batsmen & bowler selected", _isOpenersOk),
                         ],
@@ -212,7 +225,7 @@ class _ReadyToStartScreenState extends State<ReadyToStartScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Openers Selection (Only visible/active if first 3 are OK)
+                    // Openers Selection
                     if (_isTossOk && _isSquadsOk && _isOfficialsOk) ...[
                       Text(
                         "SELECT OPENING PLAYERS",
@@ -307,32 +320,20 @@ class _ReadyToStartScreenState extends State<ReadyToStartScreen> {
                         },
                       ),
                     ],
+                    const SizedBox(height: 36),
 
-                    const SizedBox(height: 40),
-
-                    // Start Match button
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        gradient: _canStartMatch ? AppColors.buttonGradient : null,
-                        color: _canStartMatch ? null : AppColors.surface,
-                        borderRadius: BorderRadius.circular(16),
+                    ElevatedButton(
+                      onPressed: _canStartMatch ? _startMatchScoring : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        disabledBackgroundColor: Colors.white10,
+                        disabledForegroundColor: Colors.white24,
                       ),
-                      child: ElevatedButton(
-                        onPressed: _canStartMatch ? _startMatchScoring : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          foregroundColor: Colors.black,
-                          disabledForegroundColor: AppColors.textSecondary,
-                          disabledBackgroundColor: Colors.transparent,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        ),
-                        child: Text(
-                          "Start Match Scoring",
-                          style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16),
-                        ),
+                      child: Text(
+                        "Start Match Scoring",
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                     ),
                   ],

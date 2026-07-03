@@ -504,12 +504,10 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
   bool get _isViewerMode {
     if (_liveState == null) return true; // Default to true (read-only) before loading
+    if (_currentUserRole == 'admin') return false;
     final matchOwnerId = _liveState!['created_by']?.toString();
-    final tournamentOrganizerId = _liveState!['tournament_organizer_id']?.toString();
     final assignedScorerId = _liveState!['assigned_scorer_id']?.toString();
-    return _currentUserId != matchOwnerId &&
-           _currentUserId != tournamentOrganizerId &&
-           _currentUserId != assignedScorerId;
+    return _currentUserId != matchOwnerId && _currentUserId != assignedScorerId;
   }
 
   @override
@@ -1288,7 +1286,9 @@ class _ScoringScreenState extends State<ScoringScreen> {
       try {
         final squadsRes = await _apiService.getMatchSquads(widget.matchId);
         final squadsData = squadsRes.data;
-        final isTeam1Batting = (battingTeamId == team1Id);
+        final isTeam1Batting = currentInnings['is_completed'] == true
+            ? (currentInnings['bowling_team_id'].toString() == team1Id)
+            : (battingTeamId == team1Id);
 
         setState(() {
           _battingSquad = isTeam1Batting ? squadsData['team1_squad'] : squadsData['team2_squad'];
@@ -1930,6 +1930,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
   }
 
 
+  void _handleBackNavigation() {
+    Navigator.of(context).popUntil((route) {
+      return route.settings.name == 'TournamentDetailsScreen' || route.isFirst;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading && _liveState == null) {
@@ -1966,6 +1972,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(isCompleted ? "Match Completed" : (_isViewerMode ? "Match Viewer" : "Live Scorer")),
+        leading: isCompleted
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: _handleBackNavigation,
+              )
+            : null,
         actions: [
           if (!isCompleted) ...[
             Row(
@@ -2005,7 +2017,13 @@ class _ScoringScreenState extends State<ScoringScreen> {
           ],
         ],
       ),
-      body: Stack(
+      body: PopScope(
+        canPop: !isCompleted,
+        onPopInvoked: (didPop) {
+          if (didPop) return;
+          _handleBackNavigation();
+        },
+        child: Stack(
         children: [
           // Background glow
           Positioned(
@@ -2085,13 +2103,26 @@ class _ScoringScreenState extends State<ScoringScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.secondary,
                           foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: Text("View Scorecard", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                        child: Text("View Scorecard", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _handleBackNavigation,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text("Back to Tournament", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
                       ),
                       const SizedBox(height: 12),
                       OutlinedButton(
                         onPressed: () {
-                          Navigator.pop(context);
+                          Navigator.of(context).popUntil((route) => route.isFirst);
                         },
                         style: OutlinedButton.styleFrom(
                           side: const BorderSide(color: Colors.white30),
@@ -2099,7 +2130,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: Text(
-                          "Return to Dashboard",
+                          "Back to Dashboard",
                           style: GoogleFonts.outfit(
                             color: Colors.white,
                             fontSize: 16,
@@ -2117,19 +2148,13 @@ class _ScoringScreenState extends State<ScoringScreen> {
                       children: [
                         _buildLiveScoreHeader(currentInnings, prevInnings, target, striker, nonStriker, bowler),
                         Expanded(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              return SingleChildScrollView(
-                                physics: const BouncingScrollPhysics(),
-                                child: ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    minHeight: constraints.maxHeight,
-                                  ),
-                                  child: IntrinsicHeight(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                    const Spacer(flex: 1),
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const SizedBox(height: 16),
                                     // 2. Batter / Bowler Card Setup
                                     Padding(
                                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -2204,7 +2229,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                                         ],
                                       ),
                                     ),
-                                    const Spacer(flex: 1),
+                                    const SizedBox(height: 16),
                                     // 3. Live Stats & Chasing Panel
                                     _buildLiveStatsPanel(
                                       currentInnings: currentInnings,
@@ -2215,15 +2240,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                                     ),
                                     const SizedBox(height: 16),
                                     _buildMatchActivitiesSection(),
-                                    const Spacer(flex: 2),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
+                                    const SizedBox(height: 16),
 
                     // 3. Chronological Ball History Ticker
                     if (recentBalls.isNotEmpty) ...[
@@ -2255,140 +2272,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
                       ),
                       _buildRecentBallsHistoryList(recentBalls),
                     ],
-
-                    // 4. Large Circle Scoring Controls Pad
-                    if (!_isViewerMode)
-                      Container(
-                        padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).padding.bottom + 16),
-                        decoration: const BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                        ),
-                        child: Column(
-                          children: [
-                            // Top control buttons (Wicket, Undo, Extras)
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                ElevatedButton(
-                                  onPressed: _openWicketDialog,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.error.withOpacity(0.2),
-                                    foregroundColor: AppColors.error,
-                                    elevation: 0,
-                                  ),
-                                  child: const Text("WICKET"),
-                                ),
-                                ElevatedButton.icon(
-                                  onPressed: _undo,
-                                  icon: const Icon(Icons.undo_rounded, size: 16),
-                                  label: const Text("UNDO"),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0x14FFFFFF),
-                                    foregroundColor: Colors.white,
-                                    elevation: 0,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            // Extras toggles
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                _buildExtraButton("WD", () => _openExtrasDialog("wide")),
-                                _buildExtraButton("NB", () => _openNoBallDialog()),
-                                _buildExtraButton("BYE", () => _openExtrasDialog("bye")),
-                                _buildExtraButton("LB", () => _openExtrasDialog("leg_bye")),
-                                _buildExtraButton("PEN", () => _openExtrasDialog("penalty")),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            // Runs pads row (0, 1, 2, 3, 4, 6)
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [0, 1, 2, 3, 4, 6].map((runs) {
-                                final isBoundary = runs == 4 || runs == 6;
-                                return Container(
-                                  width: 58,
-                                  height: 58,
-                                  decoration: BoxDecoration(
-                                    color: isBoundary
-                                        ? AppColors.primary
-                                        : const Color(0x0DFFFFFF),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: isBoundary ? Colors.transparent : const Color(0x14FFFFFF),
-                                      width: 1.5,
-                                    ),
-                                    boxShadow: [
-                                      if (isBoundary)
-                                        BoxShadow(
-                                          color: AppColors.primary.withOpacity(0.3),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 3),
-                                        )
-                                    ],
-                                  ),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    shape: const CircleBorder(),
-                                    clipBehavior: Clip.antiAlias,
-                                    child: InkWell(
-                                      onTap: () => _scoreBall(runs, 0, "none"),
-                                      child: Center(
-                                        child: Text(
-                                          runs.toString(),
-                                          style: GoogleFonts.outfit(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w900,
-                                            color: isBoundary ? Colors.black : Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            )
-                          ],
-                        ),
-                      )
-                    else
-                      Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.fromLTRB(20, 24, 20, MediaQuery.of(context).padding.bottom + 20),
-                        decoration: const BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.remove_red_eye_outlined, color: AppColors.primary, size: 28),
-                            const SizedBox(height: 8),
-                            Text(
-                              "VIEWER MODE",
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: AppColors.primary,
-                                letterSpacing: 1.5,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              "Live score updates are received in real-time.",
-                              style: GoogleFonts.outfit(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                  ],
+                  ),
                 ),
+              ),
+              _buildScoringControlsPad(recentBalls),
+            ],
+          ),
           // Celebration Overlay
           if (_showCelebration && _celebrationText != null)
             Positioned.fill(
@@ -4315,6 +4204,106 @@ class _ScoringScreenState extends State<ScoringScreen> {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScoringControlsPad(List recentBalls) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).padding.bottom + 16),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Top control buttons (Wicket, Undo)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              ElevatedButton(
+                onPressed: _openWicketDialog,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.error.withOpacity(0.2),
+                  foregroundColor: AppColors.error,
+                  elevation: 0,
+                ),
+                child: const Text("WICKET"),
+              ),
+              ElevatedButton.icon(
+                onPressed: _undo,
+                icon: const Icon(Icons.undo_rounded, size: 16),
+                label: const Text("UNDO"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0x14FFFFFF),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Extras toggles
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildExtraButton("WD", () => _openExtrasDialog("wide")),
+              _buildExtraButton("NB", () => _openNoBallDialog()),
+              _buildExtraButton("BYE", () => _openExtrasDialog("bye")),
+              _buildExtraButton("LB", () => _openExtrasDialog("leg_bye")),
+              _buildExtraButton("PEN", () => _openExtrasDialog("penalty")),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Runs pads row (0, 1, 2, 3, 4, 6)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [0, 1, 2, 3, 4, 6].map((runs) {
+              final isBoundary = runs == 4 || runs == 6;
+              return Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: isBoundary
+                      ? AppColors.primary
+                      : const Color(0x0DFFFFFF),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isBoundary ? Colors.transparent : const Color(0x14FFFFFF),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    if (isBoundary)
+                      BoxShadow(
+                        color: AppColors.primary.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      )
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  shape: const CircleBorder(),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () => _scoreBall(runs, 0, "none"),
+                    child: Center(
+                      child: Text(
+                        runs.toString(),
+                        style: GoogleFonts.outfit(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: isBoundary ? Colors.black : Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          )
         ],
       ),
     );

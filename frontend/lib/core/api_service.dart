@@ -697,6 +697,10 @@ class ApiService {
     return await _dio.get('/matches/$matchId/squads');
   }
 
+  Future<Response> lockMatchSquad(String matchId, String teamId) async {
+    return await _dio.post('/matches/$matchId/squads/$teamId/lock');
+  }
+
   Future<Response> getLiveMatch(String matchId) async {
     return await _dio.get('/matches/$matchId/live');
   }

@@ -219,6 +219,7 @@ class _TournamentListScreenState extends State<TournamentListScreen> with Single
                     tournamentId: tour['id'].toString(),
                     tournamentName: tour['name'].toString(),
                   ),
+                  settings: const RouteSettings(name: 'TournamentDetailsScreen'),
                 ),
               );
               _loadData();

@@ -174,8 +174,80 @@ async def lifespan(app: FastAPI):
     logger.info(f"RAW_BREVO_API_KEY_PREFIX={raw_api_key[:10] if raw_api_key else 'None'}")
     logger.info(f"RAW_BREVO_SMTP_PASSWORD_PREFIX={raw_smtp_password[:10] if raw_smtp_password else 'None'}")
 
+    # Matchday reminder loop
+    def playing_xi_reminder_check_loop(db):
+        import json
+        from datetime import datetime, timezone, timedelta
+        from app.models.cricket import Match, Notification, TeamMember
+        
+        now = datetime.now(timezone.utc)
+        active_matches = db.query(Match).filter(
+            Match.status.in_(["scheduled", "toss", "team_selection"]),
+            Match.match_date <= now
+        ).all()
+        
+        for m in active_matches:
+            if not m.team1_squad_locked:
+                match_id_str = str(m.id)
+                last_notif = db.query(Notification).filter(
+                    Notification.type == "playing_xi_matchday_reminder",
+                    Notification.extra_data.like(f"%{match_id_str}%")
+                ).order_by(Notification.created_at.desc()).first()
+                
+                if not last_notif or (now - last_notif.created_at.replace(tzinfo=timezone.utc) if last_notif.created_at.tzinfo is None else now - last_notif.created_at) >= timedelta(hours=6):
+                    caps = db.query(TeamMember).filter(
+                        TeamMember.team_id == m.team1_id,
+                        TeamMember.role == "captain",
+                        TeamMember.status == "active"
+                    ).all()
+                    for cap in caps:
+                        notif = Notification(
+                            user_id=cap.user_id,
+                            title="Final Reminder: Lock Playing XI",
+                            message="Playing XI must be locked before Toss.",
+                            type="playing_xi_matchday_reminder",
+                            extra_data=json.dumps({"match_id": match_id_str})
+                        )
+                        db.add(notif)
+                    db.commit()
+                    
+            if not m.team2_squad_locked:
+                match_id_str = str(m.id)
+                last_notif = db.query(Notification).filter(
+                    Notification.type == "playing_xi_matchday_reminder",
+                    Notification.extra_data.like(f"%{match_id_str}%")
+                ).order_by(Notification.created_at.desc()).first()
+                
+                if not last_notif or (now - last_notif.created_at.replace(tzinfo=timezone.utc) if last_notif.created_at.tzinfo is None else now - last_notif.created_at) >= timedelta(hours=6):
+                    caps = db.query(TeamMember).filter(
+                        TeamMember.team_id == m.team2_id,
+                        TeamMember.role == "captain",
+                        TeamMember.status == "active"
+                    ).all()
+                    for cap in caps:
+                        notif = Notification(
+                            user_id=cap.user_id,
+                            title="Final Reminder: Lock Playing XI",
+                            message="Playing XI must be locked before Toss.",
+                            type="playing_xi_matchday_reminder",
+                            extra_data=json.dumps({"match_id": match_id_str})
+                        )
+                        db.add(notif)
+                    db.commit()
+
+    async def matchday_reminder_notification_loop():
+        from app.core.database import SessionLocal
+        while True:
+            try:
+                with SessionLocal() as db:
+                    playing_xi_reminder_check_loop(db)
+            except Exception as e:
+                logger.error(f"Error in matchday reminder loop: {e}", exc_info=True)
+            await asyncio.sleep(60) # check every minute
+
     # Launch daily backup loop in background
     asyncio.create_task(daily_sqlite_backup_loop())
+    asyncio.create_task(matchday_reminder_notification_loop())
     yield
 
 app = FastAPI(
