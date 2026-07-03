@@ -1875,6 +1875,9 @@ def delete_match(
     if not is_authorized:
         raise HTTPException(status_code=403, detail="Not authorized to delete this match")
 
+    if match.tournament_id and match.tournament.status == "ongoing":
+        raise HTTPException(status_code=400, detail="Cannot delete fixtures after they are published")
+
     db.delete(match)
     db.commit()
     return None

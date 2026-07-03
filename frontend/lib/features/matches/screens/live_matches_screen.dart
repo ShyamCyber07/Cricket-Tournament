@@ -182,31 +182,37 @@ class _LiveMatchesScreenState extends State<LiveMatchesScreen> with SingleTicker
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.12),
+                    color: (status == 'ready' ? Colors.amber : (status == 'toss' || status == 'team_selection' ? Colors.orange : Colors.red)).withOpacity(0.12),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
                     children: [
-                      AnimatedBuilder(
-                        animation: _pulseController,
-                        builder: (context, child) {
-                          return Opacity(
-                            opacity: _pulseController.value,
-                            child: Container(
-                              width: 6,
-                              height: 6,
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.red,
+                      if (status != 'ready' && status != 'toss' && status != 'team_selection') ...[
+                        AnimatedBuilder(
+                          animation: _pulseController,
+                          builder: (context, child) {
+                            return Opacity(
+                              opacity: _pulseController.value,
+                              child: Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.red,
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(width: 5),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 5),
+                      ],
                       Text(
-                        "LIVE",
-                        style: GoogleFonts.outfit(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold),
+                        status == 'ready' ? 'READY' : (status == 'toss' || status == 'team_selection' ? 'PRE-MATCH' : 'LIVE'),
+                        style: GoogleFonts.outfit(
+                          color: status == 'ready' ? Colors.amber : (status == 'toss' || status == 'team_selection' ? Colors.orange : Colors.red),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
@@ -381,12 +387,16 @@ class _LiveMatchesScreenState extends State<LiveMatchesScreen> with SingleTicker
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.blueAccent.withOpacity(0.12),
+                    color: (match['status'] == 'abandoned' ? Colors.grey : (match['status'] == 'no_result' ? Colors.redAccent : Colors.blueAccent)).withOpacity(0.12),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    "COMPLETED",
-                    style: GoogleFonts.outfit(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                    (match['status']?.toString().toUpperCase() ?? 'COMPLETED'),
+                    style: GoogleFonts.outfit(
+                      color: match['status'] == 'abandoned' ? Colors.grey : (match['status'] == 'no_result' ? Colors.redAccent : Colors.blueAccent),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -455,7 +465,7 @@ class _LiveMatchesScreenState extends State<LiveMatchesScreen> with SingleTicker
     }).toList();
 
     final upcomingMatches = _matches.where((m) => m['status'] == 'scheduled').toList();
-    final completedMatches = _matches.where((m) => m['status'] == 'completed').toList();
+    final completedMatches = _matches.where((m) => m['status'] == 'completed' || m['status'] == 'abandoned' || m['status'] == 'no_result').toList();
 
     return Scaffold(
       appBar: AppBar(

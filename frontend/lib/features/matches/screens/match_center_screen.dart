@@ -28,6 +28,9 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
   String? _currentUserId;
   String? _currentUserRole;
 
+  List<dynamic> _team1Squad = [];
+  List<dynamic> _team2Squad = [];
+
   @override
   void initState() {
     super.initState();
@@ -39,10 +42,13 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
     try {
       final matchRes = await _apiService.getLiveMatch(widget.matchId);
       final profileRes = await _apiService.getProfile();
+      final squadsRes = await _apiService.getMatchSquads(widget.matchId);
       setState(() {
         _liveState = matchRes.data;
         _currentUserId = profileRes.data['id'].toString();
         _currentUserRole = profileRes.data['role'].toString();
+        _team1Squad = squadsRes.data['team1_squad'] as List<dynamic>? ?? [];
+        _team2Squad = squadsRes.data['team2_squad'] as List<dynamic>? ?? [];
         _isLoading = false;
       });
     } catch (e) {
@@ -233,20 +239,24 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
                       ElevatedButton(
-                        onPressed: () async {
-                          setDialogState(() => isSubmitting = true);
-                          try {
-                            await _apiService.submitTossDecision(widget.matchId, selectedTossDecision);
-                            Navigator.pop(dialogContext);
-                            _fetchMatchDetails();
-                          } catch (e) {
-                            setDialogState(() => isSubmitting = false);
-                            _showSnackBar("Failed to save toss: $e", AppColors.error);
-                          }
-                        },
-                        child: const Text("Save & Proceed"),
+                        onPressed: isSubmitting
+                            ? null
+                            : () async {
+                                setDialogState(() => isSubmitting = true);
+                                try {
+                                  await _apiService.submitTossDecision(widget.matchId, selectedTossDecision);
+                                  Navigator.pop(dialogContext);
+                                  _fetchMatchDetails();
+                                } catch (e) {
+                                  setDialogState(() => isSubmitting = false);
+                                  _showSnackBar("Decision submission failed: $e", AppColors.error);
+                                }
+                              },
+                        child: isSubmitting
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                            : const Text("SUBMIT DECISION"),
                       ),
                     ],
                   ],
@@ -259,42 +269,169 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
     );
   }
 
+  Widget _buildTeamReadinessBadge(List<dynamic> squad, bool isLocked) {
+    final hasWk = squad.any((p) => p['is_wicketkeeper'] == true);
+    final hasBattingOrder = squad.isNotEmpty && squad.any((p) => p['batting_order'] != null);
+    final hasBowlingPref = squad.isNotEmpty && squad.any((p) => p['bowling_preference'] != null);
+
+    final isReady = isLocked && hasWk && hasBattingOrder && hasBowlingPref;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: (isReady ? Colors.green : Colors.amber).withOpacity(0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: (isReady ? Colors.green : Colors.amber).withOpacity(0.4)),
+      ),
+      child: Text(
+        isReady ? "READY" : "WAITING",
+        style: GoogleFonts.outfit(
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+          color: isReady ? Colors.green : Colors.amber,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeamReadinessCard(
+    String teamName,
+    List<dynamic> squad,
+    bool isLocked,
+    DateTime matchDate,
+    String matchStatus,
+  ) {
+    final hasWk = squad.any((p) => p['is_wicketkeeper'] == true);
+    final hasBattingOrder = squad.isNotEmpty && squad.any((p) => p['batting_order'] != null);
+    final hasBowlingPref = squad.isNotEmpty && squad.any((p) => p['bowling_preference'] != null);
+
+    final isReady = isLocked && hasWk && hasBattingOrder && hasBowlingPref;
+    final isOverdue = matchDate.isBefore(DateTime.now()) && 
+        (matchStatus == 'scheduled' || matchStatus == 'toss' || matchStatus == 'team_selection' || matchStatus == 'ready');
+
+    String statusBadgeText;
+    Color badgeColor;
+    IconData badgeIcon;
+
+    if (isReady) {
+      statusBadgeText = "Ready";
+      badgeColor = Colors.green;
+      badgeIcon = Icons.check_circle_outline;
+    } else if (isOverdue) {
+      statusBadgeText = "Match Day Overdue";
+      badgeColor = Colors.red;
+      badgeIcon = Icons.error_outline;
+    } else {
+      statusBadgeText = "Waiting Playing XI";
+      badgeColor = Colors.amber;
+      badgeIcon = Icons.hourglass_empty;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: badgeColor.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                teamName,
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: badgeColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: badgeColor.withOpacity(0.5)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(badgeIcon, size: 12, color: badgeColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      statusBadgeText.toUpperCase(),
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 10, color: badgeColor),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildReadinessItem("Playing XI Locked", isLocked),
+          _buildReadinessItem("Wicket Keeper Selected", hasWk),
+          _buildReadinessItem("Batting Order Saved", hasBattingOrder),
+          _buildReadinessItem("Bowling Preference Saved", hasBowlingPref),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReadinessItem(String label, bool isCompleted) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      child: Row(
+        children: [
+          Icon(
+            isCompleted ? Icons.check : Icons.close,
+            color: isCompleted ? Colors.green : Colors.redAccent,
+            size: 14,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              color: isCompleted ? Colors.white70 : Colors.white38,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStepItem({
     required int stepNumber,
     required String title,
     required String subtitle,
     required bool isCompleted,
     required bool isActive,
-    VoidCallback? onTap,
-    String actionLabel = "START",
+    required VoidCallback onTap,
+    required String actionLabel,
   }) {
-    Color stepColor = isCompleted
+    final statusColor = isCompleted
         ? AppColors.primary
-        : (isActive ? AppColors.secondary : AppColors.textSecondary);
+        : (isActive ? AppColors.secondary : AppColors.textSecondary.withOpacity(0.3));
 
-    return Opacity(
-      opacity: isActive || isCompleted ? 1.0 : 0.4,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
-        decoration: AppColors.glassDecoration(
-          borderRadius: BorderRadius.circular(16),
-          borderColor: stepColor.withOpacity(0.2),
-        ),
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      color: isActive ? AppColors.surface : AppColors.surface.withOpacity(0.5),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: isActive ? AppColors.primary.withOpacity(0.3) : Colors.transparent),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Row(
           children: [
             Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: stepColor.withOpacity(0.12),
-                border: Border.all(color: stepColor, width: 1.5),
-              ),
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(color: statusColor.withOpacity(0.12), shape: BoxShape.circle),
               alignment: Alignment.center,
-              child: isCompleted
-                  ? const Icon(Icons.check, color: AppColors.primary, size: 18)
-                  : Text("$stepNumber", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: stepColor)),
+              child: Text(
+                stepNumber.toString(),
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: statusColor, fontSize: 14),
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -307,7 +444,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                 ],
               ),
             ),
-            if (isActive && onTap != null)
+            if (isActive)
               ElevatedButton(
                 onPressed: onTap,
                 style: ElevatedButton.styleFrom(
@@ -352,6 +489,10 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
     final isScorer = _currentUserId == matchOwnerId || _currentUserId == assignedScorerId || _currentUserRole == 'admin';
     final isOrganizer = _currentUserId == matchOwnerId || _currentUserId == organizerId || _currentUserRole == 'admin';
 
+    final matchDateRaw = _liveState!['match_date'];
+    DateTime matchDate = matchDateRaw != null ? DateTime.parse(matchDateRaw.toString()).toLocal() : DateTime.now();
+    String formattedDateTime = matchDateRaw != null ? DateFormat('dd MMM yyyy, hh:mm a').format(matchDate) : "";
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("MATCH SETUP CENTER"),
@@ -368,44 +509,104 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Display match summary details
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: AppColors.glassDecoration(
                   borderRadius: BorderRadius.circular(24),
-                  borderColor: AppColors.primary.withOpacity(0.15),
+                  borderColor: AppColors.primary.withOpacity(0.2),
                 ).copyWith(
                   gradient: LinearGradient(
-                    colors: [AppColors.primary.withOpacity(0.05), AppColors.secondary.withOpacity(0.05)],
+                    colors: [AppColors.primary.withOpacity(0.08), AppColors.secondary.withOpacity(0.08)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                 ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (_liveState!['tournament_name'] != null) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _liveState!['tournament_name'].toString().toUpperCase(),
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.primary,
+                                letterSpacing: 1.0,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppColors.secondary.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              "${_liveState!['tournament_stage']?.toString().toUpperCase() ?? 'LEAGUE'} • MATCH #${_liveState!['match_number'] ?? '1'}",
+                              style: GoogleFonts.outfit(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      const Divider(color: Colors.white10, height: 1),
+                      const SizedBox(height: 16),
+                    ],
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
                           child: Column(
                             children: [
-                              _buildTeamLogo(team1Logo, team1Name, size: 64),
+                              _buildTeamLogo(team1Logo, team1Name, size: 60),
                               const SizedBox(height: 8),
-                              Text(team1Name, style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 16), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              Text(
+                                team1Name,
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 15),
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              _buildTeamReadinessBadge(_team1Squad, team1Locked),
                             ],
                           ),
                         ),
                         Container(
                           padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.04)),
-                          child: Text("VS", style: GoogleFonts.outfit(fontWeight: FontWeight.w900, color: AppColors.primary, fontSize: 14)),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withOpacity(0.04),
+                          ),
+                          child: Text(
+                            "VS",
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.w900, color: AppColors.primary, fontSize: 14),
+                          ),
                         ),
                         Expanded(
                           child: Column(
                             children: [
-                              _buildTeamLogo(team2Logo, team2Name, size: 64),
+                              _buildTeamLogo(team2Logo, team2Name, size: 60),
                               const SizedBox(height: 8),
-                              Text(team2Name, style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 16), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              Text(
+                                team2Name,
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 15),
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              _buildTeamReadinessBadge(_team2Squad, team2Locked),
                             ],
                           ),
                         ),
@@ -413,23 +614,47 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                     ),
                     const SizedBox(height: 16),
                     const Divider(color: Colors.white10),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined, size: 16, color: AppColors.textSecondary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _liveState!['venue']?.toString() ?? 'Main Ground',
+                            style: GoogleFonts.outfit(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (formattedDateTime.isNotEmpty) ...[
+                          const Icon(Icons.calendar_today_outlined, size: 14, color: AppColors.textSecondary),
+                          const SizedBox(width: 6),
+                          Text(
+                            formattedDateTime,
+                            style: GoogleFonts.outfit(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ],
+                    ),
                     const SizedBox(height: 8),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        Column(
-                          children: [
-                            Text("VENUE", style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textSecondary, letterSpacing: 0.5)),
-                            const SizedBox(height: 4),
-                            Text(_liveState!['venue']?.toString() ?? 'Wankhede', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13)),
-                          ],
-                        ),
-                        Column(
-                          children: [
-                            Text("OVERS LIMIT", style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textSecondary, letterSpacing: 0.5)),
-                            const SizedBox(height: 4),
-                            Text("${_liveState!['over_limit']} Overs", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13)),
-                          ],
+                        const Icon(Icons.gavel_outlined, size: 16, color: AppColors.textSecondary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            officialsAssigned
+                                ? "Umpire: ${_liveState!['umpire_name']} • Scorer: ${_liveState!['scorer_name']}"
+                                : "Officials: Not fully assigned",
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              color: officialsAssigned ? Colors.white70 : Colors.white38,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
@@ -438,12 +663,18 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
               ),
               const SizedBox(height: 24),
               Text(
+                "Team Readiness",
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+              ),
+              const SizedBox(height: 12),
+              _buildTeamReadinessCard(team1Name, _team1Squad, team1Locked, matchDate, status),
+              _buildTeamReadinessCard(team2Name, _team2Squad, team2Locked, matchDate, status),
+              const SizedBox(height: 12),
+              Text(
                 "Linear Match Setup Sequence",
                 style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
               ),
               const SizedBox(height: 12),
-              
-              // Step 1a: Team 1 Squad Selection
               _buildStepItem(
                 stepNumber: 1,
                 title: "Lock $team1Name Playing XI",
@@ -451,7 +682,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                     ? "Finalized & Locked strategy."
                     : "Captain must select and lock roster strategy.",
                 isCompleted: team1Locked,
-                isActive: !team1Locked,
+                isActive: !team1Locked || (isScorer && status != 'live' && status != 'innings1' && status != 'innings2' && status != 'completed'),
                 onTap: () {
                   Navigator.push(
                     context,
@@ -467,10 +698,8 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                     ),
                   ).then((_) => _fetchMatchDetails());
                 },
-                actionLabel: team1Locked ? "LOCKED" : "CONFIG",
+                actionLabel: team1Locked ? "EDIT" : "CONFIG",
               ),
-
-              // Step 1b: Team 2 Squad Selection
               _buildStepItem(
                 stepNumber: 2,
                 title: "Lock $team2Name Playing XI",
@@ -478,7 +707,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                     ? "Finalized & Locked strategy."
                     : "Captain must select and lock roster strategy.",
                 isCompleted: team2Locked,
-                isActive: !team2Locked,
+                isActive: !team2Locked || (isScorer && status != 'live' && status != 'innings1' && status != 'innings2' && status != 'completed'),
                 onTap: () {
                   Navigator.push(
                     context,
@@ -494,10 +723,8 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                     ),
                   ).then((_) => _fetchMatchDetails());
                 },
-                actionLabel: team2Locked ? "LOCKED" : "CONFIG",
+                actionLabel: team2Locked ? "EDIT" : "CONFIG",
               ),
-
-              // Step 2: Officials Assignment
               _buildStepItem(
                 stepNumber: 3,
                 title: "Officials Assignment",
@@ -505,7 +732,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                     ? "Umpire 1: ${_liveState!['umpire_name']}, Scorer: ${_liveState!['scorer_name']}."
                     : (bothLocked ? "Organizer must assign match officials." : "Requires locked team strategies."),
                 isCompleted: officialsAssigned,
-                isActive: bothLocked && !officialsAssigned,
+                isActive: bothLocked && !officialsAssigned && isOrganizer,
                 onTap: () {
                   Navigator.push(
                     context,
@@ -520,10 +747,8 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                     ),
                   ).then((_) => _fetchMatchDetails());
                 },
-                actionLabel: isOrganizer ? "ASSIGN" : "VIEW ONLY",
+                actionLabel: "ASSIGN",
               ),
-
-              // Step 3: Coin Toss
               _buildStepItem(
                 stepNumber: 4,
                 title: "Coin Toss & Decision",
@@ -535,8 +760,6 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                 onTap: _startTossFlow,
                 actionLabel: "TOSS",
               ),
-
-              // Step 4: Ready to Start
               _buildStepItem(
                 stepNumber: 5,
                 title: "Start Live Match",

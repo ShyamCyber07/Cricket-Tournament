@@ -429,6 +429,9 @@ def generate_fixtures(
     if tour.organizer_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the organizer can generate fixtures")
 
+    if tour.status == "ongoing":
+        raise HTTPException(status_code=400, detail="Cannot generate fixtures after they are published")
+
     teams = tour.teams
     if len(teams) < 2:
         raise HTTPException(status_code=400, detail="Need at least 2 teams to generate fixtures")

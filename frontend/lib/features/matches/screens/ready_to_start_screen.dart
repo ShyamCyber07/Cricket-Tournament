@@ -122,8 +122,7 @@ class _ReadyToStartScreenState extends State<ReadyToStartScreen> {
       );
       setState(() => _isLoading = false);
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
           builder: (context) => ScoringScreen(
             matchId: widget.matchId,
@@ -132,6 +131,7 @@ class _ReadyToStartScreenState extends State<ReadyToStartScreen> {
             bowlerId: _selectedBowlerId,
           ),
         ),
+        (route) => route.settings.name == 'TournamentDetailsScreen' || route.isFirst,
       );
     } catch (e) {
       setState(() => _isLoading = false);

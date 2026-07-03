@@ -252,6 +252,8 @@ class MatchScorecardResponse(BaseModel):
     innings: List[InningsScorecardSchema]
 
 class MatchUpdate(BaseModel):
+    team1_id: Optional[UUID] = None
+    team2_id: Optional[UUID] = None
     venue: Optional[str] = None
     match_date: Optional[datetime] = None
     match_type: Optional[str] = None
@@ -268,6 +270,8 @@ class MatchUpdate(BaseModel):
     scorer_name: Optional[str] = None
     team1_squad_locked: Optional[bool] = None
     team2_squad_locked: Optional[bool] = None
+    tournament_stage: Optional[str] = None
+    bracket_code: Optional[str] = None
 
 
 class MatchActivityResponse(BaseModel):

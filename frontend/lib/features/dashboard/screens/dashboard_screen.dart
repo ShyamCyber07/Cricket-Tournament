@@ -516,7 +516,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     }).toList();
 
     final upcomingMatches = _matches.where((m) => m['tournament_id'] != null && m['status'] == 'scheduled').toList();
-    final completedMatches = _matches.where((m) => m['tournament_id'] != null && m['status'] == 'completed').toList();
+    final completedMatches = _matches.where((m) => m['tournament_id'] != null && (m['status'] == 'completed' || m['status'] == 'abandoned' || m['status'] == 'no_result')).toList();
 
     final String userAvatar = _currentUser['profile_picture'] ?? "🏏";
     final String? photoUrl = _currentUser['profile_photo_url'];
@@ -1015,9 +1015,33 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    "LIVE @ ${match['venue']} • Type: ${match['match_type']}",
-                    style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (match['status'] == 'ready' ? Colors.amber : (match['status'] == 'toss' || match['status'] == 'team_selection' ? Colors.orange : Colors.red)).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          match['status'] == 'ready' ? 'READY' : (match['status'] == 'toss' || match['status'] == 'team_selection' ? 'PRE-MATCH' : 'LIVE'),
+                          style: GoogleFonts.outfit(
+                            color: match['status'] == 'ready' ? Colors.amber : (match['status'] == 'toss' || match['status'] == 'team_selection' ? Colors.orange : Colors.red),
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          "@ ${match['venue']} • ${match['match_type']}",
+                          style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1281,9 +1305,28 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               "Match @ ${match['venue']}",
               style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
             ),
-            subtitle: Text(
-              "Type: ${match['match_type']} • Overs: ${match['over_limit']}",
-              style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
+            subtitle: Row(
+              children: [
+                Text(
+                  "Type: ${match['match_type']} • Overs: ${match['over_limit']} ",
+                  style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: (match['status'] == 'abandoned' ? Colors.grey : (match['status'] == 'no_result' ? Colors.redAccent : Colors.green)).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    (match['status']?.toString().toUpperCase() ?? 'COMPLETED'),
+                    style: GoogleFonts.outfit(
+                      color: match['status'] == 'abandoned' ? Colors.grey : (match['status'] == 'no_result' ? Colors.redAccent : Colors.green),
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
@@ -1298,7 +1341,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             onTap: () async {
               await Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => ScoringScreen(matchId: match['id'])),
+                MaterialPageRoute(builder: (context) => ScorecardScreen(matchId: match['id'])),
               );
               _fetchMatches();
             },

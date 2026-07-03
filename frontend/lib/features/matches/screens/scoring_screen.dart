@@ -472,6 +472,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
   List<dynamic> _bowlingSquad = [];
   bool _isPrompting = false;
   bool _isDialogActive = false;
+  bool _isInitialLoad = true;
 
   // Celebration overlay fields
   String? _celebrationText;
@@ -729,7 +730,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
       }
 
       // Check for missing players and prompt selection
-      await _checkAndPromptSelections();
+      if (_isInitialLoad) {
+        _isInitialLoad = false;
+        debugPrint("[ScoringScreen] Initial load/resume. Skipping automatic prompts.");
+      } else {
+        await _checkAndPromptSelections();
+      }
       _fetchMatchActivities();
     } catch (e) {
       setState(() => _isLoading = false);
@@ -2168,9 +2174,15 @@ class _ScoringScreenState extends State<ScoringScreen> {
                                                 padding: const EdgeInsets.all(12.0),
                                                 child: Column(
                                                   children: [
-                                                    _buildBatsmanRow(striker, isOnStrike: true),
+                                                    InkWell(
+                                                      onTap: _isViewerMode ? null : () => _promptNextBatsman(isStriker: true),
+                                                      child: _buildBatsmanRow(striker, isOnStrike: true),
+                                                    ),
                                                     const Divider(color: Colors.white12, height: 16),
-                                                    _buildBatsmanRow(nonStriker, isOnStrike: false),
+                                                    InkWell(
+                                                      onTap: _isViewerMode ? null : () => _promptNextBatsman(isStriker: false),
+                                                      child: _buildBatsmanRow(nonStriker, isOnStrike: false),
+                                                    ),
                                                   ],
                                                 ),
                                               ),
@@ -2181,48 +2193,52 @@ class _ScoringScreenState extends State<ScoringScreen> {
                                             flex: 2,
                                             child: Card(
                                               color: AppColors.surface,
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(12.0),
-                                                child: bowler == null
-                                                    ? Center(
-                                                        child: Text("Select\nBowler",
-                                                            style: GoogleFonts.outfit(
-                                                                fontSize: 12,
-                                                                fontWeight: FontWeight.bold,
-                                                                color: AppColors.textSecondary),
-                                                            textAlign: TextAlign.center))
-                                                    : Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                                        children: [
-                                                          Row(
-                                                            children: [
-                                                              const Icon(Icons.circle, color: AppColors.secondary, size: 8),
-                                                              const SizedBox(width: 6),
-                                                              Expanded(
-                                                                child: Text(
-                                                                  bowler['name'],
-                                                                  style: GoogleFonts.outfit(
-                                                                      fontWeight: FontWeight.bold, fontSize: 13),
-                                                                  overflow: TextOverflow.ellipsis,
+                                              child: InkWell(
+                                                onTap: _isViewerMode ? null : () => _promptNextBowler(),
+                                                borderRadius: BorderRadius.circular(12),
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(12.0),
+                                                  child: bowler == null
+                                                      ? Center(
+                                                          child: Text("Select\nBowler",
+                                                              style: GoogleFonts.outfit(
+                                                                  fontSize: 12,
+                                                                  fontWeight: FontWeight.bold,
+                                                                  color: AppColors.textSecondary),
+                                                              textAlign: TextAlign.center))
+                                                      : Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                          children: [
+                                                            Row(
+                                                              children: [
+                                                                const Icon(Icons.circle, color: AppColors.secondary, size: 8),
+                                                                const SizedBox(width: 6),
+                                                                Expanded(
+                                                                  child: Text(
+                                                                    bowler['name'],
+                                                                    style: GoogleFonts.outfit(
+                                                                        fontWeight: FontWeight.bold, fontSize: 13),
+                                                                    overflow: TextOverflow.ellipsis,
+                                                                  ),
                                                                 ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                          const SizedBox(height: 8),
-                                                          Text("Overs: ${bowler['overs']}",
-                                                              style: GoogleFonts.outfit(
-                                                                  fontSize: 12, color: AppColors.textSecondary)),
-                                                          Text("Mdns: ${bowler['maidens']}",
-                                                              style: GoogleFonts.outfit(
-                                                                  fontSize: 12, color: AppColors.textSecondary)),
-                                                          Text("Runs: ${bowler['runs']}",
-                                                              style: GoogleFonts.outfit(
-                                                                  fontSize: 12, color: AppColors.textSecondary)),
-                                                          Text("Wkts: ${bowler['wickets']}",
-                                                              style: GoogleFonts.outfit(
-                                                                  fontSize: 12, color: AppColors.textSecondary)),
-                                                        ],
-                                                      ),
+                                                              ],
+                                                            ),
+                                                            const SizedBox(height: 8),
+                                                            Text("Overs: ${bowler['overs']}",
+                                                                style: GoogleFonts.outfit(
+                                                                    fontSize: 12, color: AppColors.textSecondary)),
+                                                            Text("Mdns: ${bowler['maidens']}",
+                                                                style: GoogleFonts.outfit(
+                                                                    fontSize: 12, color: AppColors.textSecondary)),
+                                                            Text("Runs: ${bowler['runs']}",
+                                                                style: GoogleFonts.outfit(
+                                                                    fontSize: 12, color: AppColors.textSecondary)),
+                                                            Text("Wkts: ${bowler['wickets']}",
+                                                                style: GoogleFonts.outfit(
+                                                                    fontSize: 12, color: AppColors.textSecondary)),
+                                                          ],
+                                                        ),
+                                                ),
                                               ),
                                             ),
                                           )

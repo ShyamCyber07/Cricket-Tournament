@@ -43,6 +43,11 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
   String? _team2CaptainId;
   String? _team2KeeperId;
 
+  final Map<String, int> _team1BattingOrder = {};
+  final Map<String, int> _team1BowlingPref = {};
+  final Map<String, int> _team2BattingOrder = {};
+  final Map<String, int> _team2BowlingPref = {};
+
   @override
   void initState() {
     super.initState();
@@ -77,8 +82,12 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
         
         final matchRes = await _apiService.getLiveMatch(widget.matchId);
         final matchCreatorId = matchRes.data['created_by']?.toString();
+        final assignedScorerId = matchRes.data['assigned_scorer_id']?.toString();
+        final matchStatus = matchRes.data['status']?.toString() ?? 'scheduled';
+        final isScorer = _currentUserId == matchCreatorId || _currentUserId == assignedScorerId || _currentUserRole == 'admin';
+        final canScorerEdit = isScorer && (matchStatus != 'live' && matchStatus != 'innings1' && matchStatus != 'innings2' && matchStatus != 'completed');
         
-        if (!isCaptain && _currentUserRole != 'admin' && _currentUserId != matchCreatorId) {
+        if (!isCaptain && !canScorerEdit) {
           _isReadOnly = true;
         }
       }
@@ -95,6 +104,12 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
             _selectedTeam1.add(pId);
             if (p['is_captain'] == true) _team1CaptainId = pId;
             if (p['is_wicketkeeper'] == true) _team1KeeperId = pId;
+            if (p['batting_order'] != null) {
+              _team1BattingOrder[pId] = p['batting_order'] as int;
+            }
+            if (p['bowling_preference'] != null) {
+              _team1BowlingPref[pId] = p['bowling_preference'] as int;
+            }
           }
         } else {
           for (var p in _team1Players) {
@@ -103,6 +118,10 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
           if (_team1Players.isNotEmpty) {
             _team1CaptainId = _team1Players[0]['id']?.toString();
             _team1KeeperId = _team1Players[0]['id']?.toString();
+          }
+          int order = 1;
+          for (var p in _team1Players) {
+            _team1BattingOrder[p['id'].toString()] = order++;
           }
         }
 
@@ -113,6 +132,12 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
             _selectedTeam2.add(pId);
             if (p['is_captain'] == true) _team2CaptainId = pId;
             if (p['is_wicketkeeper'] == true) _team2KeeperId = pId;
+            if (p['batting_order'] != null) {
+              _team2BattingOrder[pId] = p['batting_order'] as int;
+            }
+            if (p['bowling_preference'] != null) {
+              _team2BowlingPref[pId] = p['bowling_preference'] as int;
+            }
           }
         } else {
           for (var p in _team2Players) {
@@ -122,6 +147,10 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
           if (availableTeam2.isNotEmpty) {
             _team2CaptainId = availableTeam2[0]['id']?.toString();
             _team2KeeperId = availableTeam2[0]['id']?.toString();
+          }
+          int order = 1;
+          for (var p in _team2Players) {
+            _team2BattingOrder[p['id'].toString()] = order++;
           }
         }
 
@@ -155,10 +184,15 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
 
       try {
         final squadList = selectionSet.map((pId) {
+          final bOrder = isTeam1 ? _team1BattingOrder[pId] : _team2BattingOrder[pId];
+          final bPref = isTeam1 ? _team1BowlingPref[pId] : _team2BowlingPref[pId];
           return {
             "player_id": pId,
             "is_captain": pId == captainId,
             "is_wicketkeeper": pId == keeperId,
+            "is_playing_xi": true,
+            "batting_order": bOrder,
+            "bowling_preference": bPref,
           };
         }).toList();
 
@@ -189,19 +223,29 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
 
       try {
         final squad1List = _selectedTeam1.map((pId) {
+          final bOrder = _team1BattingOrder[pId];
+          final bPref = _team1BowlingPref[pId];
           return {
             "player_id": pId,
             "is_captain": pId == _team1CaptainId,
             "is_wicketkeeper": pId == _team1KeeperId,
+            "is_playing_xi": true,
+            "batting_order": bOrder,
+            "bowling_preference": bPref,
           };
         }).toList();
         await _apiService.submitSquad(widget.matchId, widget.team1Id, squad1List);
 
         final squad2List = _selectedTeam2.map((pId) {
+          final bOrder = _team2BattingOrder[pId];
+          final bPref = _team2BowlingPref[pId];
           return {
             "player_id": pId,
             "is_captain": pId == _team2CaptainId,
             "is_wicketkeeper": pId == _team2KeeperId,
+            "is_playing_xi": true,
+            "batting_order": bOrder,
+            "bowling_preference": bPref,
           };
         }).toList();
         await _apiService.submitSquad(widget.matchId, widget.team2Id, squad2List);
@@ -229,6 +273,7 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
     Set<String> selectionSet,
     String? captainId,
     String? keeperId,
+    bool isTeam1,
     Function(String) onSelectToggle,
     Function(String?) onCaptainSelect,
     Function(String?) onKeeperSelect,
@@ -254,6 +299,8 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
         final player = players[index];
         final pId = player['id']?.toString() ?? '';
         final isSelected = selectionSet.contains(pId);
+        final battingOrderMap = isTeam1 ? _team1BattingOrder : _team2BattingOrder;
+        final bowlingPrefMap = isTeam1 ? _team1BowlingPref : _team2BowlingPref;
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
@@ -281,6 +328,60 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
                         (player['role'] ?? 'player').toString().toUpperCase(),
                         style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary),
                       ),
+                      if (isSelected) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Text("Batting: ", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                            const SizedBox(width: 4),
+                            DropdownButton<int>(
+                              value: battingOrderMap[pId],
+                              dropdownColor: AppColors.surface,
+                              underline: const SizedBox(),
+                              isDense: true,
+                              onChanged: _isReadOnly ? null : (val) {
+                                setState(() {
+                                  if (val != null) {
+                                    battingOrderMap[pId] = val;
+                                  }
+                                });
+                              },
+                              items: List.generate(11, (i) => i + 1).map((val) => DropdownMenuItem<int>(
+                                value: val,
+                                child: Text("#$val", style: GoogleFonts.outfit(fontSize: 12, color: Colors.white)),
+                              )).toList(),
+                            ),
+                            const SizedBox(width: 16),
+                            Text("Bowling Pref: ", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                            const SizedBox(width: 4),
+                            DropdownButton<int>(
+                              value: bowlingPrefMap[pId] ?? 0,
+                              dropdownColor: AppColors.surface,
+                              underline: const SizedBox(),
+                              isDense: true,
+                              onChanged: _isReadOnly ? null : (val) {
+                                setState(() {
+                                  if (val != null && val > 0) {
+                                    bowlingPrefMap[pId] = val;
+                                  } else {
+                                    bowlingPrefMap.remove(pId);
+                                  }
+                                });
+                              },
+                              items: [
+                                DropdownMenuItem<int>(
+                                  value: 0,
+                                  child: Text("None", style: GoogleFonts.outfit(fontSize: 12, color: Colors.white54)),
+                                ),
+                                ...List.generate(11, (i) => i + 1).map((val) => DropdownMenuItem<int>(
+                                  value: val,
+                                  child: Text("Pref $val", style: GoogleFonts.outfit(fontSize: 12, color: Colors.white)),
+                                )),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -378,15 +479,19 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
                       _selectedTeam1,
                       _team1CaptainId,
                       _team1KeeperId,
+                      true,
                       (pId) {
                         setState(() {
                           if (_selectedTeam1.contains(pId)) {
                             _selectedTeam1.remove(pId);
+                            _team1BattingOrder.remove(pId);
+                            _team1BowlingPref.remove(pId);
                           } else {
                             _selectedTeam1.add(pId);
                             _selectedTeam2.remove(pId);
                             if (_team2CaptainId == pId) _team2CaptainId = null;
                             if (_team2KeeperId == pId) _team2KeeperId = null;
+                            _team1BattingOrder[pId] = _selectedTeam1.length;
                           }
                         });
                       },
@@ -414,15 +519,19 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
                       _selectedTeam2,
                       _team2CaptainId,
                       _team2KeeperId,
+                      false,
                       (pId) {
                         setState(() {
                           if (_selectedTeam2.contains(pId)) {
                             _selectedTeam2.remove(pId);
+                            _team2BattingOrder.remove(pId);
+                            _team2BowlingPref.remove(pId);
                           } else {
                             _selectedTeam2.add(pId);
                             _selectedTeam1.remove(pId);
                             if (_team1CaptainId == pId) _team1CaptainId = null;
                             if (_team1KeeperId == pId) _team1KeeperId = null;
+                            _team2BattingOrder[pId] = _selectedTeam2.length;
                           }
                         });
                       },
