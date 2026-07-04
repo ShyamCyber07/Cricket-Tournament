@@ -51,6 +51,8 @@ def get_node_center_by_text(text_query, index=0, retries=5, exact=False):
             root = ET.fromstring(xml_content)
             nodes = []
             for node in root.iter('node'):
+                if node.get('class') == 'android.widget.EditText':
+                    continue
                 content_desc = node.get('content-desc', '').strip().lower()
                 text_val = node.get('text', '').strip().lower()
                 clean_query = text_query.strip().lower()
@@ -58,6 +60,8 @@ def get_node_center_by_text(text_query, index=0, retries=5, exact=False):
                     nodes.append(node)
             if not nodes and not exact:
                 for node in root.iter('node'):
+                    if node.get('class') == 'android.widget.EditText':
+                        continue
                     content_desc = node.get('content-desc', '').lower()
                     text_val = node.get('text', '').lower()
                     if text_query.lower() in content_desc or text_query.lower() in text_val:
@@ -292,9 +296,9 @@ def main():
     login("captain@cricup.com", "Password123")
 
     # Open Teams screen
-    print("Navigating to Teams...")
-    if not tap_node_by_text("Teams"):
-        raise Exception("Failed to navigate to Teams")
+    print("Navigating to Team Management...")
+    if not tap_node_by_text("Team Management"):
+        raise Exception("Failed to navigate to Team Management")
     time.sleep(3.0)
 
     # Create Team
@@ -315,16 +319,16 @@ def main():
     # --- STEP 2: Log in as Player, explore teams, send join request, check pending ---
     login("player@cricup.com", "Password123")
 
-    print("Navigating to Teams...")
-    if not tap_node_by_text("Teams"):
-        raise Exception("Failed to navigate to Teams")
+    print("Navigating to Team Management...")
+    if not tap_node_by_text("Team Management"):
+        raise Exception("Failed to navigate to Team Management")
     time.sleep(3.0)
 
     print("Switching to Explore Teams tab...")
     switched = False
     for attempt in range(5):
         if tap_node_by_text("Explore Teams", wait_secs=2):
-            if check_screen_text("Tap to join this team") or check_screen_text("No new teams"):
+            if check_screen_text("Tap to join this team") or check_screen_text("No new teams") or check_screen_text("No teams found"):
                 switched = True
                 break
         print("Warning: Tab switch to Explore Teams not verified yet. Retrying...")
@@ -332,6 +336,11 @@ def main():
     if not switched:
         raise Exception("Failed to switch to Explore Teams tab")
     time.sleep(1.0)
+
+    print("Searching for Test Automation Team...")
+    if not enter_text_in_field(0, "Test Automation Team"):
+        raise Exception("Failed to enter search query")
+    time.sleep(3.0)
 
     print("Tapping Join on Test Automation Team...")
     if not tap_join_for_team("Test Automation Team"):
@@ -374,15 +383,21 @@ def main():
     # --- STEP 3: Log in as Captain, approve join request, invite user, revoke invitation ---
     login("captain@cricup.com", "Password123")
 
-    print("Navigating to Teams...")
-    if not tap_node_by_text("Teams"):
-        raise Exception("Failed to navigate to Teams")
+    print("Navigating to Team Management...")
+    if not tap_node_by_text("Team Management"):
+        raise Exception("Failed to navigate to Team Management")
     time.sleep(3.0)
 
     # Tap team to view details
     print("Viewing Test Automation Team details...")
     if not tap_node_by_text("Test Automation Team"):
         raise Exception("Failed to tap Test Automation Team")
+    time.sleep(3.0)
+
+    # Switch to Members tab
+    print("Switching to Members tab...")
+    if not tap_node_by_text("Members"):
+        raise Exception("Failed to tap Members tab")
     time.sleep(3.0)
 
     # Verify pending join request is listed
@@ -403,8 +418,8 @@ def main():
     time.sleep(2.0)
     if not enter_text_in_field(0, "testuser@cricup.com"):
         raise Exception("Failed to enter email in Add Member dialog")
-    if not tap_node_by_text("Add", exact=True):
-        raise Exception("Failed to tap Add in Add Member dialog")
+    if not tap_node_by_text("SEND INVITATION", exact=False):
+        raise Exception("Failed to tap SEND INVITATION in Add Member dialog")
     time.sleep(4.0)
 
     # Verify invitation is under Sent Invitations section
@@ -425,9 +440,9 @@ def main():
     # --- STEP 4: Log in as Player, verify team is ACTIVE ---
     login("player@cricup.com", "Password123")
 
-    print("Navigating to Teams...")
-    if not tap_node_by_text("Teams"):
-        raise Exception("Failed to navigate to Teams")
+    print("Navigating to Team Management...")
+    if not tap_node_by_text("Team Management"):
+        raise Exception("Failed to navigate to Team Management")
     time.sleep(3.0)
 
     # Verify ACTIVE badge
@@ -440,7 +455,7 @@ def main():
     if not tap_node_by_text("Test Automation Team"):
         raise Exception("Failed to tap Test Automation Team")
     time.sleep(3.0)
-    if not check_screen_text("Members") or not check_screen_text("Matches"):
+    if not check_screen_text("Members") or not check_screen_text("Squad"):
         raise Exception("Team details did not load successfully!")
     print("Verified Team details page loaded successfully!")
 

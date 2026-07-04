@@ -2,17 +2,18 @@ import subprocess
 import os
 
 ADB = os.path.expandvars(r"%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe")
-DEVICE = "f35c3099"
+DEVICE_ID = "f35c3099"
+ARTIFACTS_DIR = r"C:\Users\praja\.gemini\antigravity-ide\brain\fa542cae-bc56-4ca4-934a-ad5207d414e4"
 
 def run_adb(args):
-    cmd = [ADB, "-s", DEVICE] + args
+    cmd = [ADB, "-s", DEVICE_ID] + args
     res = subprocess.run(cmd, capture_output=True)
     return res.stdout.decode('utf-8', errors='ignore')
 
-def main():
-    run_adb(["shell", "screencap", "-p", "/sdcard/current_state.png"])
-    run_adb(["pull", "/sdcard/current_state.png", "scratch/current_state.png"])
-    print("Screenshot captured to scratch/current_state.png")
+def capture_screen(filename):
+    dest = os.path.join(ARTIFACTS_DIR, filename)
+    run_adb(["shell", "screencap", "-p", "/sdcard/screen.png"])
+    run_adb(["pull", "/sdcard/screen.png", dest])
+    print(f"Captured: {filename} -> {dest}")
 
-if __name__ == "__main__":
-    main()
+capture_screen("current_screen.png")

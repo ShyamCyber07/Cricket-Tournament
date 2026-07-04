@@ -8,7 +8,7 @@ import random
 
 ADB = os.path.expandvars(r"%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe")
 DEVICE_ID = "f35c3099"
-ARTIFACTS_DIR = r"C:\Users\praja\.gemini\antigravity-ide\brain\570c5832-ec96-4900-a8dd-d495effc011c"
+ARTIFACTS_DIR = r"C:\Users\praja\.gemini\antigravity-ide\brain\900358b5-5af2-41ba-8984-6794252a881e"
 
 # Generate a unique suffix for the run to prevent list search collisions
 SUFFIX = str(random.randint(100, 999))
@@ -275,14 +275,14 @@ def ensure_on_teams_screen():
         if not ensure_on_dashboard():
             continue
         scroll_down()
-        if tap_node_by_text("Teams", exact=True, wait_secs=3):
+        if tap_node_by_text("Team Management", exact=True, wait_secs=3):
             time.sleep(1.0)
             if is_screen_active("Team Management"):
                 print("App is on Teams screen!")
                 wait_for_loading_to_complete()
                 return True
         scroll_down()
-        if tap_node_by_text("Teams", exact=True, wait_secs=3):
+        if tap_node_by_text("Team Management", exact=True, wait_secs=3):
             time.sleep(1.0)
             if is_screen_active("Team Management"):
                 print("App is on Teams screen!")
@@ -293,55 +293,64 @@ def ensure_on_teams_screen():
 def ensure_on_tournaments_screen():
     print("Ensuring app is on Tournaments screen...")
     if is_screen_active("Tournaments") and not is_screen_active("Create Tournament"):
-        print("App is on Tournaments screen!")
+        print("App is on Tournaments screen! Selecting My Tournaments tab...")
+        run_adb(["shell", "input", "tap", "810", "303"])
+        time.sleep(2.0)
         wait_for_loading_to_complete()
         return True
     for attempt in range(3):
         if not ensure_on_dashboard():
             continue
         scroll_down()
-        if tap_node_by_text("Tournaments", exact=True, wait_secs=3):
+        if tap_node_by_text("Tournament Management", exact=True, wait_secs=3):
             time.sleep(1.0)
             if is_screen_active("Tournaments") and not is_screen_active("Create Tournament"):
-                print("App is on Tournaments screen!")
+                print("App is on Tournaments screen! Selecting My Tournaments tab...")
+                run_adb(["shell", "input", "tap", "810", "303"])
+                time.sleep(2.0)
                 wait_for_loading_to_complete()
                 return True
         scroll_down()
-        if tap_node_by_text("Tournaments", exact=True, wait_secs=3):
+        if tap_node_by_text("Tournament Management", exact=True, wait_secs=3):
             time.sleep(1.0)
             if is_screen_active("Tournaments") and not is_screen_active("Create Tournament"):
-                print("App is on Tournaments screen!")
+                print("App is on Tournaments screen! Selecting My Tournaments tab...")
+                run_adb(["shell", "input", "tap", "810", "303"])
+                time.sleep(2.0)
                 wait_for_loading_to_complete()
                 return True
     raise Exception("CRITICAL: Failed to navigate to Tournaments screen!")
 
-def get_clickable_node_above_text(text_query):
-    xml_content = get_fresh_xml(retries=3)
-    if not xml_content:
-        return None
-    try:
-        root = ET.fromstring(xml_content)
-        target_node = None
-        for node in root.iter('node'):
-            content_desc = node.get('content-desc', '').lower()
-            text_val = node.get('text', '').lower()
-            if text_query.lower() in content_desc or text_query.lower() in text_val:
-                target_node = node
-                break
-        if target_node is not None:
-            parent_map = {c: p for p in root.iter() for c in p}
-            parent = parent_map.get(target_node)
-            if parent is not None:
-                idx = list(parent).index(target_node)
-                if idx > 0:
-                    prev_sibling = parent[idx-1]
-                    bounds = prev_sibling.get('bounds')
-                    m = re.findall(r'\d+', bounds)
-                    if len(m) == 4:
-                        x1, y1, x2, y2 = map(int, m)
-                        return (x1 + x2) // 2, (y1 + y2) // 2
-    except Exception as e:
-        print("Error in get_clickable_node_above_text:", e)
+def get_clickable_node_above_text(text_query, retries=5):
+    for attempt in range(retries):
+        xml_content = get_fresh_xml(retries=2)
+        if not xml_content:
+            time.sleep(1.0)
+            continue
+        try:
+            root = ET.fromstring(xml_content)
+            target_node = None
+            for node in root.iter('node'):
+                content_desc = node.get('content-desc', '').lower()
+                text_val = node.get('text', '').lower()
+                if text_query.lower() in content_desc or text_query.lower() in text_val:
+                    target_node = node
+                    break
+            if target_node is not None:
+                parent_map = {c: p for p in root.iter() for c in p}
+                parent = parent_map.get(target_node)
+                if parent is not None:
+                    idx = list(parent).index(target_node)
+                    if idx > 0:
+                        prev_sibling = parent[idx-1]
+                        bounds = prev_sibling.get('bounds')
+                        m = re.findall(r'\d+', bounds)
+                        if len(m) == 4:
+                            x1, y1, x2, y2 = map(int, m)
+                            return (x1 + x2) // 2, (y1 + y2) // 2
+        except Exception as e:
+            print("Error in get_clickable_node_above_text:", e)
+        time.sleep(1.5)
     return None
 
 def tap_first_photo_in_picker():
@@ -662,6 +671,18 @@ def main():
     print("\n--- STEP 2c: Registering Teams and Generating Fixtures ---")
     tap_node_with_scroll_or_raise(TOUR_NAME, exact=False)
     time.sleep(3)
+    wait_for_loading_to_complete()
+    
+    # Publish tournament
+    print("Publishing tournament...")
+    tap_node_or_raise("Publish", exact=True)
+    time.sleep(2.0)
+    wait_for_loading_to_complete()
+    
+    # Open Registration
+    print("Opening registration...")
+    tap_node_or_raise("Open Registration", exact=True)
+    time.sleep(2.0)
     wait_for_loading_to_complete()
     
     # Tap Teams tab

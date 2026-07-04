@@ -1016,6 +1016,18 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     );
   }
 
+  Widget _buildGlassCard({required Widget child, EdgeInsets? padding, double? width}) {
+    return Container(
+      width: width,
+      padding: padding ?? const EdgeInsets.all(16),
+      decoration: AppColors.glassDecoration(
+        borderRadius: BorderRadius.circular(24),
+        borderColor: Colors.white.withOpacity(0.08),
+      ),
+      child: child,
+    );
+  }
+
   Widget _buildStatItemMini(String label, String value) {
     return _buildStatCard(label, value);
   }
@@ -1078,7 +1090,6 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
   Future<void> _addMember() async {
     if (!_formKey.currentState!.validate()) return;
     final email = _addMemberController.text.trim();
-    Navigator.pop(context); // close dialog
     setState(() => _isLoading = true);
 
     try {

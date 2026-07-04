@@ -23,6 +23,7 @@ import 'package:cricket_scorer/core/app_config.dart';
 import 'package:cricket_scorer/features/dashboard/screens/notifications_screen.dart';
 import 'package:cricket_scorer/features/dashboard/screens/team_invitations_screen.dart';
 import 'package:cricket_scorer/core/event_bus.dart';
+import 'package:cricket_scorer/features/dashboard/screens/statistics_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -1163,9 +1164,12 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 icon: Icons.insights_outlined,
                 title: "Statistics",
                 color: Colors.blueAccent,
-                onTap: null, // Disabled
-                isPlaceholder: true,
-                placeholderText: "Soon",
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const StatisticsScreen()),
+                  );
+                },
               ),
             ),
           ],

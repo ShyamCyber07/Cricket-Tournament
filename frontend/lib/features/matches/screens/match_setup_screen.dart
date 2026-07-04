@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
-import 'package:cricket_scorer/features/dashboard/screens/team_management_screen.dart';
+import 'package:cricket_scorer/features/dashboard/screens/my_teams_screen.dart';
 import 'match_center_screen.dart';
 
 class MatchSetupScreen extends StatefulWidget {
@@ -179,7 +179,7 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
                         onPressed: () async {
                           await Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const TeamManagementScreen()),
+                            MaterialPageRoute(builder: (context) => const MyTeamsScreen()),
                           );
                           _fetchTeams();
                         },

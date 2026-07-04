@@ -93,6 +93,14 @@ def create_team(
         status="active"
     )
     db.add(creator_member)
+
+    # Sync creator's Player profile to team.players
+    creator_player = db.query(Player).filter(Player.user_id == current_user.id).first()
+    if creator_player:
+        assigned = db.query(TeamPlayer).filter(TeamPlayer.player_id == creator_player.id).first()
+        if not assigned:
+            db_team.players.append(creator_player)
+
     log_team_activity(
         db=db,
         team_id=db_team.id,
@@ -166,6 +174,14 @@ def accept_invitation(
         raise HTTPException(status_code=404, detail="Invitation not found")
         
     member.status = "active"
+
+    # Sync to Player if linked
+    player = db.query(Player).filter(Player.user_id == current_user.id).first()
+    if player:
+        assigned = db.query(TeamPlayer).filter(TeamPlayer.player_id == player.id).first()
+        if not assigned:
+            team.players.append(player)
+            db.add(team)
 
     invitation = db.query(TeamInvitation).filter(
         TeamInvitation.team_id == id,
@@ -296,18 +312,13 @@ def list_teams(
     if current_user.role == "admin":
         return db.query(Team).all()
         
-    # Enforce strict data isolation for unit test users to keep tests passing
-    if current_user.email.endswith("@example.com"):
-        active_member_team_ids = db.query(TeamMember.team_id).filter(
-            TeamMember.user_id == current_user.id,
-            TeamMember.status == "active"
-        )
-        return db.query(Team).filter(
-            (Team.created_by == current_user.id) | (Team.id.in_(active_member_team_ids))
-        ).all()
-        
-    # For real users (production/E2E), return all teams so they can discover/join them
-    return db.query(Team).all()
+    member_team_ids = db.query(TeamMember.team_id).filter(
+        TeamMember.user_id == current_user.id,
+        TeamMember.status.in_(["active", "invited", "pending"])
+    )
+    return db.query(Team).filter(
+        (Team.created_by == current_user.id) | (Team.id.in_(member_team_ids))
+    ).all()
 
 @router.get("/{id}", response_model=TeamResponse)
 def get_team(id: UUID, db: Session = Depends(get_db)):
@@ -1106,6 +1117,13 @@ def remove_member_from_team(
                 description=f"{target_name} was removed from the team by {current_user.full_name or current_user.username}"
             )
 
+    # Remove corresponding Player from team.players if linked
+    target_player = db.query(Player).filter(Player.user_id == user_id).first()
+    if target_player:
+        if target_player in team.players:
+            team.players.remove(target_player)
+            db.add(team)
+
     db.delete(member)
     db.commit()
     return None
@@ -1206,6 +1224,14 @@ def approve_join_request(
 
     member.status = "active"
     member.invited_by_id = current_user.id
+
+    # Sync approved member's Player profile to team.players
+    player = db.query(Player).filter(Player.user_id == req.user_id).first()
+    if player:
+        assigned = db.query(TeamPlayer).filter(TeamPlayer.player_id == player.id).first()
+        if not assigned:
+            team.players.append(player)
+            db.add(team)
 
     req_log = db.query(JoinRequest).filter(
         JoinRequest.team_id == id,
@@ -1777,11 +1803,8 @@ def join_team_by_code(
     # Sync to Player if linked
     player = db.query(Player).filter(Player.user_id == current_user.id).first()
     if player:
-        existing_link = db.query(Player).filter(
-            Player.id == player.id,
-            Player.teams.any(id=team.id)
-        ).first()
-        if not existing_link:
+        assigned = db.query(TeamPlayer).filter(TeamPlayer.player_id == player.id).first()
+        if not assigned:
             team.players.append(player)
             db.add(team)
             

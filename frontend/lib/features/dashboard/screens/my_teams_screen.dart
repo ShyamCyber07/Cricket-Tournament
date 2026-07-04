@@ -78,24 +78,11 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
     setState(() => _isLoading = true);
     try {
       final myRes = await _apiService.getMyTeams();
-      final allRes = await _apiService.getTeams();
-
       final List<dynamic> myTeamsData = myRes.data ?? [];
-      final List<dynamic> allTeamsData = allRes.data ?? [];
-
-      // Extract raw team IDs from my joined list to filter explore list
-      final myTeamIds = myTeamsData.map((m) => m['team']['id'].toString()).toSet();
-
-      final List<dynamic> exploreList = [];
-      for (final t in allTeamsData) {
-        if (!myTeamIds.contains(t['id'].toString())) {
-          exploreList.add(t);
-        }
-      }
 
       setState(() {
         _myTeams = myTeamsData;
-        _exploreTeams = exploreList;
+        _exploreTeams = []; // Starts empty until searched
         _isLoading = false;
       });
     } catch (e) {
@@ -513,11 +500,6 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
   }
 
   Widget _buildExploreTeamsList() {
-    final filteredExploreTeams = _exploreTeams.where((t) {
-      final name = (t['name'] ?? "").toString().toLowerCase();
-      return name.contains(_exploreSearchQuery.toLowerCase());
-    }).toList();
-
     return Column(
       children: [
         Padding(
@@ -535,6 +517,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
                   _exploreSearchController.clear();
                   setState(() {
                     _exploreSearchQuery = "";
+                    _exploreTeams = [];
                   });
                 },
               ),
@@ -549,15 +532,41 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
                 borderSide: const BorderSide(color: AppColors.primary),
               ),
             ),
-            onChanged: (val) {
+            onChanged: (val) async {
+              final query = val.trim();
               setState(() {
-                _exploreSearchQuery = val.trim();
+                _exploreSearchQuery = query;
               });
+              if (query.length >= 2) {
+                try {
+                  final res = await _apiService.searchTeams(query);
+                  final List<dynamic> searchResults = res.data ?? [];
+                  
+                  // Extract raw team IDs from joined list to filter search results
+                  final myTeamIds = _myTeams.map((m) => m['team']['id'].toString()).toSet();
+                  
+                  final List<dynamic> exploreList = [];
+                  for (final t in searchResults) {
+                    if (!myTeamIds.contains(t['id'].toString())) {
+                      exploreList.add(t);
+                    }
+                  }
+                  setState(() {
+                    _exploreTeams = exploreList;
+                  });
+                } catch (e) {
+                  debugPrint("Error searching teams: $e");
+                }
+              } else {
+                setState(() {
+                  _exploreTeams = [];
+                });
+              }
             },
           ),
         ),
         Expanded(
-          child: filteredExploreTeams.isEmpty
+          child: _exploreTeams.isEmpty
               ? Center(
                   child: Text(
                     "No teams found matching your search.",
@@ -565,10 +574,10 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
                   ),
                 )
               : ListView.builder(
-                  itemCount: filteredExploreTeams.length,
+                  itemCount: _exploreTeams.length,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemBuilder: (context, index) {
-                    final team = filteredExploreTeams[index];
+                    final team = _exploreTeams[index];
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ListTile(

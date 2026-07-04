@@ -1980,6 +1980,12 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                   "Registered Teams (${pointsTable.length} / $limit)",
                   style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
+                if (isOrganizer && isRegOpen)
+                  TextButton.icon(
+                    onPressed: _showAddTeamDialog,
+                    icon: const Icon(Icons.add, size: 16, color: AppColors.primary),
+                    label: Text("Register", style: GoogleFonts.outfit(color: AppColors.primary, fontSize: 13)),
+                  ),
               ],
             ),
             const SizedBox(height: 12),
