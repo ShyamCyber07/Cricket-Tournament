@@ -29,6 +29,8 @@ from app.schemas.tournament import (
 router = APIRouter()
 
 def check_user_tournament_registration_limit(db: Session, tournament_id: UUID, user_id: UUID, current_team_id: UUID):
+    if not user_id:
+        return
     import sys
     if "pytest" in sys.modules:
         return
@@ -1568,6 +1570,14 @@ def join_request(
     if tour.status not in ["registration_open", "registration"]:
         raise HTTPException(status_code=400, detail="Tournament registration is not open")
         
+    # Check if already registered
+    exists_registered = db.query(TournamentTeam).filter(
+        TournamentTeam.tournament_id == id,
+        TournamentTeam.team_id == team_id
+    ).first()
+    if exists_registered:
+        raise HTTPException(status_code=400, detail="Team already registered in this tournament")
+        
     # Check that current user is the captain of the team
     membership = db.query(TeamMember).filter(
         TeamMember.team_id == team_id,
@@ -1710,6 +1720,14 @@ def approve_request(
     if registered_count >= tour.num_teams:
         raise HTTPException(status_code=400, detail="Tournament team limit has been reached")
         
+    # Check if team is already registered
+    exists_registered = db.query(TournamentTeam).filter(
+        TournamentTeam.tournament_id == id,
+        TournamentTeam.team_id == req.team_id
+    ).first()
+    if exists_registered:
+        raise HTTPException(status_code=400, detail="Team already registered in this tournament")
+
     req.status = "approved"
     db.add(req)
     

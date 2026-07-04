@@ -625,57 +625,134 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
     final pointsTable = _dashboardData['points_table'] as List<dynamic>? ?? [];
     final registeredIds = pointsTable.map((e) => e['team_id'].toString()).toSet();
 
-    final availableTeams = _allTeams.where((t) => !registeredIds.contains(t['id'].toString())).toList();
-
-    if (availableTeams.isEmpty) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: AppColors.surface,
-          title: Text("No Available Teams", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-          content: Text("All teams in the system are registered or no teams exist.", style: GoogleFonts.outfit()),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("OK"),
-            )
-          ],
-        ),
-      );
-      return;
-    }
+    String searchQuery = "";
 
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          title: Text("Register Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: availableTeams.length,
-              itemBuilder: (context, index) {
-                final team = availableTeams[index];
-                return ListTile(
-                  title: Text(team['name'] ?? '', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                  subtitle: Text("Captain: ${team['captain_name'] ?? 'None'}", style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
-                  trailing: const Icon(Icons.add_circle_outline, color: AppColors.primary),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _registerTeam(team['id']);
-                  },
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final filteredTeams = _allTeams.where((t) {
+              final name = (t['name'] ?? '').toString().toLowerCase();
+              return name.contains(searchQuery.toLowerCase());
+            }).toList();
+
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              title: Text("Register Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      style: GoogleFonts.outfit(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: "Search teams...",
+                        hintStyle: GoogleFonts.outfit(color: Colors.white38),
+                        prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.03),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppColors.primary),
+                        ),
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          searchQuery = val.trim();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.4,
+                      ),
+                      child: filteredTeams.isEmpty
+                          ? Center(
+                              child: Text(
+                                "No teams found",
+                                style: GoogleFonts.outfit(color: AppColors.textSecondary),
+                              ),
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: filteredTeams.length,
+                              itemBuilder: (context, index) {
+                                final team = filteredTeams[index];
+                                final teamId = team['id'].toString();
+                                final isRegistered = registeredIds.contains(teamId);
+                                
+                                final players = team['players'] as List<dynamic>? ?? [];
+                                final captainId = team['captain_id']?.toString();
+                                final captain = players.firstWhere(
+                                  (p) => p['id'].toString() == captainId,
+                                  orElse: () => null,
+                                );
+                                final captainName = captain != null ? (captain['name'] ?? 'Not Set') : 'Not Set';
+                                final logoUrl = team['logo_url']?.toString();
+
+                                return ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                                  leading: _buildTeamLogo(logoUrl, team['name'] ?? ''),
+                                  title: Text(
+                                    team['name'] ?? '',
+                                    style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.bold,
+                                      color: isRegistered ? AppColors.textSecondary : AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    "Captain: $captainName\n${players.length} Players",
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  trailing: isRegistered
+                                      ? Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary.withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: AppColors.primary, width: 1),
+                                          ),
+                                          child: Text(
+                                            "Registered",
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 10,
+                                              color: AppColors.primary,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        )
+                                      : const Icon(Icons.add_circle_outline, color: AppColors.primary),
+                                  onTap: isRegistered
+                                      ? null
+                                      : () {
+                                          Navigator.pop(context);
+                                          _registerTeam(teamId);
+                                        },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+                ),
+              ],
+            );
+          },
         );
       },
     );

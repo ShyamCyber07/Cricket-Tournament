@@ -623,7 +623,12 @@ def get_user_photo(user_id: UUID, db: Session = Depends(get_db)):
         elif ext == "webp":
             media_type = "image/webp"
             
-    return Response(content=user.profile_photo_bytes, media_type=media_type)
+    content_bytes = user.profile_photo_bytes
+    if isinstance(content_bytes, memoryview):
+        content_bytes = content_bytes.tobytes()
+    elif isinstance(content_bytes, str):
+        content_bytes = content_bytes.encode('utf-8')
+    return Response(content=content_bytes, media_type=media_type)
 
 
 @router.get("/search", response_model=List[PublicProfileResponse])

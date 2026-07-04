@@ -26,7 +26,6 @@ class ProfileResponse(BaseModel):
     player_type: Optional[str] = None
     dominant_hand: Optional[str] = None
     default_jersey_number: Optional[int] = None
-    profile_photo_bytes: Optional[bytes] = None
     public_id: Optional[str] = None
     privacy_settings: str = "public"
     current_team: Optional[str] = None
