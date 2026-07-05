@@ -5,6 +5,7 @@ import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
 import 'package:cricket_scorer/core/app_config.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class TeamEditScreen extends StatefulWidget {
   final String teamId;
@@ -82,6 +83,22 @@ class _TeamEditScreenState extends State<TeamEditScreen> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
+    if (source == ImageSource.camera) {
+      final status = await Permission.camera.request();
+      if (!status.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Camera permission is required to take a photo."),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
     try {
       final XFile? pickedFile = await _picker.pickImage(
         source: source,

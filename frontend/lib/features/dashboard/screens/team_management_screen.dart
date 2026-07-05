@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:cricket_scorer/core/event_bus.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class TeamManagementScreen extends StatefulWidget {
   const TeamManagementScreen({super.key});
@@ -998,6 +999,34 @@ class _QrScanJoinBottomSheetState extends State<QrScanJoinBottomSheet> {
   final TextEditingController _codeController = TextEditingController();
   bool _isProcessing = false;
   String? _errorMessage;
+  bool _isCameraPermissionGranted = false;
+  bool _checkingPermission = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAndRequestPermission();
+  }
+
+  Future<void> _checkAndRequestPermission() async {
+    final status = await Permission.camera.status;
+    if (status.isGranted) {
+      if (mounted) {
+        setState(() {
+          _isCameraPermissionGranted = true;
+          _checkingPermission = false;
+        });
+      }
+    } else {
+      final requestStatus = await Permission.camera.request();
+      if (mounted) {
+        setState(() {
+          _isCameraPermissionGranted = requestStatus.isGranted;
+          _checkingPermission = false;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -1111,47 +1140,74 @@ class _QrScanJoinBottomSheetState extends State<QrScanJoinBottomSheet> {
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: Stack(
-                children: [
-                  MobileScanner(
-                    controller: _controller,
-                    onDetect: (capture) {
-                      final List<Barcode> barcodes = capture.barcodes;
-                      if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
-                        final String code = barcodes.first.rawValue!;
-                        _processScanData(code);
-                      }
-                    },
-                  ),
-                  // Scanner Overlay (visual guide)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.black54, width: 40),
-                      ),
-                      child: Center(
-                        child: Container(
-                          width: 200,
-                          height: 200,
-                          decoration: BoxDecoration(
-                            border: Border.all(color: AppColors.primary, width: 2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (_isProcessing)
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.black45,
-                        child: const Center(
-                          child: CircularProgressIndicator(color: AppColors.primary),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+              child: _checkingPermission
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
+                    )
+                  : (!_isCameraPermissionGranted
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.camera_alt_outlined, color: Colors.white30, size: 64),
+                            const SizedBox(height: 16),
+                            Text(
+                              "Camera permission is required to scan QR codes.",
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.outfit(color: Colors.white70),
+                            ),
+                            const SizedBox(height: 20),
+                            ElevatedButton(
+                              onPressed: _checkAndRequestPermission,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.black,
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              ),
+                              child: Text("Grant Permission", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        )
+                      : Stack(
+                          children: [
+                            MobileScanner(
+                              controller: _controller,
+                              onDetect: (capture) {
+                                final List<Barcode> barcodes = capture.barcodes;
+                                if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
+                                  final String code = barcodes.first.rawValue!;
+                                  _processScanData(code);
+                                }
+                              },
+                            ),
+                            // Scanner Overlay (visual guide)
+                            Positioned.fill(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.black54, width: 40),
+                                ),
+                                child: Center(
+                                  child: Container(
+                                    width: 200,
+                                    height: 200,
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: AppColors.primary, width: 2),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (_isProcessing)
+                              Positioned.fill(
+                                child: Container(
+                                  color: Colors.black45,
+                                  child: const Center(
+                                    child: CircularProgressIndicator(color: AppColors.primary),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        )),
             ),
           ),
           Padding(
