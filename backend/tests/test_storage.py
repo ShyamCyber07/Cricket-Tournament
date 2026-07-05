@@ -11,8 +11,9 @@ def test_upload_image_local_fallback(tmp_path):
         test_bytes = b"fake-image-bytes"
         filename = "test_fallback.jpg"
         
-        # Patch the local save folder to be a temp dir
-        with patch("os.makedirs") as mock_makedirs, \
+        # Patch requests.post to fail and trigger local fallback
+        with patch("requests.post", side_effect=Exception("Network error")), \
+             patch("os.makedirs") as mock_makedirs, \
              patch("builtins.open", mock_open()) as mock_file:
             url = storage.upload_image(test_bytes, filename)
             
@@ -37,13 +38,29 @@ def test_upload_image_cloudinary_success():
             assert kwargs["public_id"] == "test_cloud"
             assert kwargs["resource_type"] == "image"
 
+def test_upload_image_catbox_success():
+    # If CLOUDINARY_URL is empty, it should try catbox.moe and succeed
+    with patch.object(settings, "CLOUDINARY_URL", ""):
+        test_bytes = b"fake-image-bytes"
+        filename = "test_catbox.jpg"
+        
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "https://files.catbox.moe/abcdef.jpg\n"
+        
+        with patch("requests.post", return_value=mock_response) as mock_post:
+            url = storage.upload_image(test_bytes, filename)
+            assert url == "https://files.catbox.moe/abcdef.jpg"
+            mock_post.assert_called_once()
+
 def test_upload_image_cloudinary_failure_fallback():
-    # If Cloudinary fails, it should log the error and fall back to local storage
+    # If Cloudinary fails, it should log the error and fall back to local storage (after failing catbox.moe)
     with patch.object(settings, "CLOUDINARY_URL", "cloudinary://api_key:api_secret@cloud_name"):
         test_bytes = b"fake-image-bytes"
         filename = "test_failed_cloud.jpg"
         
         with patch("cloudinary.uploader.upload", side_effect=Exception("Cloudinary error")), \
+             patch("requests.post", side_effect=Exception("Catbox error")), \
              patch("os.makedirs") as mock_makedirs, \
              patch("builtins.open", mock_open()):
             url = storage.upload_image(test_bytes, filename)

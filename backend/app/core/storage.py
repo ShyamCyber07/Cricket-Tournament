@@ -43,7 +43,23 @@ def upload_image(file_bytes: bytes, filename: str, folder: str = "cricup") -> st
             logger.error(f"Cloudinary upload failed: {e}. Falling back to local storage.", exc_info=True)
             # Fall through to local storage if Cloudinary fails
             
-    # Local Storage Fallback
+    # Try uploading to catbox.moe as a persistent cloud fallback
+    try:
+        import requests
+        res = requests.post(
+            "https://catbox.moe/user/api.php",
+            data={"reqtype": "fileupload"},
+            files={"fileToUpload": (filename, file_bytes)},
+            timeout=10
+        )
+        if res.status_code == 200 and res.text.strip().startswith("https://files.catbox.moe"):
+            url = res.text.strip()
+            logger.info(f"Successfully uploaded to catbox.moe: {url}")
+            return url
+    except Exception as e:
+        logger.error(f"catbox.moe upload failed: {e}. Falling back to local storage.", exc_info=True)
+            
+    # Local Storage Fallback (last resort)
     os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
     filepath = os.path.join("static", "uploads", filename)
     with open(filepath, "wb") as buffer:
@@ -57,6 +73,10 @@ def delete_image(image_url: str) -> bool:
     """
     if not image_url:
         return False
+        
+    if "catbox.moe" in image_url:
+        logger.info(f"Ignoring deletion for public cloud file: {image_url}")
+        return True
         
     if "cloudinary.com" in image_url:
         if settings.CLOUDINARY_URL:
