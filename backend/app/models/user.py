@@ -32,6 +32,7 @@ class User(Base):
     role = Column(String, default="user", nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     is_deleted = Column(Boolean, default=False, nullable=False)
+    current_session_id = Column(String, nullable=True)
     joined_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
@@ -52,8 +53,8 @@ class User(Base):
     # Relationships - Fixed: removed problematic uselist=False
     # Note: Player.user_id is for profile linking, Player.created_by is for ownership
     # Use explicit queries instead of relationships to avoid lazy loading issues
-    created_teams = relationship("Team", back_populates="creator")
-    organized_tournaments = relationship("Tournament", back_populates="organizer", foreign_keys="[Tournament.organizer_id]")
+    created_teams = relationship("Team", back_populates="creator", cascade="all, delete-orphan")
+    organized_tournaments = relationship("Tournament", back_populates="organizer", foreign_keys="[Tournament.organizer_id]", cascade="all, delete-orphan")
     activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
     achievements = relationship("UserAchievement", back_populates="user", cascade="all, delete-orphan")
 

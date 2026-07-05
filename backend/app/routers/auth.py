@@ -42,6 +42,7 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         user_id_str = payload.get("sub")
+        token_session_id = payload.get("sid")
         if user_id_str is None:
             raise credentials_exception
         try:
@@ -54,6 +55,11 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         logger.error("403 REASON = USER_NOT_FOUND")
+        raise credentials_exception
+
+    # Session validation for single-device login
+    if user.current_session_id and str(user.current_session_id) != str(token_session_id):
+        logger.error(f"401 REASON = SESSION_INVALID token={token_session_id} db={user.current_session_id}")
         raise credentials_exception
         
     # Mandatory Logging Inside get_current_user()
@@ -280,9 +286,15 @@ def verify_otp(req: VerifyOTPRequest, db: Session = Depends(get_db)):
     user.otp_expiry = None
     if user.email.strip().lower() == "cricupservice@gmail.com" and user.role != "admin":
         user.role = "admin"
+    
+    # Generate new session and invalidate other devices
+    import uuid
+    session_id = str(uuid.uuid4())
+    user.current_session_id = session_id
+    db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
     db.commit()
     
-    access_token = create_access_token(subject=user.id)
+    access_token = create_access_token(subject=user.id, session_id=session_id)
     refresh_token = create_refresh_token(db, user.id)
     
     return Token(
@@ -384,9 +396,15 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     user.last_login = get_utc_now()
     if user.email.strip().lower() == "cricupservice@gmail.com" and user.role != "admin":
         user.role = "admin"
+    
+    # Generate new session and invalidate other devices
+    import uuid
+    session_id = str(uuid.uuid4())
+    user.current_session_id = session_id
+    db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
     db.commit()
     
-    access_token = create_access_token(subject=user.id)
+    access_token = create_access_token(subject=user.id, session_id=session_id)
     refresh_token = create_refresh_token(db, user.id)
     
     return Token(
@@ -422,7 +440,7 @@ def refresh(req: TokenRefreshRequest, db: Session = Depends(get_db)):
             detail="User not found."
         )
         
-    access_token = create_access_token(subject=user.id)
+    access_token = create_access_token(subject=user.id, session_id=user.current_session_id)
     return Token(
         access_token=access_token,
         refresh_token=req.refresh_token, # keep existing refresh token
@@ -843,6 +861,13 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
                 db.rollback()
                 raise
 
+        # Generate new session and invalidate other devices
+        import uuid
+        session_id = str(uuid.uuid4())
+        user.current_session_id = session_id
+        db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
+        db.commit()
+
         # ---- CHECKPOINT D: refresh token saved (create_refresh_token commits internally) ----
         logger.info(f"[GOOGLE LOGIN] CHECKPOINT D-1: writing refresh_token for user_id={user.id}")
         try:
@@ -855,7 +880,7 @@ def google_login(login_req: GoogleLoginRequest, db: Session = Depends(get_db)):
 
         # ---- CHECKPOINT F: JWT created ----
         logger.info(f"[GOOGLE LOGIN] CHECKPOINT F: creating access JWT for user_id={user.id}")
-        access_token = create_access_token(subject=user.id)
+        access_token = create_access_token(subject=user.id, session_id=session_id)
         logger.info(f"[GOOGLE LOGIN] CHECKPOINT F-OK: access JWT created len={len(access_token)}")
 
         # Log successful login
