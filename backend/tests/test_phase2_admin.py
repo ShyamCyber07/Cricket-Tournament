@@ -163,13 +163,9 @@ def test_admin_bulk_delete(client, db, admin_headers):
     )
     assert res_user.status_code == 204
 
-    # Verify users are soft deleted
-    db.refresh(u1)
-    db.refresh(u2)
-    assert u1.is_deleted is True
-    assert u1.is_active is False
-    assert u2.is_deleted is True
-    assert u2.is_active is False
+    # Verify users are permanently deleted
+    assert db.query(User).filter(User.id == u1.id).first() is None
+    assert db.query(User).filter(User.id == u2.id).first() is None
 
     # Verify admin is NOT deleted
     admin_user = db.query(User).filter(User.email == "admin@example.com").first()

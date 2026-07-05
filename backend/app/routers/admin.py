@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 from app.core.database import get_db
 from app.routers.auth import get_current_user
-from app.models.user import User, Report, UserActivity
+from app.models.user import User, Report, UserActivity, RefreshToken
 from app.models.cricket import Team, Player, Tournament, Match, TournamentTeam, MatchSquad, TeamPlayer, TeamMember
 from app.schemas.user import UserResponse
 from app.schemas.report import ReportCreate, ReportResponse
@@ -337,9 +337,10 @@ def delete_user(
         )
 
     try:
-        # Soft delete using is_deleted flag
-        user.is_deleted = True
-        user.is_active = False
+        # Delete related refresh tokens
+        db.query(RefreshToken).filter(RefreshToken.user_id == id).delete()
+        # Permanently delete user
+        db.delete(user)
         db.commit()
 
         log_admin_action(db, current_user.id, "delete", "user", id)
@@ -938,10 +939,10 @@ def bulk_delete_users(
         return None
         
     try:
-        users = db.query(User).filter(User.id.in_(valid_ids), User.is_deleted == False).all()
+        users = db.query(User).filter(User.id.in_(valid_ids)).all()
         for user in users:
-            user.is_deleted = True
-            user.is_active = False
+            db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
+            db.delete(user)
             log_admin_action(db, current_user.id, "delete", "user", user.id)
         db.commit()
     except Exception as e:
