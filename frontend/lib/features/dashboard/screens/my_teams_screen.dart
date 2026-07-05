@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:cricket_scorer/core/event_bus.dart';
+import 'team_management_screen.dart';
 
 class MyTeamsScreen extends StatefulWidget {
   final bool selectSquad;
@@ -642,6 +643,25 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
                 context,
                 MaterialPageRoute(builder: (context) => const TeamInvitationsScreen()),
               ).then((_) => _loadData());
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner),
+            tooltip: "Scan QR Code to Join",
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (context) {
+                  return QrScanJoinBottomSheet(
+                    apiService: _apiService,
+                    onSuccess: () {
+                      _loadData();
+                    },
+                  );
+                },
+              );
             },
           ),
           IconButton(

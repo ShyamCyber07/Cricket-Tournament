@@ -47,4 +47,8 @@ frontend/.env
 # Database Backups
 backups/
 
-
+# Scratch & logs
+scratch/
+*.log
+static/requests.log
+backend/static/requests.log

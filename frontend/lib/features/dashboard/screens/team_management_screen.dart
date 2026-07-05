@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:cricket_scorer/core/event_bus.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 class TeamManagementScreen extends StatefulWidget {
   const TeamManagementScreen({super.key});
@@ -887,12 +888,33 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
     );
   }
 
+  void _openQrScanner() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return QrScanJoinBottomSheet(
+          apiService: _apiService,
+          onSuccess: () {
+            _fetchTeams();
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Team Management"),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner),
+            onPressed: _openQrScanner,
+            tooltip: "Scan QR Code to Join",
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _fetchTeams,
@@ -953,6 +975,272 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                     );
                   },
                 ),
+    );
+  }
+}
+
+class QrScanJoinBottomSheet extends StatefulWidget {
+  final ApiService apiService;
+  final VoidCallback onSuccess;
+
+  const QrScanJoinBottomSheet({
+    super.key,
+    required this.apiService,
+    required this.onSuccess,
+  });
+
+  @override
+  State<QrScanJoinBottomSheet> createState() => _QrScanJoinBottomSheetState();
+}
+
+class _QrScanJoinBottomSheetState extends State<QrScanJoinBottomSheet> {
+  final MobileScannerController _controller = MobileScannerController();
+  final TextEditingController _codeController = TextEditingController();
+  bool _isProcessing = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _processScanData(String rawData) async {
+    if (_isProcessing) return;
+    setState(() {
+      _isProcessing = true;
+      _errorMessage = null;
+    });
+
+    try {
+      // Parse team code or URL
+      String teamCode = rawData.trim();
+      if (teamCode.contains('/team/')) {
+        final uri = Uri.tryParse(teamCode);
+        if (uri != null && uri.pathSegments.length >= 2 && uri.pathSegments[0] == 'team') {
+          teamCode = uri.pathSegments[1];
+        } else {
+          final match = RegExp(r'/team/([A-Z0-9-]+)').firstMatch(teamCode);
+          if (match != null) {
+            teamCode = match.group(1)!;
+          }
+        }
+      }
+
+      if (teamCode.isEmpty) {
+        throw Exception("Invalid scan data. Could not extract Team Code.");
+      }
+
+      // Search for the team using the code
+      final searchRes = await widget.apiService.searchTeams(teamCode);
+      final List<dynamic> matchedTeams = searchRes.data ?? [];
+      if (matchedTeams.isEmpty) {
+        throw Exception("No team found with code '$teamCode'");
+      }
+
+      final team = matchedTeams.first;
+      final teamId = team['id'].toString();
+      final teamName = team['name'].toString();
+
+      // Pause scanner while showing dialog
+      await _controller.stop();
+
+      // Show confirmation dialog
+      if (!mounted) return;
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text("Join Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          content: Text("Do you want to send a join request to '$teamName'?", style: GoogleFonts.outfit()),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.black),
+              child: Text("Send Request", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm == true) {
+        // Send join request
+        await widget.apiService.joinRequest(teamId);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Join request sent to '$teamName'!"),
+              backgroundColor: AppColors.primary,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          widget.onSuccess();
+          Navigator.pop(context); // close bottom sheet
+        }
+      } else {
+        // Resume scanner
+        await _controller.start();
+        setState(() {
+          _isProcessing = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isProcessing = false;
+        _errorMessage = e.toString().replaceAll("Exception: ", "");
+      });
+      // Resume scanner if it was stopped
+      try {
+        await _controller.start();
+      } catch (_) {}
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.8,
+      decoration: const BoxDecoration(
+        color: Color(0xff090c15),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(28),
+          topRight: Radius.circular(28),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 12),
+          Center(
+            child: Container(
+              width: 50,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            "SCAN QR TO JOIN TEAM",
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              letterSpacing: 1.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                children: [
+                  MobileScanner(
+                    controller: _controller,
+                    onDetect: (capture) {
+                      final List<Barcode> barcodes = capture.barcodes;
+                      if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
+                        final String code = barcodes.first.rawValue!;
+                        _processScanData(code);
+                      }
+                    },
+                  ),
+                  // Scanner Overlay (visual guide)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.black54, width: 40),
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: 200,
+                          height: 200,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: AppColors.primary, width: 2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_isProcessing)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black45,
+                        child: const Center(
+                          child: CircularProgressIndicator(color: AppColors.primary),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_errorMessage != null) ...[
+                  Text(
+                    _errorMessage!,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(color: AppColors.error, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                Text(
+                  "Or enter the invite link or Team Code manually below:",
+                  style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _codeController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          hintText: "e.g. TC-XXXXXX or link",
+                          hintStyle: TextStyle(color: Colors.white38),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      onPressed: () {
+                        final val = _codeController.text.trim();
+                        if (val.isNotEmpty) {
+                          _processScanData(val);
+                        }
+                      },
+                      child: Text(
+                        "SUBMIT",
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

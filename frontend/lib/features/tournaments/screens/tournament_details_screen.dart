@@ -589,15 +589,11 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                         overLimit: overLimit,
                         matchType: matchType,
                       );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Fixtures generated successfully!"), backgroundColor: AppColors.primary),
-                      );
+                      _showSnackBar("Fixtures generated successfully!", AppColors.primary);
                       _fetchData();
                     } catch (e) {
                       setState(() => _isLoading = false);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("Fixture generation failed: $e"), backgroundColor: AppColors.error),
-                      );
+                      _showSnackBar("Fixture generation failed: $e", AppColors.error);
                     }
                   },
                   child: const Text("Generate"),
@@ -787,8 +783,9 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                       decoration: const InputDecoration(labelText: "Format"),
                       dropdownColor: AppColors.surface,
                       items: const [
+                        DropdownMenuItem(value: "League", child: Text("League")),
                         DropdownMenuItem(value: "Knockout", child: Text("Knockout")),
-                        DropdownMenuItem(value: "Round-Robin", child: Text("Round-Robin")),
+                        DropdownMenuItem(value: "League + Knockout", child: Text("League + Knockout")),
                       ],
                       onChanged: (val) {
                         if (val != null) {
@@ -854,15 +851,11 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                         'start_date': startDateController.text.trim(),
                         'end_date': endDateController.text.trim(),
                       });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Tournament updated!"), backgroundColor: AppColors.primary),
-                      );
+                      _showSnackBar("Tournament updated!", AppColors.primary);
                       _fetchData();
                     } catch (e) {
                       setState(() => _isLoading = false);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("Update failed: $e"), backgroundColor: AppColors.error),
-                      );
+                      _showSnackBar("Update failed: $e", AppColors.error);
                     }
                   },
                   child: const Text("Save"),
@@ -876,32 +869,37 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
   }
 
   void _showDeleteTournamentDialog() {
+    final screenContext = context;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: Text("Delete Tournament", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
         content: Text("Are you sure you want to delete this tournament? This action is irreversible.", style: GoogleFonts.outfit()),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               setState(() => _isLoading = true);
               try {
                 await _apiService.deleteTournament(widget.tournamentId);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Tournament deleted successfully"), backgroundColor: AppColors.primary),
-                );
-                Navigator.pop(context); // Go back to tournaments list
+                if (mounted) {
+                  ScaffoldMessenger.of(screenContext).showSnackBar(
+                    const SnackBar(content: Text("Tournament deleted successfully"), backgroundColor: AppColors.primary),
+                  );
+                  Navigator.pop(screenContext, true); // Go back to tournaments list and trigger refresh
+                }
               } catch (e) {
-                setState(() => _isLoading = false);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Failed to delete: $e"), backgroundColor: AppColors.error),
-                );
+                if (mounted) {
+                  setState(() => _isLoading = false);
+                  ScaffoldMessenger.of(screenContext).showSnackBar(
+                    SnackBar(content: Text("Failed to delete: $e"), backgroundColor: AppColors.error),
+                  );
+                }
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
@@ -947,14 +945,10 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
               try {
                 await _apiService.submitReport('tournament', widget.tournamentId, reason);
                 setState(() => _isLoading = false);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Tournament reported successfully"), backgroundColor: AppColors.primary),
-                );
+                _showSnackBar("Tournament reported successfully", AppColors.primary);
               } catch (e) {
                 setState(() => _isLoading = false);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Failed to report: $e"), backgroundColor: AppColors.error),
-                );
+                _showSnackBar("Failed to report: $e", AppColors.error);
               }
             },
             child: const Text("Submit"),
@@ -1831,27 +1825,105 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
         (_currentUser!['id'].toString() == organizerId || _currentUser!['role'] == 'admin');
 
     if (allMatches.isEmpty) {
+      final pointsTable = _dashboardData['points_table'] as List<dynamic>? ?? [];
+      final teamCount = pointsTable.length;
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              "No fixtures generated yet.",
-              style: GoogleFonts.outfit(color: AppColors.textSecondary),
-            ),
-            if (isOrganizer) ...[
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _showCreateManualFixtureSheet,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text("Create Manual Fixture"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.black,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.05),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.primary.withOpacity(0.1), width: 2),
+                ),
+                child: const Icon(
+                  Icons.calendar_month_outlined,
+                  size: 48,
+                  color: AppColors.primary,
                 ),
               ),
+              const SizedBox(height: 24),
+              Text(
+                "No Fixtures Yet",
+                style: GoogleFonts.outfit(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  teamCount < 2 
+                      ? "At least 2 teams must be registered to start generating fixtures. Currently, there are only $teamCount team(s) registered."
+                      : "No matches have been scheduled for this tournament yet.",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 14),
+                ),
+              ),
+              const SizedBox(height: 32),
+              if (isOrganizer) ...[
+                if (teamCount < 2) ...[
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.error.withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, color: AppColors.error, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            "Waiting for more teams to register. Register at least 2 teams under the 'Teams' tab to enable fixture generation.",
+                            style: GoogleFonts.outfit(color: AppColors.error, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _showGenerateFixturesDialog,
+                      icon: const Icon(Icons.auto_awesome, size: 18),
+                      label: const Text("Generate Auto Fixtures"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _showCreateManualFixtureSheet,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text("Create Manual Fixture"),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white30),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ],
-          ],
+          ),
         ),
       );
     }
@@ -2033,6 +2105,12 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
     final pointsTable = _dashboardData['points_table'] as List<dynamic>? ?? [];
     final limit = summary['num_teams'] ?? 4;
     final isRegOpen = status.toLowerCase() == 'registration_open' || status.toLowerCase() == 'registration';
+    final statusLower = status.toLowerCase();
+    final canGenerateFixtures = statusLower == 'draft' ||
+                                statusLower == 'published' ||
+                                statusLower == 'registration_open' ||
+                                statusLower == 'registration' ||
+                                statusLower == 'registration_closed';
     final organizerId = summary['organizer_id']?.toString();
     final isOrganizer = _currentUser != null && _currentUser!['id'].toString() == organizerId;
 
@@ -2145,7 +2223,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
             const SizedBox(height: 12),
             _buildActivitiesList(),
 
-            if (isOrganizer && isRegOpen && pointsTable.length >= limit) ...[
+            if (isOrganizer && canGenerateFixtures && pointsTable.length >= 2) ...[
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _showGenerateFixturesDialog,

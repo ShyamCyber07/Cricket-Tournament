@@ -1136,6 +1136,20 @@ class UserFriendlyDioException extends DioException {
 }
 
 String _getFriendlyMessage(DioException e) {
+  if (e.response?.data != null) {
+    final data = e.response!.data;
+    if (data is Map) {
+      if (data.containsKey('detail') && data['detail'] != null && data['detail'].toString().isNotEmpty) {
+        return data['detail'].toString();
+      }
+      if (data.containsKey('message') && data['message'] != null && data['message'].toString().isNotEmpty) {
+        return data['message'].toString();
+      }
+    } else if (data is String && data.isNotEmpty) {
+      return data;
+    }
+  }
+
   if (e.type == DioExceptionType.connectionTimeout ||
       e.type == DioExceptionType.receiveTimeout ||
       e.type == DioExceptionType.sendTimeout ||
