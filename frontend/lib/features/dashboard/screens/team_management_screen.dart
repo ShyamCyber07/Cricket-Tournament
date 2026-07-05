@@ -1043,51 +1043,21 @@ class _QrScanJoinBottomSheetState extends State<QrScanJoinBottomSheet> {
       final teamId = team['id'].toString();
       final teamName = team['name'].toString();
 
-      // Pause scanner while showing dialog
+      // Pause scanner
       await _controller.stop();
 
-      // Show confirmation dialog
-      if (!mounted) return;
-      final confirm = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: AppColors.surface,
-          title: Text("Join Team", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-          content: Text("Do you want to send a join request to '$teamName'?", style: GoogleFonts.outfit()),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text("Cancel", style: GoogleFonts.outfit(color: AppColors.textSecondary)),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.black),
-              child: Text("Send Request", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      );
-
-      if (confirm == true) {
-        // Send join request
-        await widget.apiService.joinRequest(teamId);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Join request sent to '$teamName'!"),
-              backgroundColor: AppColors.primary,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          widget.onSuccess();
-          Navigator.pop(context); // close bottom sheet
-        }
-      } else {
-        // Resume scanner
-        await _controller.start();
-        setState(() {
-          _isProcessing = false;
-        });
+      // Send join request automatically
+      await widget.apiService.joinRequest(teamId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Join request sent to '$teamName'!"),
+            backgroundColor: AppColors.primary,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        widget.onSuccess();
+        Navigator.pop(context); // close bottom sheet
       }
     } catch (e) {
       setState(() {

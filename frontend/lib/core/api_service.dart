@@ -11,6 +11,7 @@ class ApiService {
   static String? _refreshToken;
   static const String _tokenKey = "jwt_auth_token";
   static const String _refreshTokenKey = "jwt_refresh_token";
+  static final StreamController<void> onUnauthorized = StreamController<void>.broadcast();
 
   ApiService() {
     _dio.options.baseUrl = AppConfig.baseUrl;
@@ -102,7 +103,10 @@ class ApiService {
         onError: (DioException e, handler) async {
           // Global 401 error handling with token refresh
           if (e.response?.statusCode == 401) {
-            if (_refreshToken != null) {
+            final path = e.requestOptions.path;
+            final isAuthRoute = path.contains('/auth/logout') || path.contains('/auth/refresh') || path.contains('/auth/login');
+            
+            if (_refreshToken != null && !isAuthRoute) {
               try {
                 print("[Dio Interceptor] Access token expired, attempting refresh...");
                 final refreshDio = Dio();
@@ -129,9 +133,11 @@ class ApiService {
               } catch (refreshErr) {
                 print("[Dio Interceptor] Token refresh failed: $refreshErr. Clearing credentials.");
                 await clearToken();
+                if (!isAuthRoute) onUnauthorized.add(null);
               }
             } else {
               await clearToken();
+              if (!isAuthRoute) onUnauthorized.add(null);
             }
           }
           return handler.next(e);

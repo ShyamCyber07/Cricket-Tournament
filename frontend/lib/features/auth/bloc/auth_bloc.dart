@@ -3,15 +3,20 @@ import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cricket_scorer/core/api_service.dart';
+import 'dart:async';
 import 'auth_event.dart';
 import 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final ApiService _apiService;
+  StreamSubscription? _unauthorizedSubscription;
 
   AuthBloc({required ApiService apiService})
       : _apiService = apiService,
         super(AuthInitial()) {
+    _unauthorizedSubscription = ApiService.onUnauthorized.stream.listen((_) {
+      add(LogoutRequested());
+    });
     on<AuthStarted>(_onAuthStarted);
     on<LoginRequested>(_onLoginRequested);
     on<SignupRequested>(_onSignupRequested);
@@ -303,5 +308,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
     
     emit(AuthUnauthenticated());
+  }
+
+  @override
+  Future<void> close() {
+    _unauthorizedSubscription?.cancel();
+    return super.close();
   }
 }
