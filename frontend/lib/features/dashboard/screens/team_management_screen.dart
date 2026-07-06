@@ -995,7 +995,7 @@ class QrScanJoinBottomSheet extends StatefulWidget {
 }
 
 class _QrScanJoinBottomSheetState extends State<QrScanJoinBottomSheet> {
-  final MobileScannerController _controller = MobileScannerController();
+  final MobileScannerController _controller = MobileScannerController(autoStart: false);
   final TextEditingController _codeController = TextEditingController();
   bool _isProcessing = false;
   String? _errorMessage;
@@ -1005,32 +1005,58 @@ class _QrScanJoinBottomSheetState extends State<QrScanJoinBottomSheet> {
   @override
   void initState() {
     super.initState();
+    debugPrint("[QR Scanner] Bottom sheet opened. Controller created.");
     _checkAndRequestPermission();
   }
 
   Future<void> _checkAndRequestPermission() async {
+    debugPrint("[QR Scanner] Checking camera permission...");
     final status = await Permission.camera.status;
+    debugPrint("[QR Scanner] Camera permission status: $status");
     if (status.isGranted) {
       if (mounted) {
         setState(() {
           _isCameraPermissionGranted = true;
           _checkingPermission = false;
         });
+        _startScanner();
       }
     } else {
+      debugPrint("[QR Scanner] Requesting camera permission...");
       final requestStatus = await Permission.camera.request();
+      debugPrint("[QR Scanner] Permission request result: $requestStatus");
       if (mounted) {
         setState(() {
           _isCameraPermissionGranted = requestStatus.isGranted;
           _checkingPermission = false;
         });
+        if (requestStatus.isGranted) {
+          _startScanner();
+        }
       }
+    }
+  }
+
+  Future<void> _startScanner() async {
+    debugPrint("[QR Scanner] Starting MobileScannerController...");
+    try {
+      await _controller.start();
+      debugPrint("[QR Scanner] MobileScannerController started successfully. Camera preview started.");
+    } catch (e, stackTrace) {
+      debugPrint("[QR Scanner] Error starting MobileScannerController: $e");
+      debugPrint("[QR Scanner] Stack trace:\n$stackTrace");
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    debugPrint("[QR Scanner] Disposing scanner controller and text controller...");
+    try {
+      _controller.dispose();
+      debugPrint("[QR Scanner] Controller disposed successfully.");
+    } catch (e) {
+      debugPrint("[QR Scanner] Error disposing controller: $e");
+    }
     _codeController.dispose();
     super.dispose();
   }
@@ -1171,10 +1197,30 @@ class _QrScanJoinBottomSheetState extends State<QrScanJoinBottomSheet> {
                           children: [
                             MobileScanner(
                               controller: _controller,
+                              errorBuilder: (context, error, child) {
+                                debugPrint("[QR Scanner] MobileScanner errorBuilder triggered. Error: $error");
+                                if (error.errorDetails != null) {
+                                  debugPrint("[QR Scanner] Error details: ${error.errorDetails}");
+                                }
+                                return Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.error_outline, color: Colors.red, size: 64),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        "Camera Error: ${error.errorCode}",
+                                        style: const TextStyle(color: Colors.white),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                               onDetect: (capture) {
                                 final List<Barcode> barcodes = capture.barcodes;
                                 if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
                                   final String code = barcodes.first.rawValue!;
+                                  debugPrint("[QR Scanner] QR Code detected: $code");
                                   _processScanData(code);
                                 }
                               },
