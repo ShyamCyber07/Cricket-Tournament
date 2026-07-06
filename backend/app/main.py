@@ -462,6 +462,32 @@ def read_root():
         "admin": "/admin"
     }
 
+@app.get("/api/v1/debug-teams")
+def debug_teams(secret: str = None):
+    from fastapi import HTTPException
+    from app.core.database import SessionLocal
+    if secret != "cricup_e2e_secret_2026":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    from app.models.cricket import Team
+    db = SessionLocal()
+    try:
+        teams = db.query(Team).all()
+        result = []
+        for t in teams:
+            result.append({
+                "id": str(t.id),
+                "name": t.name,
+                "team_code": t.team_code,
+                "created_by": str(t.created_by),
+                "created_at": str(t.created_at) if t.created_at else None,
+            })
+        return {
+            "total_teams": len(teams),
+            "teams": result
+        }
+    finally:
+        db.close()
+
 # Include routers
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(players.router, prefix=f"{settings.API_V1_STR}/players", tags=["players"])
