@@ -14,8 +14,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   AuthBloc({required ApiService apiService})
       : _apiService = apiService,
         super(AuthInitial()) {
-    _unauthorizedSubscription = ApiService.onUnauthorized.stream.listen((_) {
-      add(LogoutRequested());
+    _unauthorizedSubscription = ApiService.onUnauthorized.stream.listen((reason) {
+      add(LogoutRequested(reason: reason));
     });
     on<AuthStarted>(_onAuthStarted);
     on<LoginRequested>(_onLoginRequested);
@@ -279,6 +279,22 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   }
 
   Future<void> _onLogoutRequested(LogoutRequested event, Emitter<AuthState> emit) async {
+    if (event.reason != null) {
+      print("[DIAGNOSTICS] Session invalidated. Instantly clearing tokens and logging out...");
+      await ApiService.clearToken();
+      try {
+        await FirebaseAuth.instance.signOut();
+      } catch (_) {}
+      try {
+        final googleSignIn = GoogleSignIn(
+          serverClientId: "270888644885-il2mmaaeehom7amrhglgtckcs3gu1j8c.apps.googleusercontent.com",
+        );
+        await googleSignIn.signOut();
+      } catch (_) {}
+      emit(AuthUnauthenticated(reason: event.reason));
+      return;
+    }
+
     emit(AuthLoading());
     print("[DIAGNOSTICS] Starting Logout flow...");
     try {

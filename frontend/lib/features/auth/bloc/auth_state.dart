@@ -61,7 +61,13 @@ class AuthPasswordResetSuccess extends AuthState {}
 
 class AuthOtpResentSuccess extends AuthState {}
 
-class AuthUnauthenticated extends AuthState {}
+class AuthUnauthenticated extends AuthState {
+  final String? reason;
+  const AuthUnauthenticated({this.reason});
+
+  @override
+  List<Object?> get props => [reason];
+}
 
 class AuthSignupUnverified extends AuthState {
   final String email;

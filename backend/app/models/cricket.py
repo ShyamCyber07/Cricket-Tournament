@@ -109,6 +109,23 @@ class Team(Base):
     players = relationship("Player", secondary="team_players", back_populates="teams")
     tournaments = relationship("Tournament", secondary="tournament_teams", back_populates="teams")
     members = relationship("TeamMember", back_populates="team", cascade="all, delete-orphan")
+    captain = relationship("Player", foreign_keys=[captain_id])
+
+    @property
+    def creator_name(self) -> str:
+        if self.creator:
+            return self.creator.full_name or self.creator.username or "Unknown"
+        return "Unknown"
+
+    @property
+    def captain_name(self) -> str:
+        if self.captain:
+            return self.captain.name
+        return "Unknown"
+
+    @property
+    def player_count(self) -> int:
+        return len(self.players) if self.players else 0
 
 class Notification(Base):
     __tablename__ = "notifications"

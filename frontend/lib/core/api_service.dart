@@ -11,7 +11,7 @@ class ApiService {
   static String? _refreshToken;
   static const String _tokenKey = "jwt_auth_token";
   static const String _refreshTokenKey = "jwt_refresh_token";
-  static final StreamController<void> onUnauthorized = StreamController<void>.broadcast();
+  static final StreamController<String?> onUnauthorized = StreamController<String?>.broadcast();
 
   ApiService() {
     _dio.options.baseUrl = AppConfig.baseUrl;
@@ -106,6 +106,11 @@ class ApiService {
             final path = e.requestOptions.path;
             final isAuthRoute = path.contains('/auth/logout') || path.contains('/auth/refresh') || path.contains('/auth/login');
             
+            String? reason;
+            if (e.response?.data is Map) {
+              reason = e.response!.data['detail']?.toString();
+            }
+
             if (_refreshToken != null && !isAuthRoute) {
               try {
                 print("[Dio Interceptor] Access token expired, attempting refresh...");
@@ -133,11 +138,11 @@ class ApiService {
               } catch (refreshErr) {
                 print("[Dio Interceptor] Token refresh failed: $refreshErr. Clearing credentials.");
                 await clearToken();
-                if (!isAuthRoute) onUnauthorized.add(null);
+                if (!isAuthRoute) onUnauthorized.add(reason);
               }
             } else {
               await clearToken();
-              if (!isAuthRoute) onUnauthorized.add(null);
+              if (!isAuthRoute) onUnauthorized.add(reason);
             }
           }
           return handler.next(e);
@@ -1077,7 +1082,7 @@ class ApiService {
     return await _dio.get('/tournaments/$tournamentId/activities');
   }
 
-  Future<Response> searchTeams(String query) async {
+  Future<Response> searchTeams([String query = ""]) async {
     return await _dio.get('/teams/search', queryParameters: {'query': query});
   }
 

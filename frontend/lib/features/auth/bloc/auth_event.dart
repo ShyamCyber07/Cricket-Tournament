@@ -132,4 +132,10 @@ class AuthVerificationRedirectRequested extends AuthEvent {
   List<Object?> get props => [email];
 }
 
-class LogoutRequested extends AuthEvent {}
+class LogoutRequested extends AuthEvent {
+  final String? reason;
+  const LogoutRequested({this.reason});
+
+  @override
+  List<Object?> get props => [reason];
+}

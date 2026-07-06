@@ -291,16 +291,17 @@ def reject_invitation(
 
 @router.get("/search", response_model=List[TeamResponse])
 def search_teams(
-    query: str,
+    query: Optional[str] = "",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if len(query.strip()) < 2:
-        return []
-    teams = db.query(Team).filter(
-        (Team.name.ilike(f"%{query}%")) |
-        (Team.team_code.ilike(f"%{query}%"))
-    ).all()
+    if not query or not query.strip():
+        teams = db.query(Team).order_by(Team.created_at.desc()).all()
+    else:
+        teams = db.query(Team).filter(
+            (Team.name.ilike(f"%{query}%")) |
+            (Team.team_code.ilike(f"%{query}%"))
+        ).order_by(Team.created_at.desc()).all()
     return teams
 
 

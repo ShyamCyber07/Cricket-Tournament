@@ -72,24 +72,45 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AuthBloc, AuthState>(
-      builder: (context, state) {
-        if (state is AuthAuthenticated) {
-          return DashboardScreen(user: state.user);
-        } else if (state is AuthNeedsVerification) {
-          return VerifyOtpScreen(email: state.email);
-        } else if (state is AuthProfileIncomplete) {
-          return CompleteProfileScreen(user: state.user);
-        } else if (state is AuthLoading) {
-          return const Scaffold(
-            body: Center(
-              child: NeonBallOrbitLoader(showBackground: true),
-            ),
-          );
-        } else {
-          return const LoginScreen();
+    return BlocListener<AuthBloc, AuthState>(
+      listener: (context, state) {
+        if (state is AuthUnauthenticated && state.reason != null) {
+          Future.delayed(const Duration(milliseconds: 150), () {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).clearSnackBars();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    state.reason!,
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  backgroundColor: Colors.red,
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            }
+          });
         }
       },
+      child: BlocBuilder<AuthBloc, AuthState>(
+        builder: (context, state) {
+          if (state is AuthAuthenticated) {
+            return DashboardScreen(user: state.user);
+          } else if (state is AuthNeedsVerification) {
+            return VerifyOtpScreen(email: state.email);
+          } else if (state is AuthProfileIncomplete) {
+            return CompleteProfileScreen(user: state.user);
+          } else if (state is AuthLoading) {
+            return const Scaffold(
+              body: Center(
+                child: NeonBallOrbitLoader(showBackground: true),
+              ),
+            );
+          } else {
+            return const LoginScreen();
+          }
+        },
+      ),
     );
   }
 }

@@ -33,6 +33,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
   late TabController _tabController;
   List<dynamic> _myTeams = [];
   List<dynamic> _exploreTeams = [];
+  List<dynamic> _allExploreTeams = [];
   bool _isLoading = true;
   final Set<String> _submittingRequests = {};
   StreamSubscription? _eventSubscription;
@@ -77,15 +78,40 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
     super.dispose();
   }
 
+  void _filterExploreTeamsLocal(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) {
+      setState(() {
+        _exploreTeams = List.from(_allExploreTeams);
+      });
+    } else {
+      final filtered = _allExploreTeams.where((team) {
+        final name = team['name']?.toString().toLowerCase() ?? "";
+        final code = team['team_code']?.toString().toLowerCase() ?? "";
+        return name.contains(q) || code.contains(q);
+      }).toList();
+      setState(() {
+        _exploreTeams = filtered;
+      });
+    }
+  }
+
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
       final myRes = await _apiService.getMyTeams();
       final List<dynamic> myTeamsData = myRes.data ?? [];
 
+      final exploreRes = await _apiService.searchTeams("");
+      final List<dynamic> exploreData = exploreRes.data ?? [];
+
+      final myTeamIds = myTeamsData.map((m) => m['team']['id'].toString()).toSet();
+      final List<dynamic> filteredExplore = exploreData.where((t) => !myTeamIds.contains(t['id'].toString())).toList();
+
       setState(() {
         _myTeams = myTeamsData;
-        _exploreTeams = []; // Starts empty until searched
+        _allExploreTeams = filteredExplore;
+        _filterExploreTeamsLocal(_exploreSearchQuery);
         _isLoading = false;
       });
     } catch (e) {
@@ -511,7 +537,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
             controller: _exploreSearchController,
             style: GoogleFonts.outfit(color: Colors.white),
             decoration: InputDecoration(
-              hintText: "Search teams by name...",
+              hintText: "Search teams by name or ID...",
               hintStyle: GoogleFonts.outfit(color: Colors.white38),
               prefixIcon: const Icon(Icons.search, color: Colors.white38),
               suffixIcon: IconButton(
@@ -520,8 +546,8 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
                   _exploreSearchController.clear();
                   setState(() {
                     _exploreSearchQuery = "";
-                    _exploreTeams = [];
                   });
+                  _filterExploreTeamsLocal("");
                 },
               ),
               filled: true,
@@ -535,89 +561,190 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
                 borderSide: const BorderSide(color: AppColors.primary),
               ),
             ),
-            onChanged: (val) async {
-              final query = val.trim();
+            onChanged: (val) {
               setState(() {
-                _exploreSearchQuery = query;
+                _exploreSearchQuery = val;
               });
-              if (query.length >= 2) {
-                try {
-                  final res = await _apiService.searchTeams(query);
-                  final List<dynamic> searchResults = res.data ?? [];
-                  
-                  // Extract raw team IDs from joined list to filter search results
-                  final myTeamIds = _myTeams.map((m) => m['team']['id'].toString()).toSet();
-                  
-                  final List<dynamic> exploreList = [];
-                  for (final t in searchResults) {
-                    if (!myTeamIds.contains(t['id'].toString())) {
-                      exploreList.add(t);
-                    }
-                  }
-                  setState(() {
-                    _exploreTeams = exploreList;
-                  });
-                } catch (e) {
-                  debugPrint("Error searching teams: $e");
-                }
-              } else {
-                setState(() {
-                  _exploreTeams = [];
-                });
-              }
+              _filterExploreTeamsLocal(val);
             },
           ),
         ),
         Expanded(
-          child: _exploreTeams.isEmpty
-              ? Center(
-                  child: Text(
-                    "No teams found matching your search.",
-                    style: GoogleFonts.outfit(color: AppColors.textSecondary),
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: _exploreTeams.length,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemBuilder: (context, index) {
-                    final team = _exploreTeams[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        leading: _buildTeamLogo(team['logo_url'], team['name']),
-                        title: Text(
-                          team['name'],
-                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          "Tap to join this team",
-                          style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 11),
-                        ),
-                        trailing: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.secondary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          child: RefreshIndicator(
+            onRefresh: _loadData,
+            color: AppColors.primary,
+            child: _exploreTeams.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.5,
+                        child: Center(
+                          child: Text(
+                            _exploreSearchQuery.isEmpty
+                                ? "No public teams available."
+                                : "No teams found matching your search.",
+                            style: GoogleFonts.outfit(color: AppColors.textSecondary),
                           ),
-                          onPressed: _submittingRequests.contains(team['id'].toString())
-                              ? null
-                              : () => _sendJoinRequest(team['id'].toString()),
-                          child: _submittingRequests.contains(team['id'].toString())
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: ButtonLoader(color: Colors.white),
-                                )
-                              : Text(
-                                  "Join",
-                                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
-                                ),
                         ),
                       ),
-                    );
-                  },
-                ),
+                    ],
+                  )
+                : ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    itemCount: _exploreTeams.length,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemBuilder: (context, index) {
+                      final team = _exploreTeams[index];
+                      final String teamIdVal = team['team_code'] ?? team['id'].toString();
+                      final String creatorName = team['creator_name'] ?? "Unknown";
+                      final String captainName = team['captain_name'] ?? "Unknown";
+                      final int playerCount = team['player_count'] ?? 0;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.03),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.08),
+                            width: 1.0,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Team Logo
+                              _buildTeamLogo(team['logo_url'], team['name'], size: 54),
+                              const SizedBox(width: 16),
+                              // Team Info
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      team['name'],
+                                      style: GoogleFonts.outfit(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      "Team ID: $teamIdVal",
+                                      style: GoogleFonts.outfit(
+                                        color: AppColors.primary,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                "Created by",
+                                                style: GoogleFonts.outfit(
+                                                  color: AppColors.textSecondary,
+                                                  fontSize: 11,
+                                                ),
+                                              ),
+                                              Text(
+                                                creatorName,
+                                                style: GoogleFonts.outfit(
+                                                  color: Colors.white,
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                "Captain",
+                                                style: GoogleFonts.outfit(
+                                                  color: AppColors.textSecondary,
+                                                  fontSize: 11,
+                                                ),
+                                              ),
+                                              Text(
+                                                captainName,
+                                                style: GoogleFonts.outfit(
+                                                  color: Colors.white,
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          "$playerCount Players",
+                                          style: GoogleFonts.outfit(
+                                            color: Colors.white70,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppColors.primary,
+                                            foregroundColor: Colors.black,
+                                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            elevation: 0,
+                                          ),
+                                          onPressed: _submittingRequests.contains(team['id'].toString())
+                                              ? null
+                                              : () => _sendJoinRequest(team['id'].toString()),
+                                          child: _submittingRequests.contains(team['id'].toString())
+                                              ? const SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child: ButtonLoader(color: Colors.black),
+                                                )
+                                              : Text(
+                                                  "Join Team",
+                                                  style: GoogleFonts.outfit(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
         ),
       ],
     );

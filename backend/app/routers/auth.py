@@ -60,7 +60,11 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     # Session validation for single-device login
     if user.current_session_id and str(user.current_session_id) != str(token_session_id):
         logger.error(f"401 REASON = SESSION_INVALID token={token_session_id} db={user.current_session_id}")
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Your account has been logged in on another device.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
         
     # Mandatory Logging Inside get_current_user()
     logger.error(
