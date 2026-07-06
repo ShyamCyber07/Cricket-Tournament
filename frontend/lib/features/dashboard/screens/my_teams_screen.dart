@@ -53,6 +53,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
       vsync: this,
       initialIndex: widget.initialTabIndex,
     );
+    _tabController.addListener(_handleTabSelection);
     _loadData();
     _eventSubscription = AppEventBus().on.listen((event) {
       if (event is TeamRefreshedEvent) {
@@ -70,12 +71,21 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabSelection);
     _eventSubscription?.cancel();
     _tabController.dispose();
     _nameController.dispose();
     _exploreSearchController.dispose();
     _joinCodeController.dispose();
     super.dispose();
+  }
+
+  void _handleTabSelection() {
+    if (_tabController.index == 1 && !_tabController.indexIsChanging) {
+      // Switched to Explore Teams tab, reload data automatically
+      print("[DIAGNOSTICS] User switched to Explore Teams tab. Auto-refreshing public teams...");
+      _loadData(showFullScreenLoader: false);
+    }
   }
 
   void _filterExploreTeamsLocal(String query) {
@@ -96,8 +106,10 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
     }
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadData({bool showFullScreenLoader = true}) async {
+    if (showFullScreenLoader) {
+      setState(() => _isLoading = true);
+    }
     try {
       final myRes = await _apiService.getMyTeams();
       final List<dynamic> myTeamsData = myRes.data ?? [];
