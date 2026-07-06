@@ -564,6 +564,25 @@ def get_profile_achievements(
     return results
 
 
+# Helper to crop image to square and resize
+def crop_and_resize_image(image_bytes: bytes, target_size=(256, 256)) -> bytes:
+    from PIL import Image
+    import io
+    img = Image.open(io.BytesIO(image_bytes))
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    width, height = img.size
+    min_side = min(width, height)
+    left = (width - min_side) // 2
+    top = (height - min_side) // 2
+    right = left + min_side
+    bottom = top + min_side
+    img = img.crop((left, top, right, bottom))
+    img = img.resize(target_size, Image.Resampling.LANCZOS)
+    out_io = io.BytesIO()
+    img.save(out_io, format="JPEG", quality=90)
+    return out_io.getvalue()
+
 @router.post("/upload-photo")
 def upload_profile_photo(
     file: UploadFile = File(...),
@@ -581,11 +600,22 @@ def upload_profile_photo(
         if len(content) > 5 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="Image size exceeds the 5MB limit.")
             
-        # Update user record with photo bytes directly (Persistent DB storage)
-        current_user.profile_photo_bytes = content
+        # Crop and resize image
+        processed_content = crop_and_resize_image(content)
         
-        # Set URL to the custom database rendering endpoint
-        url = f"/api/v1/profile/photo/{current_user.id}"
+        # Delete old photo if it exists
+        if current_user.profile_photo_url:
+            try:
+                delete_image(current_user.profile_photo_url)
+            except Exception:
+                pass
+                
+        # Upload
+        filename = f"user_{current_user.id}_{uuid.uuid4().hex}.jpg"
+        url = upload_image(processed_content, filename, folder="profiles")
+        
+        # Update user record
+        current_user.profile_photo_bytes = None  # Ensure no binary image data in DB
         current_user.profile_photo_url = url
         
         db.add(current_user)

@@ -7,27 +7,49 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Initialize Cloudinary if URL is provided
-if settings.CLOUDINARY_URL:
+# Configure Cloudinary if credentials are provided
+if settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET:
+    try:
+        cloudinary.config(
+            cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+            api_key=settings.CLOUDINARY_API_KEY,
+            api_secret=settings.CLOUDINARY_API_SECRET,
+            secure=True
+        )
+        logger.info("Cloudinary configured successfully via credentials.")
+    except Exception as e:
+        logger.error(f"Failed to configure Cloudinary: {e}", exc_info=True)
+elif settings.CLOUDINARY_URL:
     try:
         cloudinary.config(cloudinary_url=settings.CLOUDINARY_URL)
-        logger.info("Cloudinary configured successfully.")
+        logger.info("Cloudinary configured successfully via CLOUDINARY_URL.")
     except Exception as e:
         logger.error(f"Failed to configure Cloudinary with the provided URL: {e}", exc_info=True)
 else:
-    logger.warning("CLOUDINARY_URL not set. Falling back to local storage.")
+    logger.warning("Cloudinary credentials and CLOUDINARY_URL not set. Falling back to local storage in development.")
 
 def upload_image(file_bytes: bytes, filename: str, folder: str = "cricup") -> str:
     """
-    Uploads an image. If CLOUDINARY_URL is configured, uploads to Cloudinary.
-    Otherwise, saves to the local static/uploads directory as a fallback.
+    Uploads an image.
+    In production mode: Uploads exclusively to Cloudinary. Raises HTTPException if not configured or failed.
+    In development mode: Uploads to Cloudinary if configured, otherwise falls back to local storage.
     """
-    if settings.CLOUDINARY_URL:
+    from fastapi import HTTPException
+    
+    is_production = settings.APP_ENV.lower() in ["production", "prod"]
+    has_credentials = bool(
+        (settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET)
+        or (not is_production and settings.CLOUDINARY_URL)
+    )
+    
+    if is_production:
+        # Enforce Cloudinary individual credentials in production
+        prod_configured = bool(settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET)
+        if not prod_configured:
+            logger.error("Cloudinary configuration missing.")
+            raise HTTPException(status_code=500, detail="Cloudinary is not configured.")
         try:
-            # Extract public_id without extension
             base_name = os.path.splitext(filename)[0]
-            
-            # Upload file directly from bytes
             res = cloudinary.uploader.upload(
                 io.BytesIO(file_bytes),
                 folder=folder,
@@ -39,33 +61,40 @@ def upload_image(file_bytes: bytes, filename: str, folder: str = "cricup") -> st
             if secure_url:
                 logger.info(f"Successfully uploaded to Cloudinary: {secure_url}")
                 return secure_url
+            else:
+                raise Exception("No secure_url returned from Cloudinary.")
+        except HTTPException as he:
+            raise he
         except Exception as e:
-            logger.error(f"Cloudinary upload failed: {e}. Falling back to local storage.", exc_info=True)
-            # Fall through to local storage if Cloudinary fails
+            logger.error(f"Cloudinary upload failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Cloudinary upload failed: {str(e)}")
             
-    # Try uploading to catbox.moe as a persistent cloud fallback
-    try:
-        import requests
-        res = requests.post(
-            "https://catbox.moe/user/api.php",
-            data={"reqtype": "fileupload"},
-            files={"fileToUpload": (filename, file_bytes)},
-            timeout=10
-        )
-        if res.status_code == 200 and res.text.strip().startswith("https://files.catbox.moe"):
-            url = res.text.strip()
-            logger.info(f"Successfully uploaded to catbox.moe: {url}")
-            return url
-    except Exception as e:
-        logger.error(f"catbox.moe upload failed: {e}. Falling back to local storage.", exc_info=True)
-            
-    # Local Storage Fallback (last resort)
-    os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
-    filepath = os.path.join("static", "uploads", filename)
-    with open(filepath, "wb") as buffer:
-        buffer.write(file_bytes)
-    logger.info(f"Saved file locally: {filepath}")
-    return f"/static/uploads/{filename}"
+    else:
+        # Development mode
+        if has_credentials:
+            try:
+                base_name = os.path.splitext(filename)[0]
+                res = cloudinary.uploader.upload(
+                    io.BytesIO(file_bytes),
+                    folder=folder,
+                    public_id=base_name,
+                    overwrite=True,
+                    resource_type="image"
+                )
+                secure_url = res.get("secure_url")
+                if secure_url:
+                    logger.info(f"Successfully uploaded to Cloudinary (Dev): {secure_url}")
+                    return secure_url
+            except Exception as e:
+                logger.warning(f"Cloudinary upload failed in Dev, falling back to local: {e}")
+                
+        # Local Storage Fallback (only in development)
+        os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
+        filepath = os.path.join("static", "uploads", filename)
+        with open(filepath, "wb") as buffer:
+            buffer.write(file_bytes)
+        logger.info(f"Saved file locally: {filepath}")
+        return f"/static/uploads/{filename}"
 
 def delete_image(image_url: str) -> bool:
     """
@@ -74,15 +103,10 @@ def delete_image(image_url: str) -> bool:
     if not image_url:
         return False
         
-    if "catbox.moe" in image_url:
-        logger.info(f"Ignoring deletion for public cloud file: {image_url}")
-        return True
-        
     if "cloudinary.com" in image_url:
-        if settings.CLOUDINARY_URL:
+        has_credentials = bool(settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET) or bool(settings.CLOUDINARY_URL)
+        if has_credentials:
             try:
-                # Extract public ID from the Cloudinary URL
-                # Example: https://res.cloudinary.com/cloud_name/image/upload/v12345/folder/public_id.jpg
                 parts = image_url.split("/")
                 if "upload" in parts:
                     idx = parts.index("upload")

@@ -1424,6 +1424,8 @@ def upload_tournament_logo(
             delete_image(tour.banner_url)
             
         url = upload_image(processed_content, filename, folder="tournaments")
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process or upload image: {str(e)}")
 

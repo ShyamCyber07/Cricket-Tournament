@@ -31,11 +31,14 @@ class Settings(BaseSettings):
     # Google OAuth
     GOOGLE_CLIENT_ID: str | None = os.getenv("GOOGLE_CLIENT_ID", None)
 
-    # Cloudinary Persistent Storage URL
+    # Cloudinary Persistent Storage Configuration
     CLOUDINARY_URL: str = os.getenv("CLOUDINARY_URL", "")
+    CLOUDINARY_CLOUD_NAME: str = os.getenv("CLOUDINARY_CLOUD_NAME", "")
+    CLOUDINARY_API_KEY: str = os.getenv("CLOUDINARY_API_KEY", "")
+    CLOUDINARY_API_SECRET: str = os.getenv("CLOUDINARY_API_SECRET", "")
 
     # Environment
-    APP_ENV: str = os.getenv("APP_ENV", "development")
+    APP_ENV: str = os.getenv("APP_ENV", os.getenv("ENV", "development"))
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
@@ -46,7 +49,27 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_security(self):
+        # Extract Cloudinary credentials from CLOUDINARY_URL if they are not explicitly set
+        if self.CLOUDINARY_URL and not (self.CLOUDINARY_CLOUD_NAME and self.CLOUDINARY_API_KEY and self.CLOUDINARY_API_SECRET):
+            try:
+                import urllib.parse
+                url_parsed = urllib.parse.urlparse(self.CLOUDINARY_URL)
+                if url_parsed.scheme == "cloudinary":
+                    self.CLOUDINARY_API_KEY = url_parsed.username or ""
+                    self.CLOUDINARY_API_SECRET = url_parsed.password or ""
+                    self.CLOUDINARY_CLOUD_NAME = url_parsed.hostname or ""
+            except Exception:
+                pass
+
         app_env = self.APP_ENV.lower() if self.APP_ENV else "development"
+
+        # Verify Cloudinary configuration in production mode
+        if app_env in ["production", "prod"]:
+            if not self.CLOUDINARY_CLOUD_NAME or not self.CLOUDINARY_API_KEY or not self.CLOUDINARY_API_SECRET:
+                print("\n" + "="*80)
+                print("  ERROR: Cloudinary configuration missing.")
+                print("="*80 + "\n")
+                raise ValueError("Cloudinary configuration missing. Required variables: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.")
 
         # Check SECRET_KEY
         if not self.SECRET_KEY:

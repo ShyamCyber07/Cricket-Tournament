@@ -65,20 +65,24 @@ def test_get_profile_activity_and_achievements(client, auth_headers, db):
         assert ach["is_unlocked"] is False
 
 def test_upload_profile_photo(client, auth_headers, db):
-    # Create a dummy image file payload
+    # Create a valid dummy image file payload
+    from PIL import Image
     from io import BytesIO
-    dummy_image = BytesIO(b"fake image data")
+    img = Image.new("RGB", (100, 100), color="red")
+    img_byte_arr = BytesIO()
+    img.save(img_byte_arr, format="PNG")
+    img_byte_arr.seek(0)
     
     response = client.post(
         "/api/v1/profile/upload-photo",
         headers=auth_headers,
-        files={"file": ("test_avatar.png", dummy_image, "image/png")}
+        files={"file": ("test_avatar.png", img_byte_arr, "image/png")}
     )
     assert response.status_code == 200
     res_data = response.json()
     assert "url" in res_data
     assert "profile_photo_url" in res_data
-    assert res_data["url"].startswith("/api/v1/profile/photo/")
+    assert res_data["url"].startswith("/static/uploads/")
     
     # Confirm it got updated on profile
     response = client.get("/api/v1/profile/", headers=auth_headers)

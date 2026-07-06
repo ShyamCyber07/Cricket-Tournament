@@ -825,6 +825,8 @@ def upload_team_logo(
                 pass
             
         url = upload_image(processed_content, filename, folder="teams")
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process or upload image: {str(e)}")
 

@@ -11,9 +11,7 @@ def test_upload_image_local_fallback(tmp_path):
         test_bytes = b"fake-image-bytes"
         filename = "test_fallback.jpg"
         
-        # Patch requests.post to fail and trigger local fallback
-        with patch("requests.post", side_effect=Exception("Network error")), \
-             patch("os.makedirs") as mock_makedirs, \
+        with patch("os.makedirs") as mock_makedirs, \
              patch("builtins.open", mock_open()) as mock_file:
             url = storage.upload_image(test_bytes, filename)
             
@@ -38,29 +36,48 @@ def test_upload_image_cloudinary_success():
             assert kwargs["public_id"] == "test_cloud"
             assert kwargs["resource_type"] == "image"
 
-def test_upload_image_catbox_success():
-    # If CLOUDINARY_URL is empty, it should try catbox.moe and succeed
-    with patch.object(settings, "CLOUDINARY_URL", ""):
+def test_upload_image_production_missing_credentials():
+    from fastapi import HTTPException
+    # In production, if credentials are empty/missing, it must fail fast with HTTPException 500
+    with patch.object(settings, "APP_ENV", "production"), \
+         patch.object(settings, "CLOUDINARY_CLOUD_NAME", ""), \
+         patch.object(settings, "CLOUDINARY_API_KEY", ""), \
+         patch.object(settings, "CLOUDINARY_API_SECRET", ""), \
+         patch.object(settings, "CLOUDINARY_URL", ""):
         test_bytes = b"fake-image-bytes"
-        filename = "test_catbox.jpg"
+        filename = "test_prod_missing.jpg"
         
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = "https://files.catbox.moe/abcdef.jpg\n"
+        with pytest.raises(HTTPException) as exc_info:
+            storage.upload_image(test_bytes, filename)
         
-        with patch("requests.post", return_value=mock_response) as mock_post:
-            url = storage.upload_image(test_bytes, filename)
-            assert url == "https://files.catbox.moe/abcdef.jpg"
-            mock_post.assert_called_once()
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Cloudinary is not configured."
 
-def test_upload_image_cloudinary_failure_fallback():
-    # If Cloudinary fails, it should log the error and fall back to local storage (after failing catbox.moe)
-    with patch.object(settings, "CLOUDINARY_URL", "cloudinary://api_key:api_secret@cloud_name"):
+def test_upload_image_production_upload_failure():
+    from fastapi import HTTPException
+    # In production, if Cloudinary upload fails, it raises HTTPException 500 and does NOT fall back
+    with patch.object(settings, "APP_ENV", "production"), \
+         patch.object(settings, "CLOUDINARY_CLOUD_NAME", "cloud"), \
+         patch.object(settings, "CLOUDINARY_API_KEY", "key"), \
+         patch.object(settings, "CLOUDINARY_API_SECRET", "secret"):
+        test_bytes = b"fake-image-bytes"
+        filename = "test_prod_fail.jpg"
+        
+        with patch("cloudinary.uploader.upload", side_effect=Exception("Cloudinary API failure")):
+            with pytest.raises(HTTPException) as exc_info:
+                storage.upload_image(test_bytes, filename)
+            
+            assert exc_info.value.status_code == 500
+            assert "Cloudinary upload failed" in exc_info.value.detail
+
+def test_upload_image_cloudinary_failure_fallback_development():
+    # In development mode, if Cloudinary fails, it falls back to local storage
+    with patch.object(settings, "APP_ENV", "development"), \
+         patch.object(settings, "CLOUDINARY_URL", "cloudinary://api_key:api_secret@cloud_name"):
         test_bytes = b"fake-image-bytes"
         filename = "test_failed_cloud.jpg"
         
         with patch("cloudinary.uploader.upload", side_effect=Exception("Cloudinary error")), \
-             patch("requests.post", side_effect=Exception("Catbox error")), \
              patch("os.makedirs") as mock_makedirs, \
              patch("builtins.open", mock_open()):
             url = storage.upload_image(test_bytes, filename)
