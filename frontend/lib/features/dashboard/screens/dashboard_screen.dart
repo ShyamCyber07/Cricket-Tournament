@@ -971,7 +971,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   }
 
   Widget _buildLiveMatchCard(dynamic match) {
-    return _buildSpringyButton(
+    return DashboardLiveMatchCard(
+      match: match,
+      buildTeamLogo: _buildTeamLogo,
       onTap: () async {
         final status = match['status'];
         if (status == 'toss' || status == 'team_selection' || status == 'ready') {
@@ -987,74 +989,6 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         }
         _fetchMatches();
       },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: AppColors.glassDecoration(
-          borderRadius: BorderRadius.circular(16),
-          borderColor: AppColors.primary.withOpacity(0.25),
-        ),
-        child: Row(
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildTeamLogo(match['team1_logo_url'], match['team1_name'] ?? 'Team', size: 32),
-                const SizedBox(width: 4),
-                _buildTeamLogo(match['team2_logo_url'], match['team2_name'] ?? 'Team', size: 32),
-              ],
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "${match['team1_name'] ?? 'Unknown Team'} vs ${match['team2_name'] ?? 'Unknown Team'}",
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: (match['status'] == 'ready' ? Colors.amber : (match['status'] == 'toss' || match['status'] == 'team_selection' ? Colors.orange : Colors.red)).withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          match['status'] == 'ready' ? 'READY' : (match['status'] == 'toss' || match['status'] == 'team_selection' ? 'PRE-MATCH' : 'LIVE'),
-                          style: GoogleFonts.outfit(
-                            color: match['status'] == 'ready' ? Colors.amber : (match['status'] == 'toss' || match['status'] == 'team_selection' ? Colors.orange : Colors.red),
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          "@ ${match['venue']} • ${match['match_type']}",
-                          style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            GestureDetector(
-              onTap: () {},
-              child: _buildMatchMenu(match),
-            ),
-            const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.primary, size: 16),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1291,97 +1225,16 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   }
 
   Widget _buildCompletedMatchCard(dynamic match) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: AppColors.glassDecoration(borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        children: [
-          ListTile(
-            leading: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildTeamLogo(match['team1_logo_url'], match['team1_name'] ?? 'Team', size: 28),
-                const SizedBox(width: 4),
-                _buildTeamLogo(match['team2_logo_url'], match['team2_name'] ?? 'Team', size: 28),
-              ],
-            ),
-            title: Text(
-              "Match @ ${match['venue']}",
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
-            ),
-            subtitle: Row(
-              children: [
-                Text(
-                  "Type: ${match['match_type']} • Overs: ${match['over_limit']} ",
-                  style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: (match['status'] == 'abandoned' ? Colors.grey : (match['status'] == 'no_result' ? Colors.redAccent : Colors.green)).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    (match['status']?.toString().toUpperCase() ?? 'COMPLETED'),
-                    style: GoogleFonts.outfit(
-                      color: match['status'] == 'abandoned' ? Colors.grey : (match['status'] == 'no_result' ? Colors.redAccent : Colors.green),
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                GestureDetector(
-                  onTap: () {},
-                  child: _buildMatchMenu(match),
-                ),
-                const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textSecondary, size: 14),
-              ],
-            ),
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ScorecardScreen(matchId: match['id'])),
-              );
-              _fetchMatches();
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 12.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                _buildSpringyButton(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => ScorecardScreen(matchId: match['id'])),
-                    );
-                  },
-                  child: Row(
-                    children: [
-                      const Icon(Icons.analytics_outlined, size: 16, color: AppColors.primary),
-                      const SizedBox(width: 4),
-                      Text(
-                        "View Scorecard",
-                        style: GoogleFonts.outfit(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return DashboardRecentMatchCard(
+      match: match,
+      buildTeamLogo: _buildTeamLogo,
+      onTap: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => ScorecardScreen(matchId: match['id'])),
+        );
+        _fetchMatches();
+      },
     );
   }
 
@@ -1541,5 +1394,663 @@ class GlowingLineChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class DashboardLiveMatchCard extends StatefulWidget {
+  final Map<String, dynamic> match;
+  final VoidCallback onTap;
+  final Widget Function(String? logoUrl, String teamName, {double size}) buildTeamLogo;
+
+  const DashboardLiveMatchCard({
+    super.key,
+    required this.match,
+    required this.onTap,
+    required this.buildTeamLogo,
+  });
+
+  @override
+  State<DashboardLiveMatchCard> createState() => _DashboardLiveMatchCardState();
+}
+
+class _DashboardLiveMatchCardState extends State<DashboardLiveMatchCard> {
+  final ApiService _apiService = ApiService();
+  Map<String, dynamic>? _liveState;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLiveState();
+  }
+
+  Future<void> _fetchLiveState() async {
+    try {
+      final res = await _apiService.getLiveMatch(widget.match['id']);
+      if (mounted) {
+        setState(() {
+          _liveState = res.data;
+        });
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final match = _liveState ?? widget.match;
+
+    // Team names
+    final team1Name = match['team1_name'] ?? 'Team 1';
+    final team2Name = match['team2_name'] ?? 'Team 2';
+    final team1Logo = match['team1_logo_url'];
+    final team2Logo = match['team2_logo_url'];
+
+    // Score & Overs
+    String score1 = "0/0";
+    String overs1 = "(0.0)";
+    String score2 = "0/0";
+    String overs2 = "(0.0)";
+
+    bool isTeam1Batting = false;
+    bool isTeam2Batting = false;
+
+    if (_liveState != null) {
+      final team1Id = _liveState!['team1_id']?.toString();
+      final team2Id = _liveState!['team2_id']?.toString();
+      final currentInnings = _liveState!['current_innings'];
+      final previousInnings = _liveState!['previous_innings'];
+
+      if (currentInnings != null) {
+        final battingId = currentInnings['batting_team_id']?.toString();
+        final runs = currentInnings['total_runs'] ?? 0;
+        final wickets = currentInnings['total_wickets'] ?? 0;
+        final overs = currentInnings['total_overs'] ?? 0.0;
+
+        if (battingId == team1Id) {
+          score1 = "$runs/$wickets";
+          overs1 = "($overs)";
+          isTeam1Batting = true;
+        } else if (battingId == team2Id) {
+          score2 = "$runs/$wickets";
+          overs2 = "($overs)";
+          isTeam2Batting = true;
+        }
+      }
+
+      if (previousInnings != null) {
+        final battingId = previousInnings['batting_team_id']?.toString();
+        final runs = previousInnings['total_runs'] ?? 0;
+        final wickets = previousInnings['total_wickets'] ?? 0;
+        final overs = previousInnings['total_overs'] ?? 0.0;
+
+        if (battingId == team1Id) {
+          score1 = "$runs/$wickets";
+          overs1 = "($overs)";
+        } else if (battingId == team2Id) {
+          score2 = "$runs/$wickets";
+          overs2 = "($overs)";
+        }
+      }
+    }
+
+    final tournamentStage = match['tournament_stage']?.toString();
+    
+    // Tournament Stage Formatting
+    String stageText = "League";
+    if (tournamentStage != null && tournamentStage.isNotEmpty) {
+      if (tournamentStage.toLowerCase() == 'semi_final' || tournamentStage.toLowerCase() == 'semifinal') {
+        stageText = "Semi Final";
+      } else if (tournamentStage.toLowerCase() == 'final') {
+        stageText = "Final";
+      } else {
+        stageText = tournamentStage.replaceAll('_', ' ');
+        stageText = stageText.split(' ').map((s) => s.isNotEmpty ? s[0].toUpperCase() + s.substring(1) : '').join(' ');
+      }
+    }
+    final tournamentChipText = "${match['match_type'] ?? 'T20'} • $stageText";
+
+    final statusText = _liveState != null ? _getMatchStatusText(_liveState!) : "Loading scores...";
+
+    return InkWell(
+      onTap: widget.onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0F14).withOpacity(0.85),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: AppColors.primary.withOpacity(0.3),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0x1F00FF88),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.primary.withOpacity(0.4), width: 1),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              "LIVE",
+                              style: GoogleFonts.outfit(
+                                color: AppColors.primary,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        tournamentChipText,
+                        style: GoogleFonts.outfit(
+                          color: AppColors.textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            widget.buildTeamLogo(team1Logo, team1Name, size: 42),
+                            const SizedBox(height: 8),
+                            Text(
+                              team1Name,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  score1,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900,
+                                    color: isTeam1Batting ? AppColors.primary : Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  overs1,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10,
+                                    color: AppColors.textSecondary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withOpacity(0.04),
+                          border: Border.all(color: Colors.white12, width: 1),
+                        ),
+                        child: Text(
+                          "VS",
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            widget.buildTeamLogo(team2Logo, team2Name, size: 42),
+                            const SizedBox(height: 8),
+                            Text(
+                              team2Name,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  score2,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900,
+                                    color: isTeam2Batting ? AppColors.primary : Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  overs2,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10,
+                                    color: AppColors.textSecondary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.02),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      statusText,
+                      style: GoogleFonts.outfit(
+                        color: AppColors.primary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.primary,
+              size: 24,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getMatchStatusText(Map<String, dynamic> liveState) {
+    final status = liveState['status'];
+    if (status == 'innings_break') {
+      final target = liveState['target'] as int?;
+      if (target != null) {
+        return "Target $target (Innings Break)";
+      }
+      return "Innings Break";
+    }
+    if (status == 'completed') {
+      return liveState['win_margin_text'] ?? "Match Completed";
+    }
+    if (status == 'scheduled' || status == 'toss' || status == 'team_selection') {
+      final tossWin = liveState['toss_winner_name'];
+      final tossDec = liveState['toss_decision'];
+      if (tossWin != null && tossDec != null) {
+        return "$tossWin won toss & elected to $tossDec";
+      }
+      return "Toss Pending";
+    }
+
+    final target = liveState['target'] as int?;
+    final currentInnings = liveState['current_innings'];
+    if (target != null && currentInnings != null) {
+      final runs = currentInnings['total_runs'] as int? ?? 0;
+      final overs = double.tryParse((currentInnings['total_overs'] ?? 0.0).toString()) ?? 0.0;
+      final runsNeeded = target - runs;
+      final overLimit = liveState['over_limit'] as int? ?? 20;
+
+      final currentOversInt = overs.toInt();
+      final currentBallsInOver = ((overs - currentOversInt) * 10).round();
+      final totalBallsBowled = (currentOversInt * 6) + currentBallsInOver;
+      final totalBallsInMatch = overLimit * 6;
+      final ballsRemaining = totalBallsInMatch - totalBallsBowled;
+
+      if (runsNeeded > 0) {
+        if (ballsRemaining > 0) {
+          return "Needs $runsNeeded runs in $ballsRemaining balls";
+        }
+        return "Innings completed";
+      }
+      return "Target achieved!";
+    } else if (currentInnings != null) {
+      final runs = currentInnings['total_runs'] as int? ?? 0;
+      final wickets = currentInnings['total_wickets'] as int? ?? 0;
+      final overs = currentInnings['total_overs'] ?? 0.0;
+      return "Innings 1 • $runs/$wickets in $overs overs";
+    }
+    return "Match in progress";
+  }
+}
+
+class DashboardRecentMatchCard extends StatefulWidget {
+  final Map<String, dynamic> match;
+  final VoidCallback onTap;
+  final Widget Function(String? logoUrl, String teamName, {double size}) buildTeamLogo;
+
+  const DashboardRecentMatchCard({
+    super.key,
+    required this.match,
+    required this.onTap,
+    required this.buildTeamLogo,
+  });
+
+  @override
+  State<DashboardRecentMatchCard> createState() => _DashboardRecentMatchCardState();
+}
+
+class _DashboardRecentMatchCardState extends State<DashboardRecentMatchCard> {
+  final ApiService _apiService = ApiService();
+  Map<String, dynamic>? _scorecardState;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchScorecard();
+  }
+
+  Future<void> _fetchScorecard() async {
+    try {
+      final res = await _apiService.getMatchScorecard(widget.match['id']);
+      if (mounted) {
+        setState(() {
+          _scorecardState = res.data;
+        });
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final match = widget.match;
+
+    // Team names
+    final team1Name = match['team1_name'] ?? 'Team 1';
+    final team2Name = match['team2_name'] ?? 'Team 2';
+    final team1Logo = match['team1_logo_url'];
+    final team2Logo = match['team2_logo_url'];
+
+    // Score & Overs Fallbacks
+    String score1 = "-";
+    String score2 = "-";
+
+    if (_scorecardState != null) {
+      final innings = _scorecardState!['innings'] as List?;
+      if (innings != null) {
+        for (var inn in innings) {
+          final battingName = inn['batting_team_name']?.toString();
+          final runs = inn['total_runs'] ?? 0;
+          final wickets = inn['total_wickets'] ?? 0;
+          if (battingName == team1Name) {
+            score1 = "$runs/$wickets";
+          } else if (battingName == team2Name) {
+            score2 = "$runs/$wickets";
+          }
+        }
+      }
+    } else {
+      final t1Runs = match['team1_runs'];
+      final t1Wkts = match['team1_wickets'];
+      if (t1Runs != null && t1Wkts != null) {
+        score1 = "$t1Runs/$t1Wkts";
+      }
+      final t2Runs = match['team2_runs'];
+      final t2Wkts = match['team2_wickets'];
+      if (t2Runs != null && t2Wkts != null) {
+        score2 = "$t2Runs/$t2Wkts";
+      }
+    }
+
+    final tournamentStage = match['tournament_stage']?.toString();
+
+    String stageText = "League";
+    if (tournamentStage != null && tournamentStage.isNotEmpty) {
+      if (tournamentStage.toLowerCase() == 'semi_final' || tournamentStage.toLowerCase() == 'semifinal') {
+        stageText = "Semi Final";
+      } else if (tournamentStage.toLowerCase() == 'final') {
+        stageText = "Final";
+      } else {
+        stageText = tournamentStage.replaceAll('_', ' ');
+        stageText = stageText.split(' ').map((s) => s.isNotEmpty ? s[0].toUpperCase() + s.substring(1) : '').join(' ');
+      }
+    }
+    final tournamentChipText = "${match['match_type'] ?? 'T20'} • $stageText";
+
+    final resultText = _scorecardState != null 
+        ? (_scorecardState!['match_summary']?['win_margin_text'] ?? match['win_margin_text'] ?? "Match Completed")
+        : (match['win_margin_text'] ?? "Match Completed");
+
+    return InkWell(
+      onTap: widget.onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0F14).withOpacity(0.85),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: const Color(0x14FFFFFF),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0x1F64748B),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.textSecondary.withOpacity(0.4), width: 1),
+                        ),
+                        child: Text(
+                          "COMPLETED",
+                          style: GoogleFonts.outfit(
+                            color: Colors.white70,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        tournamentChipText,
+                        style: GoogleFonts.outfit(
+                          color: AppColors.textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Row(
+                          children: [
+                            widget.buildTeamLogo(team1Logo, team1Name, size: 36),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                team1Name,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        flex: 4,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              score1,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withOpacity(0.04),
+                              ),
+                              child: Text(
+                                "VS",
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              score2,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                team2Name,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                                textAlign: TextAlign.end,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            widget.buildTeamLogo(team2Logo, team2Name, size: 36),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.01),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      resultText,
+                      style: GoogleFonts.outfit(
+                        color: AppColors.primary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textSecondary,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
