@@ -459,7 +459,8 @@ def read_root():
     return {
         "message": f"Welcome to {settings.PROJECT_NAME}!",
         "docs": f"{settings.API_V1_STR}/docs",
-        "admin": "/admin"
+        "admin": "/admin",
+        "commit_sha": os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT_SHA") or os.getenv("RAILWAY_GIT_COMMIT_SHA") or "unknown"
     }
 
 @app.get("/api/v1/debug-teams")
