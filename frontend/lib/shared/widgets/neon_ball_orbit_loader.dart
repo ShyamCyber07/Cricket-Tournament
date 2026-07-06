@@ -191,57 +191,68 @@ class _NeonBallOrbitLoaderState extends State<NeonBallOrbitLoader>
             ],
           ),
         ),
-        const SizedBox(height: 24),
+        if (widget.size >= 50.0) ...[
+          const SizedBox(height: 24),
 
-        // 4. CricUP Brand Name
-        Text(
-          "CRICUP",
-          style: textStyle,
-        ),
-        const SizedBox(height: 8),
+          // 4. CricUP Brand Name
+          Text(
+            "CRICUP",
+            style: textStyle,
+            textAlign: TextAlign.center,
+            softWrap: false,
+            overflow: TextOverflow.visible,
+          ),
+          const SizedBox(height: 8),
 
-        // 5. Dynamic Loading Messages
-        Text(
-          widget.loadingText ?? "LOADING MATCHES...",
-          style: subTextStyle,
-        ),
-        const SizedBox(height: 6),
-        Text(
-          "Please wait a moment...",
-          style: statusTextStyle,
-        ),
-        const SizedBox(height: 20),
+          // 5. Dynamic Loading Messages
+          Text(
+            widget.loadingText ?? "LOADING MATCHES...",
+            style: subTextStyle,
+            textAlign: TextAlign.center,
+            softWrap: false,
+            overflow: TextOverflow.visible,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "Please wait a moment...",
+            style: statusTextStyle,
+            textAlign: TextAlign.center,
+            softWrap: false,
+            overflow: TextOverflow.visible,
+          ),
+          const SizedBox(height: 20),
 
-        // 6. Animated Staggered Loading Dots
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: List.generate(5, (index) {
-            return AnimatedBuilder(
-              animation: _dotsController,
-              builder: (context, child) {
-                final double scale = _dotAnimations[index].value;
-                final double opacity = _dotAnimations[index].value;
-                return Container(
-                  width: 6,
-                  height: 6,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: primaryColor.withOpacity(opacity),
-                    boxShadow: [
-                      BoxShadow(
-                        color: primaryColor.withOpacity(opacity * 0.6),
-                        blurRadius: scale * 4,
-                        spreadRadius: scale * 1,
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
-          }),
-        ),
+          // 6. Animated Staggered Loading Dots
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(5, (index) {
+              return AnimatedBuilder(
+                animation: _dotsController,
+                builder: (context, child) {
+                  final double scale = _dotAnimations[index].value;
+                  final double opacity = _dotAnimations[index].value;
+                  return Container(
+                    width: 6,
+                    height: 6,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: primaryColor.withOpacity(opacity),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primaryColor.withOpacity(opacity * 0.6),
+                          blurRadius: scale * 4,
+                          spreadRadius: scale * 1,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            }),
+          ),
+        ],
       ],
     );
 

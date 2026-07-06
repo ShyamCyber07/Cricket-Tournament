@@ -1,4 +1,5 @@
 import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -758,7 +759,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           SafeArea(
             child: _isLoading
                 ? const Center(
-                    child: ButtonLoader(color: AppColors.primary),
+                    child: NeonBallOrbitLoader(
+                      size: 60.0,
+                      loadingText: "LOADING PROFILE...",
+                    ),
                   )
                 : _errorMessage != null
                     ? Center(
