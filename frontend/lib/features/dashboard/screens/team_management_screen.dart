@@ -1,3 +1,5 @@
+import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
@@ -929,7 +931,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(child: NeonBallOrbitLoader())
           : _teams.isEmpty
               ? Center(
                   child: Text(
@@ -1168,7 +1170,7 @@ class _QrScanJoinBottomSheetState extends State<QrScanJoinBottomSheet> {
               borderRadius: BorderRadius.circular(16),
               child: _checkingPermission
                   ? const Center(
-                      child: CircularProgressIndicator(color: AppColors.primary),
+                      child: ButtonLoader(color: AppColors.primary),
                     )
                   : (!_isCameraPermissionGranted
                       ? Column(
@@ -1248,7 +1250,7 @@ class _QrScanJoinBottomSheetState extends State<QrScanJoinBottomSheet> {
                                 child: Container(
                                   color: Colors.black45,
                                   child: const Center(
-                                    child: CircularProgressIndicator(color: AppColors.primary),
+                                    child: ButtonLoader(color: AppColors.primary),
                                   ),
                                 ),
                               ),

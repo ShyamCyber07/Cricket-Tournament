@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
@@ -487,7 +488,7 @@ class _LiveMatchesScreenState extends State<LiveMatchesScreen> with SingleTicker
         color: AppColors.primary,
         backgroundColor: AppColors.surface,
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            ? const Center(child: NeonBallOrbitLoader())
             : TabBarView(
                 controller: _tabController,
                 children: [

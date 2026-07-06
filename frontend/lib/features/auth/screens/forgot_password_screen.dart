@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -253,7 +254,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                       final localLoading = _isSubmitting || state is AuthLoading;
                                       if (localLoading) {
                                         return const Center(
-                                          child: CircularProgressIndicator(color: AppColors.secondary),
+                                          child: ButtonLoader(color: AppColors.secondary),
                                         );
                                       }
                                       return Container(

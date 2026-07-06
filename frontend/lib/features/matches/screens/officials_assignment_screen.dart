@@ -1,3 +1,5 @@
+import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
@@ -144,7 +146,7 @@ class _OfficialsAssignmentScreenState extends State<OfficialsAssignmentScreen> {
       ),
       body: SafeArea(
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            ? const Center(child: NeonBallOrbitLoader())
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(24.0),
                 child: Column(
@@ -226,7 +228,7 @@ class _OfficialsAssignmentScreenState extends State<OfficialsAssignmentScreen> {
                       ),
                       const SizedBox(height: 12),
                       if (_isSearching)
-                        const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)))
+                        const Center(child: SizedBox(width: 24, height: 24, child: ButtonLoader(color: AppColors.primary)))
                       else if (_searchResults.isNotEmpty)
                         Container(
                           constraints: const BoxConstraints(maxHeight: 180),

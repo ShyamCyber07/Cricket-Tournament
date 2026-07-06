@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -423,7 +424,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
 
   Widget _buildAnalyticsTab() {
     if (_isLoadingAnalytics) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+      return const Center(child: NeonBallOrbitLoader());
     }
 
     final items = [
@@ -535,7 +536,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
           ),
         Expanded(
           child: _isLoadingUsers
-              ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+              ? const Center(child: NeonBallOrbitLoader())
               : _users.isEmpty
                   ? const Center(child: Text("No users found"))
                   : ListView.builder(
@@ -639,7 +640,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
 
   Widget _buildReportsTab() {
     if (_isLoadingReports) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+      return const Center(child: NeonBallOrbitLoader());
     }
 
     if (_reports.isEmpty) {
@@ -752,7 +753,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
 
   Widget _buildActivityLogsTab() {
     if (_isLoadingActivityLogs) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+      return const Center(child: NeonBallOrbitLoader());
     }
 
     if (_activityLogs.isEmpty) {
@@ -841,7 +842,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
 
   Widget _buildContentTab() {
     if (_isLoadingContent) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+      return const Center(child: NeonBallOrbitLoader());
     }
 
     return DefaultTabController(

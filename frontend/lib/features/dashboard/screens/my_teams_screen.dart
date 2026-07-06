@@ -1,3 +1,5 @@
+import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
@@ -309,7 +311,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
                         child: SizedBox(
                           width: 24,
                           height: 24,
-                          child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2),
+                          child: ButtonLoader(color: AppColors.primary),
                         ),
                       )
                     : ElevatedButton(
@@ -605,10 +607,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
                               ? const SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
+                                  child: ButtonLoader(color: Colors.white),
                                 )
                               : Text(
                                   "Join",
@@ -687,7 +686,7 @@ class _MyTeamsScreenState extends State<MyTeamsScreen> with SingleTickerProvider
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(child: NeonBallOrbitLoader())
           : TabBarView(
               controller: _tabController,
               children: [

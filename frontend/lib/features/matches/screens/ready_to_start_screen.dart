@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
@@ -183,7 +184,7 @@ class _ReadyToStartScreenState extends State<ReadyToStartScreen> {
       ),
       body: SafeArea(
         child: _isLoading || !_isInitialized
-            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            ? const Center(child: NeonBallOrbitLoader())
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(24.0),
                 child: Column(

@@ -14,6 +14,7 @@ import 'package:cricket_scorer/core/app_config.dart';
 
 import 'package:cricket_scorer/features/auth/screens/splash_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -82,7 +83,7 @@ class AuthGate extends StatelessWidget {
         } else if (state is AuthLoading) {
           return const Scaffold(
             body: Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
+              child: NeonBallOrbitLoader(showBackground: true),
             ),
           );
         } else {

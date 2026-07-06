@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
@@ -211,7 +212,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> with SingleTickerPr
   // --- CAREER TAB ---
   Widget _buildCareerTab() {
     if (_isLoadingCareer) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+      return const Center(child: NeonBallOrbitLoader());
     }
     if (_errorMsg != null) {
       return Center(
@@ -564,7 +565,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> with SingleTickerPr
         // Team stats display below
         Expanded(
           child: _isLoadingTeams
-              ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+              ? const Center(child: NeonBallOrbitLoader())
               : _selectedTeamStats == null
                   ? const Center(child: Text("Select a team above to view statistics"))
                   : ListView(
@@ -742,7 +743,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> with SingleTickerPr
         // Tournament Stats Dashboard details below
         Expanded(
           child: _isLoadingTournaments
-              ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+              ? const Center(child: NeonBallOrbitLoader())
               : _selectedTournamentDashboard == null
                   ? const Center(child: Text("Select a tournament above to view details"))
                   : _buildTournamentDetailsStats(),

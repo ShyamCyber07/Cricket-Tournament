@@ -1,3 +1,5 @@
+import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:ui';
@@ -1084,7 +1086,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                           child: isSubmitting
-                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                              ? const SizedBox(width: 20, height: 20, child: ButtonLoader(color: Colors.black))
                               : Text("SPIN COIN", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14)),
                         ),
                       ],
@@ -1201,7 +1203,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                           child: isSubmitting
-                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                              ? const SizedBox(width: 20, height: 20, child: ButtonLoader(color: Colors.white))
                               : Text("Proceed to Lineups", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14)),
                         ),
                       ],
@@ -1946,7 +1948,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
   Widget build(BuildContext context) {
     if (_isLoading && _liveState == null) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        body: Center(child: NeonBallOrbitLoader()),
       );
     }
 
@@ -3873,7 +3875,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                 ? const Padding(
                     padding: EdgeInsets.all(24.0),
                     child: Center(
-                      child: CircularProgressIndicator(color: AppColors.primary),
+                      child: ButtonLoader(color: AppColors.primary),
                     ),
                   )
                 : (_scorecardData == null

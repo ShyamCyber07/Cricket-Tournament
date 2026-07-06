@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -749,7 +750,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.symmetric(vertical: 40.0),
-                        child: CircularProgressIndicator(color: AppColors.primary),
+                        child: NeonBallOrbitLoader(size: 60.0),
                       ),
                     )
                   : completedMatches.isEmpty
@@ -2053,4 +2054,3 @@ class _DashboardRecentMatchCardState extends State<DashboardRecentMatchCard> {
     );
   }
 }
-

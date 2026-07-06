@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
@@ -124,7 +125,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
               // Results Area
               Expanded(
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                    ? const Center(child: NeonBallOrbitLoader())
                     : _errorMessage != null
                         ? Center(
                             child: Text(

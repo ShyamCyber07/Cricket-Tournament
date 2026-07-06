@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -251,7 +252,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               onRefresh: _fetchNotifications,
               color: AppColors.primary,
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                  ? const Center(child: NeonBallOrbitLoader())
                   : filteredNotifs.isEmpty
                       ? _buildEmptyState()
                       : ListView.builder(

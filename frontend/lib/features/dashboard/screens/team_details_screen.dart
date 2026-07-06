@@ -1,3 +1,5 @@
+import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -796,7 +798,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: _isSavingSettings
-                ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                ? const SizedBox(height: 16, width: 16, child: ButtonLoader(color: Colors.black))
                 : Text("Save Settings", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15)),
           ),
           const SizedBox(height: 32),
@@ -2333,7 +2335,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(child: NeonBallOrbitLoader())
           : TabBarView(
               controller: _tabController,
               children: [
@@ -2611,4 +2613,3 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     );
   }
 }
-

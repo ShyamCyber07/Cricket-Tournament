@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
@@ -146,7 +147,7 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
   Widget _buildOriginalBuild_frozen(BuildContext context) {
     if (_isLoadingTeams) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        body: Center(child: NeonBallOrbitLoader()),
       );
     }
     return Scaffold(
@@ -283,7 +284,7 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
                       const SizedBox(height: 32),
 
                       _isCreatingMatch
-                          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                          ? const Center(child: NeonBallOrbitLoader())
                           : ElevatedButton(
                               onPressed: _createMatch,
                               style: ElevatedButton.styleFrom(

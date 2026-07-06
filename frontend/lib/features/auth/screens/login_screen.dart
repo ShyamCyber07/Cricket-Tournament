@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -286,7 +287,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       final localLoading = _isSubmitting || state is AuthLoading;
                                       if (localLoading) {
                                         return const Center(
-                                          child: CircularProgressIndicator(color: AppColors.primary),
+                                          child: ButtonLoader(color: AppColors.primary),
                                         );
                                       }
                                       return Container(

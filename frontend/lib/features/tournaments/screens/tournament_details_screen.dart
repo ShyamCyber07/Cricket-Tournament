@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -963,7 +964,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(title: Text(widget.tournamentName)),
-        body: const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        body: const Center(child: NeonBallOrbitLoader()),
       );
     }
 

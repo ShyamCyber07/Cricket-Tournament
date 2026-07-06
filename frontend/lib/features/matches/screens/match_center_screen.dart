@@ -1,3 +1,5 @@
+import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
@@ -200,7 +202,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                           }
                         },
                         child: isSubmitting
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                            ? const SizedBox(width: 20, height: 20, child: ButtonLoader(color: Colors.black))
                             : const Text("SPIN COIN"),
                       ),
                     ],
@@ -255,7 +257,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
                                 }
                               },
                         child: isSubmitting
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                            ? const SizedBox(width: 20, height: 20, child: ButtonLoader(color: Colors.black))
                             : const Text("SUBMIT DECISION"),
                       ),
                     ],
@@ -463,7 +465,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
   Widget build(BuildContext context) {
     if (_isLoading || _liveState == null) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        body: Center(child: NeonBallOrbitLoader()),
       );
     }
 

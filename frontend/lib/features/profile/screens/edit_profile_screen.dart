@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -385,10 +386,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                   child: _isUploadingPhoto
                                       ? const Padding(
                                           padding: EdgeInsets.all(28.0),
-                                          child: CircularProgressIndicator(
-                                            color: AppColors.primary,
-                                            strokeWidth: 2.5,
-                                          ),
+                                          child: ButtonLoader(color: AppColors.primary),
                                         )
                                       : _uploadedPhotoUrl != null && _uploadedPhotoUrl!.isNotEmpty
                                           ? ClipOval(
@@ -834,7 +832,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     // Save Button
                     _isSaving
                         ? const Center(
-                            child: CircularProgressIndicator(color: AppColors.primary),
+                            child: ButtonLoader(color: AppColors.primary),
                           )
                         : Container(
                             decoration: BoxDecoration(

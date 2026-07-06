@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
@@ -420,7 +421,7 @@ class _TournamentCreateScreenState extends State<TournamentCreateScreen> {
 
               // Submit Button
               _isSubmitting
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                  ? const Center(child: NeonBallOrbitLoader())
                   : ElevatedButton(
                       onPressed: _submit,
                       style: ElevatedButton.styleFrom(

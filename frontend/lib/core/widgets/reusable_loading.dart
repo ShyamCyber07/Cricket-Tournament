@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:cricket_scorer/core/theme.dart';
+import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
 
 class SkeletonLoader extends StatelessWidget {
   final double width;
@@ -86,49 +86,20 @@ class FullScreenLoader extends StatelessWidget {
 
   const FullScreenLoader({
     super.key,
-    this.message = "Loading CricUP...",
+    this.message = "LOADING MATCHES...",
   });
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // Semi-transparent blurry backdrop
-        Positioned.fill(
-          child: Container(
-            color: Colors.black.withOpacity(0.75),
-          ),
+    return Scaffold(
+      backgroundColor: const Color(0xFF090B10),
+      body: Center(
+        child: NeonBallOrbitLoader(
+          size: 130.0,
+          loadingText: message,
+          showBackground: true,
         ),
-        Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Spinning Cricket Spinkit Loader
-              const SpinKitDoubleBounce(
-                color: AppColors.primary,
-                size: 70.0,
-              ),
-              const SizedBox(height: 24),
-              // Glassmorphic styling for message
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                decoration: AppColors.glassDecoration(
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -148,9 +119,9 @@ class ButtonLoader extends StatelessWidget {
     return SizedBox(
       width: size,
       height: size,
-      child: CircularProgressIndicator(
-        strokeWidth: 2,
-        valueColor: AlwaysStoppedAnimation<Color>(color),
+      child: NeonBallOrbitLoader(
+        size: size * 1.5,
+        color: color,
       ),
     );
   }

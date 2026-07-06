@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -343,7 +344,7 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen> with 
                                     builder: (context, state) {
                                       if (state is AuthLoading) {
                                         return const Center(
-                                          child: CircularProgressIndicator(color: AppColors.primary),
+                                          child: ButtonLoader(color: AppColors.primary),
                                         );
                                       }
                                       return Container(

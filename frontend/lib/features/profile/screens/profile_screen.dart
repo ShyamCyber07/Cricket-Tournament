@@ -1,3 +1,4 @@
+import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -757,7 +758,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           SafeArea(
             child: _isLoading
                 ? const Center(
-                    child: CircularProgressIndicator(color: AppColors.primary),
+                    child: ButtonLoader(color: AppColors.primary),
                   )
                 : _errorMessage != null
                     ? Center(
