@@ -156,6 +156,8 @@ class LiveMatchState(BaseModel):
     created_by: Optional[UUID] = None
     assigned_scorer_id: Optional[UUID] = None
     tournament_organizer_id: Optional[UUID] = None
+    team1_squad_locked: bool = False
+    team2_squad_locked: bool = False
     
     tournament_name: Optional[str] = None
     tournament_logo_url: Optional[str] = None
