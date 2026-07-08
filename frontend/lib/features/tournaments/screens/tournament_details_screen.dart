@@ -1953,24 +1953,55 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  ChoiceChip(
-                    label: Text("List View", style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
-                    selected: !_showBracketView,
-                    selectedColor: AppColors.primary,
-                    backgroundColor: AppColors.surface,
-                    onSelected: (val) {
-                      if (val) setState(() => _showBracketView = false);
-                    },
-                  ),
-                  const SizedBox(width: 12),
-                  ChoiceChip(
-                    label: Text("Bracket View", style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
-                    selected: _showBracketView,
-                    selectedColor: AppColors.primary,
-                    backgroundColor: AppColors.surface,
-                    onSelected: (val) {
-                      if (val) setState(() => _showBracketView = true);
-                    },
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withOpacity(0.08)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () => setState(() => _showBracketView = false),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: !_showBracketView ? AppColors.primary : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              "List View",
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: !_showBracketView ? Colors.black : Colors.white70,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () => setState(() => _showBracketView = true),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: _showBracketView ? AppColors.primary : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              "Bracket View",
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: _showBracketView ? Colors.black : Colors.white70,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -2023,40 +2054,79 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 if (isKnockoutFormat)
-                  Row(
-                    children: [
-                      ChoiceChip(
-                        label: Text("List View", style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
-                        selected: !_showBracketView,
-                        selectedColor: AppColors.primary,
-                        backgroundColor: AppColors.surface,
-                        onSelected: (val) {
-                          if (val) setState(() => _showBracketView = false);
-                        },
-                      ),
-                      const SizedBox(width: 12),
-                      ChoiceChip(
-                        label: Text("Bracket View", style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
-                        selected: _showBracketView,
-                        selectedColor: AppColors.primary,
-                        backgroundColor: AppColors.surface,
-                        onSelected: (val) {
-                          if (val) setState(() => _showBracketView = true);
-                        },
-                      ),
-                    ],
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withOpacity(0.08)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () => setState(() => _showBracketView = false),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: !_showBracketView ? AppColors.primary : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              "List View",
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: !_showBracketView ? Colors.black : Colors.white70,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () => setState(() => _showBracketView = true),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: _showBracketView ? AppColors.primary : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              "Bracket View",
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: _showBracketView ? Colors.black : Colors.white70,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   )
                 else
                   const Spacer(),
                 if (isOrganizer)
                   ElevatedButton.icon(
                     onPressed: _showCreateManualFixtureSheet,
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text("Add Match"),
+                    icon: const Icon(Icons.add_circle_outline, size: 18, color: Colors.black),
+                    label: Text(
+                      "Add Match",
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: Colors.black,
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      shadowColor: AppColors.primary.withOpacity(0.4),
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     ),
                   ),
               ],

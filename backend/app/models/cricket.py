@@ -227,6 +227,10 @@ class Match(Base):
     def team2_logo_url(self) -> Optional[str]:
         return self.team2.logo_url if self.team2 else None
 
+    @property
+    def tournament_organizer_id(self) -> Optional[uuid.UUID]:
+        return self.tournament.organizer_id if self.tournament else None
+
 
 class MatchSquad(Base):
     __tablename__ = "match_squads"

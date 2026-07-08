@@ -30,6 +30,7 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   bool _isReadOnly = false;
+  bool _isSquadLocked = false;
   String _currentUserId = '';
   String _currentUserRole = '';
 
@@ -82,13 +83,13 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
         }
         
         final matchRes = await _apiService.getLiveMatch(widget.matchId);
-        final matchCreatorId = matchRes.data['created_by']?.toString();
-        final assignedScorerId = matchRes.data['assigned_scorer_id']?.toString();
-        final matchStatus = matchRes.data['status']?.toString() ?? 'scheduled';
-        final isScorer = _currentUserId == matchCreatorId || _currentUserId == assignedScorerId || _currentUserRole == 'admin';
-        final canScorerEdit = isScorer && (matchStatus != 'live' && matchStatus != 'innings1' && matchStatus != 'innings2' && matchStatus != 'completed');
+        _isSquadLocked = targetTeamId == widget.team1Id
+            ? matchRes.data['team1_squad_locked'] == true
+            : matchRes.data['team2_squad_locked'] == true;
+            
+        final isAdmin = _currentUserRole == 'admin';
         
-        if (!isCaptain && !canScorerEdit) {
+        if (_isSquadLocked || (!isCaptain && !isAdmin)) {
           _isReadOnly = true;
         }
       }
@@ -443,7 +444,9 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              "View Only: Only the team Captain can edit and lock strategy.",
+                              _isSquadLocked
+                                  ? "Strategy is Locked: This Playing XI is finalized."
+                                  : "View Only: Only the team Captain can edit and lock strategy.",
                               style: GoogleFonts.outfit(color: AppColors.error, fontSize: 13, fontWeight: FontWeight.bold),
                             ),
                           ),

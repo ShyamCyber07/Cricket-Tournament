@@ -73,6 +73,23 @@ def check_match_scorer_permission(match, current_user_id, db: Session):
         )
 
 
+def check_match_setup_permission(match, current_user_id, db: Session):
+    is_organizer = False
+    if match.tournament:
+        is_organizer = match.tournament.organizer_id == current_user_id
+    else:
+        is_organizer = match.created_by == current_user_id
+
+    user = db.query(User).filter(User.id == current_user_id).first()
+    is_admin = user and user.role == "admin"
+
+    if not is_organizer and not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the Tournament Organizer or Admin can perform match setup controls."
+        )
+
+
 
 def log_match_activity(db: Session, match_id: UUID, user_id: Optional[UUID], action_type: str, description: str):
     activity = MatchActivity(
@@ -190,7 +207,7 @@ def submit_toss(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    check_match_scorer_permission(match, current_user.id, db)
+    check_match_setup_permission(match, current_user.id, db)
 
     if toss.toss_winner_id not in [match.team1_id, match.team2_id]:
         raise HTTPException(status_code=400, detail="Toss winner must be one of the playing teams")
@@ -225,7 +242,7 @@ def initiate_toss(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    check_match_scorer_permission(match, current_user.id, db)
+    check_match_setup_permission(match, current_user.id, db)
 
     if match.tournament_id is not None:
         if not match.team1_squad_locked or not match.team2_squad_locked:
@@ -266,7 +283,7 @@ def submit_toss_decision(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    check_match_scorer_permission(match, current_user.id, db)
+    check_match_setup_permission(match, current_user.id, db)
 
     if match.toss_winner_id is None:
         raise HTTPException(status_code=400, detail="Toss has not been initiated/executed yet")
@@ -369,11 +386,10 @@ def submit_squads(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    check_match_scoring_permission(match, current_user.id)
-
-    # Strict Captain check: only captain (or admin or match creator) can submit squads
+    # Strict Captain check: only captain (or admin) can submit squads
     user = db.query(User).filter(User.id == current_user.id).first()
-    if user and user.role != "admin" and match.created_by != current_user.id:
+    is_admin = user and user.role == "admin"
+    if not is_admin:
         membership = db.query(TeamMember).filter(
             TeamMember.team_id == squad.team_id,
             TeamMember.user_id == current_user.id,
@@ -492,9 +508,10 @@ def lock_squad(
     if team_id not in [match.team1_id, match.team2_id]:
         raise HTTPException(status_code=400, detail="Team is not playing in this match")
 
-    # Strict Captain check: only captain (or admin or match creator) can lock squads
+    # Strict Captain check: only captain (or admin) can lock squads
     user = db.query(User).filter(User.id == current_user.id).first()
-    if user and user.role != "admin" and match.created_by != current_user.id:
+    is_admin = user and user.role == "admin"
+    if not is_admin:
         membership = db.query(TeamMember).filter(
             TeamMember.team_id == team_id,
             TeamMember.user_id == current_user.id,
@@ -616,7 +633,7 @@ def start_match(
 
     if match.toss_winner_id is None or match.toss_decision is None:
         raise HTTPException(status_code=400, detail="Toss must be completed and decision made before starting match")
-    if squad1_count == 0 or squad2_count == 0:
+    if not match.team1_squad_locked or not match.team2_squad_locked:
         raise HTTPException(status_code=400, detail="Playing XI must be locked for both teams before starting match")
     if not match.umpire_name or not match.scorer_name:
         raise HTTPException(status_code=400, detail="Match officials (Umpire and Scorer) must be assigned before starting match")

@@ -303,11 +303,12 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
     DateTime matchDate,
     String matchStatus,
   ) {
+    final hasCaptain = squad.any((p) => p['is_captain'] == true);
     final hasWk = squad.any((p) => p['is_wicketkeeper'] == true);
     final hasBattingOrder = squad.isNotEmpty && squad.any((p) => p['batting_order'] != null);
     final hasBowlingPref = squad.isNotEmpty && squad.any((p) => p['bowling_preference'] != null);
 
-    final isReady = isLocked && hasWk && hasBattingOrder && hasBowlingPref;
+    final isReady = isLocked && hasCaptain && hasWk && hasBattingOrder && hasBowlingPref;
     final isOverdue = matchDate.isBefore(DateTime.now()) && 
         (matchStatus == 'scheduled' || matchStatus == 'toss' || matchStatus == 'team_selection' || matchStatus == 'ready');
 
@@ -370,6 +371,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
           ),
           const SizedBox(height: 12),
           _buildReadinessItem("Playing XI Locked", isLocked),
+          _buildReadinessItem("Captain Selected", hasCaptain),
           _buildReadinessItem("Wicket Keeper Selected", hasWk),
           _buildReadinessItem("Batting Order Saved", hasBattingOrder),
           _buildReadinessItem("Bowling Preference Saved", hasBowlingPref),
@@ -428,12 +430,18 @@ class _MatchCenterScreenState extends State<MatchCenterScreen> {
             Container(
               width: 32,
               height: 32,
-              decoration: BoxDecoration(color: statusColor.withOpacity(0.12), shape: BoxShape.circle),
-              alignment: Alignment.center,
-              child: Text(
-                stepNumber.toString(),
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: statusColor, fontSize: 14),
+              decoration: BoxDecoration(
+                color: isCompleted ? Colors.green.withOpacity(0.12) : statusColor.withOpacity(0.12),
+                shape: BoxShape.circle,
+                border: isCompleted ? Border.all(color: Colors.green.withOpacity(0.5)) : null,
               ),
+              alignment: Alignment.center,
+              child: isCompleted
+                  ? const Icon(Icons.check, color: Colors.green, size: 16)
+                  : Text(
+                      stepNumber.toString(),
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: statusColor, fontSize: 14),
+                    ),
             ),
             const SizedBox(width: 16),
             Expanded(

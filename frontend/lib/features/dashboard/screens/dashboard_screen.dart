@@ -943,25 +943,36 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   ),
                 ),
                 const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => MatchCenterScreen(matchId: match['id'])),
+                Builder(
+                  builder: (context) {
+                    final organizerId = match['tournament_organizer_id']?.toString();
+                    final isOrganizer = _currentUser != null && (
+                      _currentUser['role'] == 'admin' ||
+                      (organizerId != null && _currentUser['id']?.toString() == organizerId) ||
+                      (organizerId == null && match['created_by']?.toString() == _currentUser['id']?.toString())
                     );
-                    _fetchMatches();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.black,
-                  ),
-                  child: Text(
-                    "Start Match Setup",
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12),
-                  ),
+                    if (!isOrganizer) return const SizedBox();
+                    return ElevatedButton(
+                      onPressed: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => MatchCenterScreen(matchId: match['id'])),
+                        );
+                        _fetchMatches();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.black,
+                      ),
+                      child: Text(
+                        "Start Match Setup",
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12),
+                      ),
+                    );
+                  }
                 ),
               ],
             )

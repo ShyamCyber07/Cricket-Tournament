@@ -42,6 +42,7 @@ class MatchResponse(MatchBase):
     team2_squad_locked: bool = False
     created_by: Optional[UUID] = None
     assigned_scorer_id: Optional[UUID] = None
+    tournament_organizer_id: Optional[UUID] = None
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
