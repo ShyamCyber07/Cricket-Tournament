@@ -29,7 +29,7 @@ class SquadSelectionScreen extends StatefulWidget {
 class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
-  bool _isReadOnly = false;
+  bool _isReadOnly = true;
   bool _isSquadLocked = false;
   String _currentUserId = '';
   String _currentUserRole = '';
@@ -70,8 +70,8 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
 
       final targetTeamId = widget.targetTeamId;
       if (targetTeamId != null) {
-        final targetTeamRes = targetTeamId == widget.team1Id ? t1Res : t2Res;
-        final members = targetTeamRes.data['members'] as List<dynamic>? ?? [];
+        final membersRes = await _apiService.getTeamMembers(targetTeamId);
+        final members = membersRes.data as List<dynamic>? ?? [];
         
         bool isCaptain = false;
         for (var m in members) {
@@ -89,9 +89,11 @@ class _SquadSelectionScreenState extends State<SquadSelectionScreen> {
             
         final isAdmin = _currentUserRole == 'admin';
         
-        if (_isSquadLocked || (!isCaptain && !isAdmin)) {
-          _isReadOnly = true;
+        if (!_isSquadLocked && (isCaptain || isAdmin)) {
+          _isReadOnly = false;
         }
+      } else {
+        _isReadOnly = false;
       }
 
       final matchSquadsRes = await _apiService.getMatchSquads(widget.matchId);
