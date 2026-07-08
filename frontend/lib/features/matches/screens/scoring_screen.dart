@@ -1,5 +1,6 @@
 import 'package:cricket_scorer/core/widgets/reusable_loading.dart';
 import 'package:cricket_scorer/shared/widgets/neon_ball_orbit_loader.dart';
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:ui';
@@ -495,6 +496,549 @@ class _ScoringScreenState extends State<ScoringScreen> {
     });
   }
 
+
+  // Milestone alerts and tab selections (added in Phase 4.3)
+  int _activeTab = 0;
+  final Set<String> _shownMilestones = {};
+  MilestoneAlert? _activeMilestone;
+  Timer? _milestoneTimer;
+
+  void _checkForMilestones(Map<String, dynamic> data) {
+    final currentInnings = data['current_innings'];
+    if (currentInnings == null) return;
+
+    final teamRuns = currentInnings['total_runs'] as int? ?? 0;
+    final striker = data['striker'];
+    final nonStriker = data['non_striker'];
+    final bowler = data['bowler'];
+    
+    final List<Map<String, dynamic>> potentialMilestones = [];
+
+    // 1. Team Runs
+    if (teamRuns >= 200) {
+      potentialMilestones.add({
+        'key': 'team_200',
+        'title': '200 Team Runs',
+        'desc': '${currentInnings['batting_team_name']} cross the 200-run mark!',
+        'icon': '🎉',
+      });
+    } else if (teamRuns >= 150) {
+      potentialMilestones.add({
+        'key': 'team_150',
+        'title': '150 Team Runs',
+        'desc': '150 runs reached for ${currentInnings['batting_team_name']}!',
+        'icon': '🙌',
+      });
+    } else if (teamRuns >= 100) {
+      potentialMilestones.add({
+        'key': 'team_100',
+        'title': '100 Team Runs',
+        'desc': 'Team century! 100 runs milestone achieved.',
+        'icon': '💯',
+      });
+    } else if (teamRuns >= 50) {
+      potentialMilestones.add({
+        'key': 'team_50',
+        'title': '50 Team Runs',
+        'desc': 'Fifty runs compiled for the team.',
+        'icon': '📈',
+      });
+    }
+
+    // 2. Batter Runs
+    if (striker != null) {
+      final runs = striker['runs'] as int? ?? 0;
+      final name = striker['name']?.toString() ?? 'Striker';
+      final pid = striker['player_id']?.toString() ?? 'st';
+      if (runs >= 100) {
+        potentialMilestones.add({
+          'key': 'bat_100_$pid',
+          'title': 'Century!',
+          'desc': 'A magnificent century for $name! 100 runs reached.',
+          'icon': '👑',
+        });
+      } else if (runs >= 50) {
+        potentialMilestones.add({
+          'key': 'bat_50_$pid',
+          'title': 'Half Century!',
+          'desc': 'A brilliant fifty runs scored by $name!',
+          'icon': '⭐',
+        });
+      }
+    }
+    if (nonStriker != null) {
+      final runs = nonStriker['runs'] as int? ?? 0;
+      final name = nonStriker['name']?.toString() ?? 'Non-Striker';
+      final pid = nonStriker['player_id']?.toString() ?? 'ns';
+      if (runs >= 100) {
+        potentialMilestones.add({
+          'key': 'bat_100_$pid',
+          'title': 'Century!',
+          'desc': 'A magnificent century for $name! 100 runs reached.',
+          'icon': '👑',
+        });
+      } else if (runs >= 50) {
+        potentialMilestones.add({
+          'key': 'bat_50_$pid',
+          'title': 'Half Century!',
+          'desc': 'A brilliant fifty runs scored by $name!',
+          'icon': '⭐',
+        });
+      }
+    }
+
+    // 3. Bowler Wickets
+    if (bowler != null) {
+      final wickets = bowler['wickets'] as int? ?? 0;
+      final name = bowler['name']?.toString() ?? 'Bowler';
+      final pid = bowler['player_id']?.toString() ?? 'bw';
+      if (wickets >= 5) {
+        potentialMilestones.add({
+          'key': 'bowl_5_$pid',
+          'title': '5-Wicket Haul!',
+          'desc': 'Five wickets for $name! Sensational bowling spell.',
+          'icon': '🏆',
+        });
+      } else if (wickets >= 3) {
+        potentialMilestones.add({
+          'key': 'bowl_3_$pid',
+          'title': '3 Wickets!',
+          'desc': 'Three wickets spell for $name!',
+          'icon': '🎩',
+        });
+      }
+    }
+
+    // 4. Partnership
+    final activePair = data['active_partnership'];
+    if (activePair != null) {
+      final runs = activePair['runs'] as int? ?? 0;
+      final p1 = activePair['player1_name']?.toString() ?? '';
+      final p2 = activePair['player2_name']?.toString() ?? '';
+      final p1Id = activePair['player1_id']?.toString() ?? '';
+      final p2Id = activePair['player2_id']?.toString() ?? '';
+      if (runs >= 100) {
+        potentialMilestones.add({
+          'key': 'part_100_${p1Id}_$p2Id',
+          'title': '100 Partnership!',
+          'desc': 'Fabulous 100-run partnership between $p1 & $p2!',
+          'icon': '🤝',
+        });
+      } else if (runs >= 50) {
+        potentialMilestones.add({
+          'key': 'part_50_${p1Id}_$p2Id',
+          'title': '50 Partnership!',
+          'desc': 'Fifty-run partnership compiled by $p1 & $p2!',
+          'icon': '🤝',
+        });
+      }
+    }
+
+    // Check if any milestone is newly reached
+    final currentlyMetKeys = potentialMilestones.map((m) => m['key'] as String).toSet();
+    
+    // Self-correct shown milestones: remove keys that are no longer met (handles Undos)
+    _shownMilestones.retainAll(currentlyMetKeys);
+
+    for (final milestone in potentialMilestones) {
+      final key = milestone['key'] as String;
+      if (!_shownMilestones.contains(key)) {
+        _shownMilestones.add(key);
+        _showMilestoneAlert(MilestoneAlert(
+          title: milestone['title'] as String,
+          description: milestone['desc'] as String,
+          icon: milestone['icon'] as String,
+        ));
+        break; // Show one at a time to prevent overlapping overlays
+      }
+    }
+  }
+
+  void _showMilestoneAlert(MilestoneAlert alert) {
+    _milestoneTimer?.cancel();
+    setState(() {
+      _activeMilestone = alert;
+    });
+    _milestoneTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) {
+        setState(() {
+          _activeMilestone = null;
+        });
+      }
+    });
+  }
+
+  Widget _buildMatchResultScreen(Map<String, dynamic> currentInnings, Map<String, dynamic> prevInnings) {
+    final stats = _scorecardData?['match_summary_stats'];
+    final potm = _scorecardData?['player_of_the_match'];
+
+    String defaultResultText = "";
+    final r1 = prevInnings['total_runs'] as int;
+    final r2 = currentInnings['total_runs'] as int;
+    final team1 = prevInnings['batting_team_name'];
+    final team2 = currentInnings['batting_team_name'];
+    if (r2 > r1) {
+      defaultResultText = "$team2 won by ${10 - currentInnings['total_wickets']} wickets!";
+    } else if (r1 > r2) {
+      defaultResultText = "$team1 won by ${r1 - r2} runs!";
+    } else {
+      defaultResultText = "Match Tied!";
+    }
+
+    final winnerText = stats?['result_text'] ?? defaultResultText;
+    final winningShot = stats?['winning_shot'] ?? 'Not recorded';
+    final matchDuration = stats?['match_duration'] ?? '15 mins';
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 20),
+          Center(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0.5, end: 1.0),
+              duration: const Duration(milliseconds: 600),
+              curve: Curves.elasticOut,
+              builder: (context, val, child) {
+                return Transform.scale(
+                  scale: val,
+                  child: const Icon(
+                    Icons.emoji_events_rounded,
+                    size: 96,
+                    color: Colors.amber,
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            "MATCH COMPLETE",
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              color: Colors.white30,
+              letterSpacing: 2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          
+          Text(
+            winnerText.toUpperCase(),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              fontSize: 20,
+              color: AppColors.secondary,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: AppColors.glassDecoration(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      prevInnings['batting_team_name'],
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white70),
+                    ),
+                    Text(
+                      "${prevInnings['total_runs']}/${prevInnings['total_wickets']} (${prevInnings['total_overs']} ov)",
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                    ),
+                  ],
+                ),
+                const Divider(color: Colors.white10, height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      currentInnings['batting_team_name'],
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white70),
+                    ),
+                    Text(
+                      "${currentInnings['total_runs']}/${currentInnings['total_wickets']} (${currentInnings['total_overs']} ov)",
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: AppColors.glassDecoration(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildResultDetailRow("Match Duration", matchDuration, icon: Icons.access_time_rounded),
+                const Divider(color: Colors.white10, height: 20),
+                _buildResultDetailRow("Winning Shot", winningShot, icon: Icons.sports_cricket_rounded),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          if (potm != null) ...[
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: AppColors.glassDecoration(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "PLAYER OF THE MATCH",
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.primary,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          (potm['name']?.toString() ?? 'P').substring(0, 1).toUpperCase(),
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              potm['name']?.toString() ?? '',
+                              style: GoogleFonts.outfit(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              potm['team_name']?.toString() ?? '',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                color: Colors.white54,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      potm['reason']?.toString() ?? '',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          if (stats != null) ...[
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: AppColors.glassDecoration(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "KEY MATCH STATISTICS",
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.secondary,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (stats['top_scorer_name'] != null)
+                    _buildResultStatsRow(
+                      "Top Scorer",
+                      "${stats['top_scorer_name']}",
+                      "${stats['top_scorer_runs']} off ${stats['top_scorer_balls']} balls",
+                      icon: Icons.star_border_rounded,
+                    ),
+                  if (stats['best_bowler_name'] != null) ...[
+                    const Divider(color: Colors.white10, height: 24),
+                    _buildResultStatsRow(
+                      "Best Bowler",
+                      "${stats['best_bowler_name']}",
+                      "${stats['best_bowler_wickets']} Wickets for ${stats['best_bowler_runs']} runs",
+                      icon: Icons.insights_rounded,
+                    ),
+                  ],
+                  if (stats['highest_partnership_runs'] != null) ...[
+                    const Divider(color: Colors.white10, height: 24),
+                    _buildResultStatsRow(
+                      "Highest Partnership",
+                      "${stats['highest_partnership_players']}",
+                      "${stats['highest_partnership_runs']} runs accumulated",
+                      icon: Icons.people_outline_rounded,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+          ],
+
+          ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ScorecardScreen(matchId: widget.matchId),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.secondary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text("View Full Scorecard", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: _handleBackNavigation,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text("Back to Tournament", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            },
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Colors.white30),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text(
+              "Back to Dashboard",
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResultDetailRow(String label, String value, {required IconData icon}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: AppColors.accent, size: 20),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.outfit(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildResultStatsRow(String label, String value1, String value2, {required IconData icon}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: AppColors.primary, size: 20),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: GoogleFonts.outfit(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value1,
+                style: GoogleFonts.outfit(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value2,
+                style: GoogleFonts.outfit(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   // WebSocket fields
   WebSocket? _webSocket;
   bool _isWsConnected = false;
@@ -633,6 +1177,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
           _checkAndPromptSelections();
         }
       });
+      _checkForMilestones(data);
       if (_showScorecard) {
         _fetchScorecardData();
       }
@@ -727,6 +1272,11 @@ class _ScoringScreenState extends State<ScoringScreen> {
         _isLoading = false;
       });
 
+      if (status == 'completed' && _scorecardData == null) {
+        _fetchScorecardData();
+      }
+      _checkForMilestones(data);
+
       if (_showScorecard) {
         _fetchScorecardData();
       }
@@ -759,122 +1309,532 @@ class _ScoringScreenState extends State<ScoringScreen> {
   }
 
   Widget _buildMatchActivitiesSection() {
+    final recentBalls = _liveState?['recent_balls'] as List? ?? [];
+    
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: AppColors.surface,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: AppColors.surface.withOpacity(0.4),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              color: Colors.white.withOpacity(0.03),
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              child: Row(
+                children: [
+                  _buildTabButton(0, "FEED", Icons.dynamic_feed_rounded),
+                  _buildTabButton(1, "TIMELINE", Icons.history_edu_rounded),
+                  _buildTabButton(2, "ACTIVITIES", Icons.admin_panel_settings_outlined),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: _buildActiveTabContent(recentBalls),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabButton(int index, String label, IconData icon) {
+    final isSelected = _activeTab == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _activeTab = index;
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primary.withOpacity(0.12) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: isSelected ? Border.all(color: AppColors.primary.withOpacity(0.3), width: 1) : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isSelected ? AppColors.primary : Colors.white38,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: GoogleFonts.outfit(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                  color: isSelected ? AppColors.primary : Colors.white38,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveTabContent(List<dynamic> recentBalls) {
+    if (_activeTab == 0) {
+      return _buildFeedTabContent(recentBalls);
+    } else if (_activeTab == 1) {
+      return _buildTimelineTabContent(recentBalls);
+    } else {
+      return _buildActivitiesTabContent();
+    }
+  }
+
+  Widget _buildTimelineTabContent(List<dynamic> recentBalls) {
+    if (recentBalls.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24.0),
+        child: Center(
+          child: Text(
+            "No deliveries recorded yet.",
+            style: GoogleFonts.outfit(color: Colors.white30, fontSize: 13),
+          ),
+        ),
+      );
+    }
+
+    final reversedBalls = recentBalls.reversed.toList();
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: reversedBalls.length,
+      separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 20),
+      itemBuilder: (context, index) {
+        final ball = reversedBalls[index];
+        final coord = ball['over_ball_coord']?.toString() ?? '';
+        final label = ball['ball_label']?.toString() ?? '';
+        final isWicket = ball['is_wicket'] == true;
+        final commentaryText = ball['commentary']?.toString() ?? '';
+
+        Color badgeColor = Colors.white10;
+        Color textColor = Colors.white70;
+        if (isWicket) {
+          badgeColor = Colors.red.withOpacity(0.15);
+          textColor = Colors.redAccent;
+        } else if (label == '6') {
+          badgeColor = AppColors.secondary.withOpacity(0.15);
+          textColor = AppColors.secondary;
+        } else if (label == '4') {
+          badgeColor = AppColors.primary.withOpacity(0.15);
+          textColor = AppColors.primary;
+        } else if (label == '0' || label == '.') {
+          badgeColor = Colors.white.withOpacity(0.04);
+          textColor = Colors.white38;
+        } else {
+          badgeColor = AppColors.accent.withOpacity(0.1);
+          textColor = AppColors.accent;
+        }
+
+        return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Text(
+                  coord,
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white70,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: badgeColor,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    isWicket ? "WICKET" : (label == '6' ? "SIX" : (label == '4' ? "FOUR" : label.toUpperCase())),
+                    style: GoogleFonts.outfit(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                commentaryText.isNotEmpty ? commentaryText : "Ball logged successfully.",
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  color: Colors.white.withOpacity(0.85),
+                  height: 1.3,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildFeedTabContent(List<dynamic> recentBalls) {
+    final List<Map<String, dynamic>> feedItems = [];
+
+    int runsAcc = 0;
+    int wicketsAcc = 0;
+    
+    final Map<String, int> batterRuns = {};
+    final Map<String, String> batterNames = {};
+    final Map<String, int> bowlerWickets = {};
+    final Map<String, List<bool>> bowlerDeliveries = {};
+
+    for (final ball in recentBalls) {
+      final label = ball['ball_label']?.toString() ?? '';
+      final runs = ball['runs'] as int? ?? 0;
+      final isWicket = ball['is_wicket'] == true;
+      final coord = ball['over_ball_coord']?.toString() ?? '';
+      final commentary = ball['commentary']?.toString() ?? '';
+      final extraType = ball['extra_type']?.toString() ?? 'none';
+
+      runsAcc += runs;
+      if (isWicket) {
+        wicketsAcc += 1;
+      }
+
+      String bName = "Batter";
+      String bowlName = "Bowler";
+      final toParts = commentary.split(' to ');
+      if (toParts.length > 1) {
+        final prefix = toParts[0];
+        final spaceIdx = prefix.indexOf(' ');
+        if (spaceIdx != -1) {
+          bowlName = prefix.substring(spaceIdx + 1).trim();
+        }
+        final suffix = toParts[1];
+        final colonIdx = suffix.indexOf(':');
+        if (colonIdx != -1) {
+          bName = suffix.substring(0, colonIdx).trim();
+        }
+      }
+
+      int runBatsman = 0;
+      if (extraType == 'none') {
+        runBatsman = runs;
+      } else if (extraType == 'no_ball') {
+        runBatsman = runs > 0 ? runs - 1 : 0;
+      }
+
+      if (bName != "Batter") {
+        batterRuns[bName] = (batterRuns[bName] ?? 0) + runBatsman;
+        batterNames[bName] = bName;
+      }
+
+      if (bowlName != "Bowler") {
+        if (isWicket) {
+          bowlerWickets[bowlName] = (bowlerWickets[bowlName] ?? 0) + 1;
+        }
+        if (extraType != 'wide') {
+          bowlerDeliveries.putIfAbsent(bowlName, () => []);
+          bowlerDeliveries[bowlName]!.add(isWicket);
+        }
+      }
+
+      if (isWicket) {
+        feedItems.add({
+          'icon': '🔥',
+          'title': 'WICKET',
+          'description': commentary.contains(':') ? commentary.split(':').last.trim() : 'Wicket fell.',
+          'coord': coord,
+          'color': Colors.redAccent,
+        });
+      } else if (label == '4') {
+        feedItems.add({
+          'icon': '🏏',
+          'title': 'FOUR',
+          'description': commentary.contains(':') ? commentary.split(':').last.trim() : 'Four runs.',
+          'coord': coord,
+          'color': AppColors.primary,
+        });
+      } else if (label == '6') {
+        feedItems.add({
+          'icon': '🚀',
+          'title': 'SIX',
+          'description': commentary.contains(':') ? commentary.split(':').last.trim() : 'Six runs!',
+          'coord': coord,
+          'color': AppColors.secondary,
+        });
+      }
+
+      if (bName != "Batter") {
+        final currentBatRuns = batterRuns[bName]!;
+        if (currentBatRuns >= 50 && currentBatRuns - runBatsman < 50) {
+          feedItems.add({
+            'icon': '⭐',
+            'title': 'Fifty',
+            'description': '$bName reaches a spectacular half-century!',
+            'coord': coord,
+            'color': Colors.amber,
+          });
+        }
+        if (currentBatRuns >= 100 && currentBatRuns - runBatsman < 100) {
+          feedItems.add({
+            'icon': '👑',
+            'title': 'Century',
+            'description': 'A historic century for $bName! 100 runs up.',
+            'coord': coord,
+            'color': Colors.orangeAccent,
+          });
+        }
+      }
+
+      if (bowlName != "Bowler") {
+        final currentBowlWickets = bowlerWickets[bowlName]!;
+        if (currentBowlWickets >= 3 && currentBowlWickets - (isWicket ? 1 : 0) < 3) {
+          feedItems.add({
+            'icon': '🎩',
+            'title': '3 Wickets',
+            'description': '$bowlName takes their 3rd wicket of the match!',
+            'coord': coord,
+            'color': Colors.blueAccent,
+          });
+        }
+        if (currentBowlWickets >= 5 && currentBowlWickets - (isWicket ? 1 : 0) < 5) {
+          feedItems.add({
+            'icon': '🏆',
+            'title': '5 Wickets',
+            'description': 'Five-wicket haul for $bowlName! Outstanding spell.',
+            'coord': coord,
+            'color': Colors.purpleAccent,
+          });
+        }
+        
+        final list = bowlerDeliveries[bowlName];
+        if (list != null && list.length >= 3) {
+          final len = list.length;
+          if (list[len - 1] && list[len - 2] && list[len - 3]) {
+            if (isWicket && list[len - 1] && (!list.sublist(0, len - 1).take(3).contains(false) || len == 3)) {
+              feedItems.add({
+                'icon': '💥',
+                'title': 'HAT-TRICK',
+                'description': '$bowlName takes a brilliant HAT-TRICK!',
+                'coord': coord,
+                'color': Colors.amberAccent,
+              });
+            }
+          }
+        }
+      }
+
+      final prevRuns = runsAcc - runs;
+      if (runsAcc >= 200 && prevRuns < 200) {
+        feedItems.add({
+          'icon': '🎉',
+          'title': '200 Team Runs',
+          'description': 'Batting side reach the 200-run mark!',
+          'coord': coord,
+          'color': Colors.tealAccent,
+        });
+      } else if (runsAcc >= 150 && prevRuns < 150) {
+        feedItems.add({
+          'icon': '🙌',
+          'title': '150 Team Runs',
+          'description': '150 runs up for the team!',
+          'coord': coord,
+          'color': Colors.cyanAccent,
+        });
+      } else if (runsAcc >= 100 && prevRuns < 100) {
+        feedItems.add({
+          'icon': '💯',
+          'title': '100 Team Runs',
+          'description': 'Team century! 100 runs milestone reached.',
+          'coord': coord,
+          'color': Colors.pinkAccent,
+        });
+      } else if (runsAcc >= 50 && prevRuns < 50) {
+        feedItems.add({
+          'icon': '📈',
+          'title': '50 Team Runs',
+          'description': 'Fifty runs compiled by the team.',
+          'coord': coord,
+          'color': Colors.lightGreenAccent,
+        });
+      }
+    }
+
+    if (feedItems.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24.0),
+        child: Center(
+          child: Text(
+            "No major highlights recorded in the feed yet.",
+            style: GoogleFonts.outfit(color: Colors.white30, fontSize: 13),
+          ),
+        ),
+      );
+    }
+
+    final reversedFeed = feedItems.reversed.toList();
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: reversedFeed.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final item = reversedFeed[index];
+        final icon = item['icon'] as String;
+        final title = item['title'] as String;
+        final desc = item['description'] as String;
+        final coord = item['coord'] as String;
+        final color = item['color'] as Color;
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.02),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withOpacity(0.04), width: 1),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(icon, style: const TextStyle(fontSize: 18)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.history_toggle_off_rounded, color: AppColors.primary, size: 20),
-                    const SizedBox(width: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          title.toUpperCase(),
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: color,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        Text(
+                          "Ov $coord",
+                          style: GoogleFonts.outfit(
+                            fontSize: 10,
+                            color: Colors.white30,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
                     Text(
-                      "MATCH TIMELINE & ACTIVITIES",
+                      desc,
                       style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textSecondary,
-                        letterSpacing: 1.2,
+                        fontSize: 13,
+                        color: Colors.white.withOpacity(0.85),
                       ),
                     ),
                   ],
                 ),
-                _buildResetTossButton(),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (_matchActivities.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16.0),
-                child: Center(
-                  child: Text(
-                    "No match activities logged yet.",
-                    style: GoogleFonts.outfit(color: Colors.white30, fontSize: 13),
-                  ),
-                ),
-              )
-            else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _matchActivities.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final act = _matchActivities[index];
-                  final desc = act['description']?.toString() ?? '';
-                  final timeStr = act['created_at']?.toString() ?? '';
-                  final actionType = act['action_type']?.toString() ?? '';
-                  
-                  String formattedTime = '';
-                  try {
-                    final parsed = DateTime.parse(timeStr).toLocal();
-                    formattedTime = "${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}";
-                  } catch (_) {}
-
-                  IconData icon = Icons.info_outline;
-                  Color iconColor = Colors.white54;
-                  if (actionType.contains('toss_initiated')) {
-                    icon = Icons.monetization_on_outlined;
-                    iconColor = Colors.amber;
-                  } else if (actionType.contains('toss_decision')) {
-                    icon = Icons.sports_cricket_rounded;
-                    iconColor = AppColors.primary;
-                  } else if (actionType.contains('toss_reset')) {
-                    icon = Icons.restore_rounded;
-                    iconColor = Colors.redAccent;
-                  }
-
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: iconColor.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(icon, color: iconColor, size: 16),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              desc,
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                color: Colors.white.withOpacity(0.9),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            if (formattedTime.isNotEmpty) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                formattedTime,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 10,
-                                  color: Colors.white38,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                },
               ),
-          ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActivitiesTabContent() {
+    if (_matchActivities.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16.0),
+        child: Center(
+          child: Text(
+            "No match activities logged yet.",
+            style: GoogleFonts.outfit(color: Colors.white30, fontSize: 13),
+          ),
         ),
-      ),
+      );
+    }
+
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _matchActivities.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final act = _matchActivities[index];
+        final desc = act['description']?.toString() ?? '';
+        final timeStr = act['created_at']?.toString() ?? '';
+        final actionType = act['action_type']?.toString() ?? '';
+        
+        String formattedTime = '';
+        try {
+          final parsed = DateTime.parse(timeStr).toLocal();
+          formattedTime = "${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}";
+        } catch (_) {}
+
+        IconData icon = Icons.info_outline;
+        Color iconColor = Colors.white54;
+        if (actionType.contains('toss_initiated')) {
+          icon = Icons.monetization_on_outlined;
+          iconColor = Colors.amber;
+        } else if (actionType.contains('toss_decision')) {
+          icon = Icons.sports_cricket_rounded;
+          iconColor = AppColors.primary;
+        } else if (actionType.contains('toss_reset')) {
+          icon = Icons.restore_rounded;
+          iconColor = Colors.redAccent;
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: iconColor, size: 16),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    desc,
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: Colors.white.withOpacity(0.9),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (formattedTime.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      formattedTime,
+                      style: GoogleFonts.outfit(
+                        fontSize: 10,
+                        color: Colors.white38,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -2539,103 +3499,7 @@ void _handleBackNavigation() {
           ),
           // Core Content body
           isCompleted
-              ? Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Icon(Icons.emoji_events_outlined, size: 80, color: AppColors.accent),
-                      const SizedBox(height: 24),
-                      Text(
-                        "Match Result",
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        resultText,
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.outfit(fontSize: 18, color: Colors.white, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 32),
-                      if (prevInnings != null && currentInnings != null) ...[
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20.0),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(prevInnings['batting_team_name'], style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                                    Text("${prevInnings['total_runs']}/${prevInnings['total_wickets']} (${prevInnings['total_overs']} ov)", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                                const Divider(height: 24),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(currentInnings['batting_team_name'], style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                                    Text("${currentInnings['total_runs']}/${currentInnings['total_wickets']} (${currentInnings['total_overs']} ov)", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 48),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ScorecardScreen(matchId: widget.matchId),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.secondary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text("View Scorecard", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: _handleBackNavigation,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text("Back to Tournament", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
-                      ),
-                      const SizedBox(height: 12),
-                      OutlinedButton(
-                        onPressed: () {
-                          Navigator.of(context).popUntil((route) => route.isFirst);
-                        },
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.white30),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(
-                          "Back to Dashboard",
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
+              ? _buildMatchResultScreen(currentInnings, prevInnings)
               : _isViewerMode
                   ? _buildViewerBody()
                   : Column(
@@ -2693,66 +3557,153 @@ void _handleBackNavigation() {
                       ],
                     ),
 
-          // Celebration Overlay
+          // Celebration Overlay with smooth fade & scale transitions (Phase 4.3)
           if (_showCelebration && _celebrationText != null)
             Positioned.fill(
-              child: Container(
-                color: _celebrationText == "OUT!"
-                    ? Colors.red.withOpacity(0.35)
-                    : (_celebrationText == "SIX!" ? AppColors.secondary.withOpacity(0.25) : AppColors.primary.withOpacity(0.25)),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TweenAnimationBuilder<double>(
-                          tween: Tween<double>(begin: 0.5, end: 1.25),
-                          duration: const Duration(milliseconds: 450),
-                          curve: Curves.elasticOut,
-                          builder: (context, scale, child) {
-                            return Transform.scale(
-                              scale: scale,
-                              child: Text(
-                                _celebrationText!,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 300),
+                builder: (context, opacityVal, child) {
+                  return Opacity(
+                    opacity: opacityVal,
+                    child: Container(
+                      color: _celebrationText == "OUT!"
+                          ? Colors.red.withOpacity(0.35)
+                          : (_celebrationText == "SIX!" ? AppColors.secondary.withOpacity(0.25) : AppColors.primary.withOpacity(0.25)),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TweenAnimationBuilder<double>(
+                                tween: Tween<double>(begin: 0.5, end: 1.25),
+                                duration: const Duration(milliseconds: 450),
+                                curve: Curves.elasticOut,
+                                builder: (context, scale, child) {
+                                  return Transform.scale(
+                                    scale: scale,
+                                    child: Text(
+                                      _celebrationText!,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 84,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.white,
+                                        letterSpacing: 2,
+                                        shadows: [
+                                          Shadow(
+                                            color: _celebrationText == "OUT!"
+                                                ? Colors.red
+                                                : (_celebrationText == "SIX!" ? AppColors.secondary : AppColors.primary),
+                                            blurRadius: 30,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                _celebrationText == "OUT!" ? "WICKET FALLS!" : "SUPERB SHOT!",
                                 style: GoogleFonts.outfit(
-                                  fontSize: 84,
-                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
                                   color: Colors.white,
-                                  letterSpacing: 2,
+                                  letterSpacing: 3,
                                   shadows: [
                                     Shadow(
-                                      color: _celebrationText == "OUT!"
-                                          ? Colors.red
-                                          : (_celebrationText == "SIX!" ? AppColors.secondary : AppColors.primary),
-                                      blurRadius: 30,
-                                    ),
+                                      color: Colors.black.withOpacity(0.5),
+                                      blurRadius: 4,
+                                    )
                                   ],
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          _celebrationText == "OUT!" ? "WICKET FALLS!" : "SUPERB SHOT!",
-                          style: GoogleFonts.outfit(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            letterSpacing: 3,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withOpacity(0.5),
-                                blurRadius: 4,
                               )
                             ],
                           ),
-                        )
-                      ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                }
+              ),
+            ),
+
+          // Milestone Card Overlay (Phase 4.3)
+          if (_activeMilestone != null)
+            Positioned(
+              bottom: 120,
+              left: 24,
+              right: 24,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeOutBack,
+                builder: (context, val, child) {
+                  return Opacity(
+                    opacity: val,
+                    child: Transform.translate(
+                      offset: Offset(0, 30 * (1.0 - val)),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.accent.withOpacity(0.4), width: 1.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.accent.withOpacity(0.25),
+                              blurRadius: 15,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.accent.withOpacity(0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                _activeMilestone!.icon,
+                                style: const TextStyle(fontSize: 24),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _activeMilestone!.title.toUpperCase(),
+                                    style: GoogleFonts.outfit(
+                                      color: AppColors.accent,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 12,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _activeMilestone!.description,
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
         ],
@@ -4756,4 +5707,11 @@ class _BlinkingDotState extends State<_BlinkingDot> with SingleTickerProviderSta
       ),
     );
   }
+}
+
+class MilestoneAlert {
+  final String title;
+  final String description;
+  final String icon;
+  MilestoneAlert({required this.title, required this.description, required this.icon});
 }

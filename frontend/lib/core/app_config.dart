@@ -9,7 +9,7 @@ class AppConfig {
 
   /// Returns the base URL based on the environment configuration
   static String get baseUrl {
-    return "https://$prodDomain/api/v1";
+    return "http://10.225.255.71:8000/api/v1";
   }
 }
 

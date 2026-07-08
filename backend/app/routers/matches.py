@@ -884,18 +884,33 @@ def submit_ball(
             
             event_desc = ""
             if ball_in.is_wicket:
-                w_type = (ball_in.wicket_type or "out").upper().replace('_', ' ')
-                event_desc = f"OUT! {w_type}!"
+                w_type = ball_in.wicket_type
+                if w_type == "bowled":
+                    event_desc = "CLEAN BOWLED!"
+                elif w_type == "caught":
+                    event_desc = "Taken! Safe hands in the deep."
+                elif w_type == "lbw":
+                    event_desc = "Huge appeal... OUT!"
+                elif w_type == "run_out":
+                    event_desc = "Direct hit! Run out."
+                elif w_type == "stumped":
+                    event_desc = "Brilliant work behind the stumps."
+                else:
+                    event_desc = "WICKET! Out!"
             elif ball_in.extra_type == "wide":
-                event_desc = f"Wide! +{ball_in.runs_extras} extra runs."
+                event_desc = "Wide ball."
             elif ball_in.extra_type == "no_ball":
-                event_desc = f"No Ball! +{ball_in.runs_extras} extra runs."
-            elif ball_in.runs_batsman == 6:
-                event_desc = "SIX! Beautifully struck over the ropes!"
-            elif ball_in.runs_batsman == 4:
-                event_desc = "FOUR! Hit cleanly through the gap to the boundary!"
+                event_desc = "No Ball. Free hit if applicable."
             elif ball_in.runs_batsman == 0:
-                event_desc = "No run."
+                event_desc = "Excellent delivery. No run."
+            elif ball_in.runs_batsman == 1:
+                event_desc = "They rotate the strike."
+            elif ball_in.runs_batsman == 2:
+                event_desc = "Good running between the wickets."
+            elif ball_in.runs_batsman == 4:
+                event_desc = "FOUR! Beautiful shot through the covers."
+            elif ball_in.runs_batsman == 6:
+                event_desc = "SIX! That's gone a long way."
             else:
                 total_runs = ball_in.runs_batsman + ball_in.runs_extras
                 r_str = "run" if total_runs == 1 else "runs"
@@ -1304,7 +1319,8 @@ def get_live_match(id: UUID, db: Session = Depends(get_db)):
                     extra_type=bl.extra_type,
                     is_wicket=bl.is_wicket,
                     over_ball_coord=coord,
-                    over_number=over
+                    over_number=over,
+                    commentary=bl.commentary
                 )
             )
 
@@ -1517,7 +1533,8 @@ from app.routers.players import update_player_stats
 from app.schemas.match import (
     MatchScorecardResponse, MatchSummaryCardSchema, InningsScorecardSchema,
     BatsmanScorecardEntry, BowlerScorecardEntry, ExtrasBreakdownSchema,
-    FallOfWicketEntry, PartnershipEntry
+    FallOfWicketEntry, PartnershipEntry, RecentBallSchema, PlayerOfTheMatchSchema,
+    MatchSummaryStatsSchema
 )
 
 @router.get("/{id}/scorecard", response_model=MatchScorecardResponse)
@@ -1559,6 +1576,13 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
     elif toss_winner_name and toss_decision:
         win_margin_text = f"{toss_winner_name} won toss & elected to {toss_decision}"
 
+    # Target calculation
+    db_innings = db.query(Innings).filter(Innings.match_id == id).order_by(Innings.innings_number.asc()).all()
+    target = None
+    first_innings = next((i for i in db_innings if i.innings_number == 1), None)
+    if first_innings:
+        target = first_innings.total_runs + 1
+
     summary = MatchSummaryCardSchema(
         match_id=match.id,
         venue=match.venue,
@@ -1571,12 +1595,19 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
         winner_name=winner_name,
         win_margin_runs=match.win_margin_runs,
         win_margin_wickets=match.win_margin_wickets,
-        win_margin_text=win_margin_text
+        win_margin_text=win_margin_text,
+        status=match.status,
+        overs_limit=match.over_limit,
+        tournament_name=match.tournament.name if match.tournament else None,
+        target=target
     )
+
+    # Fetch captain/wicketkeeper designations
+    squad_configs = db.query(MatchSquad).filter(MatchSquad.match_id == id).all()
+    squad_map = {s.player_id: (s.is_captain, s.is_wicketkeeper) for s in squad_configs}
 
     # 2. Process Innings Scorecards
     innings_list = []
-    db_innings = db.query(Innings).filter(Innings.match_id == id).order_by(Innings.innings_number.asc()).all()
 
     for innings in db_innings:
         batting_team_name = innings.batting_team.name
@@ -1637,6 +1668,7 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
                 else:
                     dismissal_info = w_type
 
+            is_cap, is_wk = squad_map.get(batsman_id, (False, False))
             batting_entries.append(
                 BatsmanScorecardEntry(
                     name=players_name_map.get(batsman_id, "Unknown Batsman"),
@@ -1645,7 +1677,9 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
                     fours=fours,
                     sixes=sixes,
                     strike_rate=sr,
-                    dismissal_info=dismissal_info
+                    dismissal_info=dismissal_info,
+                    is_captain=is_cap,
+                    is_wicketkeeper=is_wk
                 )
             )
 
@@ -1681,6 +1715,8 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
                     if over_runs == 0:
                         maidens += 1
 
+            wides = sum(1 for b in bowler_balls if b.extra_type == "wide")
+            no_balls = sum(1 for b in bowler_balls if b.extra_type == "no_ball")
             bowling_entries.append(
                 BowlerScorecardEntry(
                     name=bowlers_name_map.get(bowler_id, "Unknown Bowler"),
@@ -1688,7 +1724,9 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
                     maidens=maidens,
                     runs_conceded=runs_conceded,
                     wickets=wickets,
-                    economy=econ
+                    economy=econ,
+                    wides=wides,
+                    no_balls=no_balls
                 )
             )
 
@@ -1739,7 +1777,9 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
                 "player1_id": balls[0].batsman_id,
                 "player2_id": balls[0].non_striker_id,
                 "runs": 0,
-                "balls": 0
+                "balls": 0,
+                "fours": 0,
+                "sixes": 0
             }
             active_partners = {balls[0].batsman_id, balls[0].non_striker_id}
 
@@ -1759,13 +1799,19 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
                         "player1_id": p1,
                         "player2_id": p2,
                         "runs": 0,
-                        "balls": 0
+                        "balls": 0,
+                        "fours": 0,
+                        "sixes": 0
                     }
                     active_partners = {p1, p2}
 
                 current_p["runs"] += (b.runs_batsman + b.runs_extras)
                 if b.extra_type != "wide":
                     current_p["balls"] += 1
+                if b.runs_batsman == 4:
+                    current_p["fours"] += 1
+                elif b.runs_batsman == 6:
+                    current_p["sixes"] += 1
 
                 if b.is_wicket and b.player_dismissed_id:
                     partnerships_list.append(current_p)
@@ -1787,7 +1833,9 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
                     player1_name=partners_map.get(p["player1_id"], "Unknown"),
                     player2_name=partners_map.get(p["player2_id"], "Unknown"),
                     runs=p["runs"],
-                    balls=p["balls"]
+                    balls=p["balls"],
+                    fours=p.get("fours", 0),
+                    sixes=p.get("sixes", 0)
                 )
                 for p in partnerships_list
             ]
@@ -1798,6 +1846,51 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
         total_balls = (legit_balls_so_far // 6) * 6 + (legit_balls_so_far % 6)
         overs_frac = total_balls / 6.0
         run_rate = round(innings.total_runs / overs_frac, 2) if overs_frac > 0 else 0.0
+
+        # Compile timeline entries
+        timeline_entries = []
+        legit_balls_in_over = {}
+        for bl in balls:
+            over = bl.over_number
+            legit_count = legit_balls_in_over.get(over, 0)
+            coord = f"{over}.{legit_count + 1}"
+            if bl.extra_type not in ["wide", "no_ball"]:
+                legit_balls_in_over[over] = legit_count + 1
+                
+            label = str(bl.runs_batsman)
+            if bl.is_wicket:
+                label = "W"
+            elif bl.extra_type == "wide":
+                label = "WD"
+                if bl.runs_extras > 1:
+                    label += f"+{bl.runs_extras - 1}"
+            elif bl.extra_type == "no_ball":
+                label = "NB"
+                if bl.runs_batsman > 0:
+                    label += f"+{bl.runs_batsman}"
+                elif bl.runs_extras > 1:
+                    label += f"+{bl.runs_extras - 1}"
+            elif bl.extra_type == "bye":
+                label = "B"
+                if bl.runs_extras > 0:
+                    label += f"+{bl.runs_extras}"
+            elif bl.extra_type == "leg_bye":
+                label = "LB"
+                if bl.runs_extras > 0:
+                    label += f"+{bl.runs_extras}"
+            elif bl.runs_batsman == 0:
+                label = "."
+
+            timeline_entries.append(
+                RecentBallSchema(
+                    ball_label=label,
+                    runs=bl.runs_batsman + bl.runs_extras,
+                    extra_type=bl.extra_type,
+                    is_wicket=bl.is_wicket,
+                    over_ball_coord=coord,
+                    over_number=over
+                )
+            )
 
         innings_list.append(
             InningsScorecardSchema(
@@ -1811,13 +1904,266 @@ def get_match_scorecard(id: UUID, db: Session = Depends(get_db)):
                 batting=batting_entries,
                 bowling=bowling_entries,
                 fall_of_wickets=fow_entries,
-                partnerships=resolved_partnerships
+                partnerships=resolved_partnerships,
+                timeline=timeline_entries
             )
+        )
+
+    # 3. Calculate Player of the Match automatically
+    player_of_the_match = None
+    all_squads = db.query(MatchSquad).filter(MatchSquad.match_id == id).all()
+    if all_squads:
+        # Load all balls in the match
+        match_balls = db.query(Ball).join(Innings).filter(Innings.match_id == id).all()
+        
+        player_stats = {}
+        for sq in all_squads:
+            player_stats[sq.player_id] = {
+                "player": sq.player,
+                "team_name": sq.team.name,
+                "team_id": sq.team_id,
+                "runs": 0,
+                "balls": 0,
+                "fours": 0,
+                "sixes": 0,
+                "balls_bowled": 0,
+                "runs_conceded": 0,
+                "wickets": 0,
+                "maidens": 0,
+                "catches": 0,
+                "stumpings": 0,
+                "run_outs": 0
+            }
+            
+        for b in match_balls:
+            # Batting
+            if b.batsman_id in player_stats:
+                player_stats[b.batsman_id]["runs"] += b.runs_batsman
+                if b.extra_type not in ["wide", "penalty"]:
+                    player_stats[b.batsman_id]["balls"] += 1
+                if b.runs_batsman == 4:
+                    player_stats[b.batsman_id]["fours"] += 1
+                elif b.runs_batsman == 6:
+                    player_stats[b.batsman_id]["sixes"] += 1
+                    
+            # Bowling
+            if b.bowler_id in player_stats:
+                if b.extra_type in ["wide", "no_ball", "none"]:
+                    player_stats[b.bowler_id]["runs_conceded"] += (b.runs_batsman + b.runs_extras)
+                if b.extra_type not in ["wide", "no_ball", "penalty"]:
+                    player_stats[b.bowler_id]["balls_bowled"] += 1
+                if b.is_wicket and (b.wicket_type or "") not in ["run_out", "retired_hurt", "retired_out", "timed_out", "handled_ball", "none"]:
+                    player_stats[b.bowler_id]["wickets"] += 1
+                    
+            # Fielding
+            if b.is_wicket and b.fielder_id in player_stats:
+                if b.wicket_type == "caught":
+                    player_stats[b.fielder_id]["catches"] += 1
+                elif b.wicket_type == "stumped":
+                    player_stats[b.fielder_id]["stumpings"] += 1
+                elif b.wicket_type == "run_out":
+                    player_stats[b.fielder_id]["run_outs"] += 1
+
+        # Calculate maidens, points
+        for pid, st in player_stats.items():
+            runs = st["runs"]
+            fours = st["fours"]
+            sixes = st["sixes"]
+            wickets = st["wickets"]
+            runs_conceded = st["runs_conceded"]
+            balls_bowled = st["balls_bowled"]
+            catches = st["catches"]
+            stumpings = st["stumpings"]
+            run_outs = st["run_outs"]
+            
+            # Batting points
+            bat_pts = runs + fours * 1 + sixes * 2
+            if runs >= 100:
+                bat_pts += 20
+            elif runs >= 50:
+                bat_pts += 10
+            elif runs >= 30:
+                bat_pts += 5
+                
+            # Bowling points
+            bowl_pts = wickets * 25
+            if wickets >= 5:
+                bowl_pts += 20
+            elif wickets >= 3:
+                bowl_pts += 10
+                
+            # Maiden calculation
+            maidens = 0
+            bowler_balls = [b for b in match_balls if b.bowler_id == pid]
+            overs_grouped = {}
+            for b in bowler_balls:
+                overs_grouped.setdefault(b.over_number, []).append(b)
+            for over_no, over_balls in overs_grouped.items():
+                legit_over_balls = [ob for ob in over_balls if ob.extra_type not in ["wide", "no_ball"]]
+                if len(legit_over_balls) == 6:
+                    over_runs = sum(ob.runs_batsman + ob.runs_extras for ob in over_balls if ob.extra_type in ["wide", "no_ball", "none"])
+                    if over_runs == 0:
+                        maidens += 1
+            st["maidens"] = maidens
+            bowl_pts += maidens * 8
+            
+            # Fielding points
+            field_pts = catches * 8 + stumpings * 12 + run_outs * 8
+            
+            total_pts = bat_pts + bowl_pts + field_pts
+            st["points"] = total_pts
+
+        # Filter by winning team if completed
+        winner_team_id = match.winner_id
+        candidates = [pid for pid, st in player_stats.items() if st["team_id"] == winner_team_id] if winner_team_id else []
+        if not candidates:
+            candidates = list(player_stats.keys())
+            
+        if candidates:
+            best_pid = max(candidates, key=lambda pid: player_stats[pid]["points"])
+            best_st = player_stats[best_pid]
+            
+            reason_parts = []
+            if best_st["runs"] > 0:
+                reason_parts.append(f"{best_st['runs']} ({best_st['balls']})")
+            if best_st["wickets"] > 0:
+                ovs = float(f"{best_st['balls_bowled'] // 6}.{best_st['balls_bowled'] % 6}")
+                reason_parts.append(f"{best_st['wickets']}/{best_st['runs_conceded']} ({ovs} ov)")
+            if best_st["catches"] > 0 or best_st["stumpings"] > 0 or best_st["run_outs"] > 0:
+                fld = []
+                if best_st["catches"] > 0:
+                    fld.append(f"{best_st['catches']} ct")
+                if best_st["stumpings"] > 0:
+                    fld.append(f"{best_st['stumpings']} st")
+                if best_st["run_outs"] > 0:
+                    fld.append(f"{best_st['run_outs']} ro")
+                reason_parts.append(", ".join(fld))
+                
+            reason = " & ".join(reason_parts) if reason_parts else "Impact Player"
+            
+            overs = float(f"{best_st['balls_bowled'] // 6}.{best_st['balls_bowled'] % 6}")
+            economy = round(best_st["runs_conceded"] / (best_st["balls_bowled"] / 6.0), 2) if best_st["balls_bowled"] > 0 else 0.0
+            
+            player_of_the_match = PlayerOfTheMatchSchema(
+                player_id=best_pid,
+                name=best_st["player"].name,
+                team_name=best_st["team_name"],
+                reason=reason,
+                runs=best_st["runs"],
+                balls=best_st["balls"],
+                wickets=best_st["wickets"],
+                runs_conceded=best_st["runs_conceded"],
+                overs=overs,
+                economy=economy,
+                catches=best_st["catches"],
+                stumpings=best_st["stumpings"],
+                run_outs=best_st["run_outs"],
+                photo_url=f"/api/v1/profile/photo/{best_pid}"
+            )
+
+    # 4. Compile Match Summary Stats
+    match_summary_stats = None
+    if db_innings:
+        second_innings = next((i for i in db_innings if i.innings_number == 2), None)
+        achieved_runs = second_innings.total_runs if second_innings else None
+        achieved_wickets = second_innings.total_wickets if second_innings else None
+        achieved_overs = second_innings.total_overs if second_innings else None
+
+        overall_top_batsman = None
+        for innings_data in innings_list:
+            for bat in innings_data.batting:
+                if overall_top_batsman is None or bat.runs > overall_top_batsman.runs:
+                    overall_top_batsman = bat
+
+        overall_best_bowler = None
+        for innings_data in innings_list:
+            for bowl in innings_data.bowling:
+                if overall_best_bowler is None:
+                    overall_best_bowler = bowl
+                else:
+                    if bowl.wickets > overall_best_bowler.wickets:
+                        overall_best_bowler = bowl
+                    elif bowl.wickets == overall_best_bowler.wickets:
+                        if bowl.runs_conceded < overall_best_bowler.runs_conceded:
+                            overall_best_bowler = bowl
+                        elif bowl.runs_conceded == overall_best_bowler.runs_conceded:
+                            if bowl.economy < overall_best_bowler.economy:
+                                overall_best_bowler = bowl
+
+        overall_best_partnership = None
+        for innings_data in innings_list:
+            for part in innings_data.partnerships:
+                if overall_best_partnership is None or part.runs > overall_best_partnership.runs:
+                    overall_best_partnership = part
+
+        # Calculate match duration
+        all_balls = db.query(Ball).join(Innings).filter(Innings.match_id == match.id).order_by(Ball.created_at.asc()).all()
+        match_duration = None
+        if all_balls:
+            first_ball = all_balls[0]
+            last_ball = all_balls[-1]
+            diff = last_ball.created_at - first_ball.created_at
+            total_mins = int(diff.total_seconds() / 60)
+            if total_mins < 1:
+                match_duration = "10 mins"
+            elif total_mins < 60:
+                match_duration = f"{total_mins} mins"
+            else:
+                match_duration = f"{total_mins // 60}h {total_mins % 60}m"
+        else:
+            match_duration = "15 mins"
+
+        # Calculate winning shot
+        winning_shot = None
+        if match.status == 'completed' and second_innings:
+            sec_balls = [b for b in all_balls if b.innings_id == second_innings.id]
+            if sec_balls:
+                w_ball = sec_balls[-1]
+                striker_name = db.query(Player.name).filter(Player.id == w_ball.batsman_id).scalar() or "Batsman"
+                bowler_name = db.query(Player.name).filter(Player.id == w_ball.bowler_id).scalar() or "Bowler"
+                if target and second_innings.total_runs >= target:
+                    if w_ball.runs_batsman == 4:
+                        winning_shot = f"{striker_name} hit a FOUR to seal the victory!"
+                    elif w_ball.runs_batsman == 6:
+                        winning_shot = f"{striker_name} smashed a SIX to win the match!"
+                    elif w_ball.runs_batsman == 1:
+                        winning_shot = f"{striker_name} took a single to win the match!"
+                    elif w_ball.extra_type in ["wide", "no_ball"]:
+                        winning_shot = f"Match won via extra ({w_ball.extra_type.upper()}) delivered by {bowler_name}."
+                    else:
+                        winning_shot = f"{striker_name} scored {w_ball.runs_batsman} run(s) to win!"
+                else:
+                    if w_ball.is_wicket:
+                        winning_shot = f"{bowler_name} took a wicket on the final ball to win!"
+                    else:
+                        winning_shot = f"{bowler_name} delivered a dot ball on the final delivery to defend the total."
+        
+        if not winning_shot:
+            winning_shot = win_margin_text
+
+        match_summary_stats = MatchSummaryStatsSchema(
+            result_text=win_margin_text,
+            target=target,
+            achieved_runs=achieved_runs,
+            achieved_wickets=achieved_wickets,
+            achieved_overs=achieved_overs,
+            top_scorer_name=overall_top_batsman.name if overall_top_batsman else None,
+            top_scorer_runs=overall_top_batsman.runs if overall_top_batsman else None,
+            top_scorer_balls=overall_top_batsman.balls if overall_top_batsman else None,
+            best_bowler_name=overall_best_bowler.name if overall_best_bowler else None,
+            best_bowler_wickets=overall_best_bowler.wickets if overall_best_bowler else None,
+            best_bowler_runs=overall_best_bowler.runs_conceded if overall_best_bowler else None,
+            highest_partnership_runs=overall_best_partnership.runs if overall_best_partnership else None,
+            highest_partnership_players=f"{overall_best_partnership.player1_name} & {overall_best_partnership.player2_name}" if overall_best_partnership else None,
+            winning_shot=winning_shot,
+            match_duration=match_duration
         )
 
     return MatchScorecardResponse(
         match_summary=summary,
-        innings=innings_list
+        innings=innings_list,
+        player_of_the_match=player_of_the_match,
+        match_summary_stats=match_summary_stats
     )
 
 @router.put("/{id}", response_model=MatchResponse)

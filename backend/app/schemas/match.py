@@ -118,6 +118,7 @@ class RecentBallSchema(BaseModel):
     is_wicket: bool
     over_ball_coord: Optional[str] = None
     over_number: Optional[int] = None
+    commentary: Optional[str] = None
 
 class OverSummarySchema(BaseModel):
     over_number: int
@@ -194,6 +195,8 @@ class BatsmanScorecardEntry(BaseModel):
     sixes: int
     strike_rate: float
     dismissal_info: str
+    is_captain: bool = False
+    is_wicketkeeper: bool = False
 
 class BowlerScorecardEntry(BaseModel):
     name: str
@@ -202,6 +205,8 @@ class BowlerScorecardEntry(BaseModel):
     runs_conceded: int
     wickets: int
     economy: float
+    wides: int = 0
+    no_balls: int = 0
 
 class ExtrasBreakdownSchema(BaseModel):
     wides: int
@@ -221,6 +226,8 @@ class PartnershipEntry(BaseModel):
     player2_name: str
     runs: int
     balls: int
+    fours: int = 0
+    sixes: int = 0
 
 class InningsScorecardSchema(BaseModel):
     innings_number: int
@@ -234,6 +241,7 @@ class InningsScorecardSchema(BaseModel):
     bowling: List[BowlerScorecardEntry]
     fall_of_wickets: List[FallOfWicketEntry]
     partnerships: List[PartnershipEntry]
+    timeline: List[RecentBallSchema] = []
 
 class MatchSummaryCardSchema(BaseModel):
     match_id: UUID
@@ -248,10 +256,49 @@ class MatchSummaryCardSchema(BaseModel):
     win_margin_runs: Optional[int] = None
     win_margin_wickets: Optional[int] = None
     win_margin_text: str
+    status: str = "scheduled"
+    overs_limit: int = 20
+    tournament_name: Optional[str] = None
+    target: Optional[int] = None
+
+class PlayerOfTheMatchSchema(BaseModel):
+    player_id: UUID
+    name: str
+    team_name: str
+    reason: str
+    runs: int
+    balls: int
+    wickets: int
+    runs_conceded: int
+    overs: float
+    economy: float
+    catches: int
+    stumpings: int
+    run_outs: int
+    photo_url: Optional[str] = None
+
+class MatchSummaryStatsSchema(BaseModel):
+    result_text: str
+    target: Optional[int] = None
+    achieved_runs: Optional[int] = None
+    achieved_wickets: Optional[int] = None
+    achieved_overs: Optional[float] = None
+    top_scorer_name: Optional[str] = None
+    top_scorer_runs: Optional[int] = None
+    top_scorer_balls: Optional[int] = None
+    best_bowler_name: Optional[str] = None
+    best_bowler_wickets: Optional[int] = None
+    best_bowler_runs: Optional[int] = None
+    highest_partnership_runs: Optional[int] = None
+    highest_partnership_players: Optional[str] = None
+    winning_shot: Optional[str] = None
+    match_duration: Optional[str] = None
 
 class MatchScorecardResponse(BaseModel):
     match_summary: MatchSummaryCardSchema
     innings: List[InningsScorecardSchema]
+    player_of_the_match: Optional[PlayerOfTheMatchSchema] = None
+    match_summary_stats: Optional[MatchSummaryStatsSchema] = None
 
 class MatchUpdate(BaseModel):
     team1_id: Optional[UUID] = None
