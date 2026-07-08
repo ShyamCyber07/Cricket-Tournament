@@ -33,11 +33,11 @@ void main() async {
     debugPrint("--------------------------------------------------");
     debugPrint("[WARNING] APP_ENV is not set to 'production'!");
     debugPrint("[WARNING] Defaulting to LOCAL EMULATOR BACKEND: ${AppConfig.baseUrl}");
-    debugPrint("[WARNING] To target the production Railway backend, run with:");
+    debugPrint("[WARNING] To target the production Render backend, run with:");
     debugPrint("[WARNING] flutter run -d emulator-5554 --dart-define=APP_ENV=production");
     debugPrint("--------------------------------------------------");
   } else {
-    debugPrint("[INFO] Running in PRODUCTION mode against Railway backend.");
+    debugPrint("[INFO] Running in PRODUCTION mode against Render backend.");
   }
   debugPrint("==================================================");
 

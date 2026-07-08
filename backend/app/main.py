@@ -68,6 +68,10 @@ async def lifespan(app: FastAPI):
         dialect = db_url.drivername
         print(f"DATABASE_DIALECT = {dialect}")
         logger.info(f"DATABASE_DIALECT = {dialect}")
+        print(f"DATABASE_HOST = {db_url.host}")
+        logger.info(f"DATABASE_HOST = {db_url.host}")
+        print(f"DATABASE_NAME = {db_url.database}")
+        logger.info(f"DATABASE_NAME = {db_url.database}")
 
         # Read alembic version directly from the DB.
         with engine.connect() as conn:
