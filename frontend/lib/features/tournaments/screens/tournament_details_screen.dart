@@ -1727,6 +1727,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                 DataColumn(label: Text("NR", style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.textSecondary))),
                 DataColumn(label: Text("NRR", style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.secondary))),
                 DataColumn(label: Text("Pts", style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.accent))),
+                DataColumn(label: Text("FP", style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12, color: Colors.amber))),
               ],
               rows: List.generate(standings.length, (index) {
                 final entry = standings[index];
@@ -1797,6 +1798,16 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                           fontSize: 13,
                           fontWeight: FontWeight.w900,
                           color: AppColors.accent,
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      Text(
+                        "${entry['fair_play_points']?.toStringAsFixed(1) ?? '10.0'}",
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amberAccent,
                         ),
                       ),
                     ),

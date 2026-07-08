@@ -38,6 +38,7 @@ class PointsTableEntry(BaseModel):
     overs_faced: float = 0.0
     overs_bowled: float = 0.0
     net_run_rate: float
+    fair_play_points: float = 10.0
 
 class PlayerLeaderboardEntry(BaseModel):
     player_id: UUID

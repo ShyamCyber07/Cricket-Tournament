@@ -177,6 +177,30 @@ def get_points_table_logic(id: UUID, db: Session) -> List[PointsTableEntry]:
             rate_conceded = total_runs_conceded / total_overs_bowled
             nrr = round(rate_scored - rate_conceded, 3)
             
+        # Fair Play points calculation
+        total_fair_play_points = 0.0
+        completed_matches_count = 0
+        for m in matches:
+            if team.id not in [m.team1_id, m.team2_id]:
+                continue
+            if m.status != "completed":
+                continue
+                
+            completed_matches_count += 1
+            opp_innings = [inn for inn in m.innings if inn.batting_team_id != team.id]
+            wides_noballs = 0
+            for inn in opp_innings:
+                wides_noballs += db.query(Ball).filter(
+                    Ball.innings_id == inn.id,
+                    Ball.extra_type.in_(["wide", "no_ball"])
+                ).count()
+            
+            deduction = wides_noballs * 0.1
+            match_fp = max(5.0, 10.0 - deduction)
+            total_fair_play_points += match_fp
+            
+        avg_fair_play = round(total_fair_play_points / completed_matches_count, 2) if completed_matches_count > 0 else 10.0
+
         points_table.append(
             PointsTableEntry(
                 team_id=team.id,
@@ -192,7 +216,8 @@ def get_points_table_logic(id: UUID, db: Session) -> List[PointsTableEntry]:
                 runs_against=total_runs_conceded,
                 overs_faced=round(total_overs_faced, 2),
                 overs_bowled=round(total_overs_bowled, 2),
-                net_run_rate=nrr
+                net_run_rate=nrr,
+                fair_play_points=avg_fair_play
             )
         )
         

@@ -424,6 +424,7 @@ def calculate_user_career_stats(db: Session, user_id: UUID) -> CareerStatsRespon
             or_(Match.team1_id.in_(team_ids), Match.team2_id.in_(team_ids))
         ).count()
         matches_won = db.query(Match).filter(Match.winner_id.in_(team_ids)).count()
+        tournament.matches_won = matches_won
         if matches_count > 0:
             tournament.win_percentage = round((matches_won / matches_count) * 100.0, 1)
 

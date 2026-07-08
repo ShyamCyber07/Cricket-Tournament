@@ -55,6 +55,9 @@ class TeamStatsResponse(BaseModel):
     lowest_score: int = 0
     highest_chase: int = 0
     net_run_rate: float = 0.0
+    average_score: float = 0.0
+    best_partnership: str = "N/A"
+    best_bowling: str = "N/A"
     captain_name: Optional[str] = None
     vice_captain_name: Optional[str] = None
     form: List[str] = []

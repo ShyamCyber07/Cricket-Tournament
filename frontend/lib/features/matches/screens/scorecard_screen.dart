@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cricket_scorer/core/theme.dart';
 import 'package:cricket_scorer/core/api_service.dart';
+import 'package:cricket_scorer/features/matches/widgets/match_analytics_tab.dart';
 
 class ScorecardScreen extends StatefulWidget {
   final String matchId;
@@ -23,7 +24,7 @@ class _ScorecardScreenState extends State<ScorecardScreen> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _fetchScorecard();
   }
 
@@ -121,6 +122,7 @@ class _ScorecardScreenState extends State<ScorecardScreen> with SingleTickerProv
             Tab(text: "SUMMARY", icon: Icon(Icons.analytics_outlined, size: 20)),
             Tab(text: "SCORECARD", icon: Icon(Icons.table_rows_outlined, size: 20)),
             Tab(text: "TIMELINE", icon: Icon(Icons.history_toggle_off, size: 20)),
+            Tab(text: "ANALYTICS", icon: Icon(Icons.bar_chart_outlined, size: 20)),
           ],
         ),
       ),
@@ -130,6 +132,7 @@ class _ScorecardScreenState extends State<ScorecardScreen> with SingleTickerProv
           _buildSummaryTab(summary),
           _buildScorecardTab(inningsList, accentColor),
           _buildTimelineTab(inningsList, accentColor),
+          MatchAnalyticsTab(inningsList: inningsList),
         ],
       ),
     );

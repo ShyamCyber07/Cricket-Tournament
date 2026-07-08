@@ -88,6 +88,7 @@ class TournamentStats(BaseModel):
     tournaments_won: int = 0
     finals_played: int = 0
     win_percentage: float = 0.0
+    matches_won: int = 0
 
 class CareerStatsResponse(BaseModel):
     batting: BattingStats

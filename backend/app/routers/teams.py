@@ -12,7 +12,7 @@ from app.core.storage import upload_image, delete_image
 from app.core.database import get_db
 from app.routers.auth import get_current_user
 from app.models.user import User
-from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad, TeamMember, Notification, TeamActivity, TeamInvitation, JoinRequest
+from app.models.cricket import Team, Player, TeamPlayer, Match, Tournament, TournamentTeam, MatchSquad, TeamMember, Notification, TeamActivity, TeamInvitation, JoinRequest, Innings, Ball
 from app.schemas.team import TeamCreate, TeamResponse, AddPlayerRequest, TeamStatsResponse, TeamUpdate, BulkAddPlayersRequest, TeamMemberResponse, MyTeamsResponse, AddMemberRequest, ApproveMemberRequest, UpdateMemberRoleRequest, UpdateSquadConfigRequest, TeamActivityResponse, TeamInvitationResponse, JoinRequestResponse
 
 router = APIRouter()
@@ -518,9 +518,89 @@ def get_team_stats(id: UUID, db: Session = Depends(get_db)):
     if vc_member and vc_member.user:
         vice_captain_name = vc_member.user.full_name or vc_member.user.username
 
-    # Form (Last 5 completed matches result, oldest to newest)
+    # Calculate average score, best partnership, best bowling
+    # 1. Batting Innings & Average score
+    batting_innings = db.query(Innings).filter(Innings.batting_team_id == id).all()
+    batting_innings_count = len(batting_innings)
+    avg_score = round(total_runs_scored / batting_innings_count, 2) if batting_innings_count > 0 else 0.0
+
+    # 2. Best Partnership
+    best_runs = 0
+    best_part_str = "N/A"
+    for innings in batting_innings:
+        balls_in_inn = db.query(Ball).filter(Ball.innings_id == innings.id).order_by(Ball.over_number, Ball.ball_number).all()
+        if not balls_in_inn:
+            continue
+        parts = []
+        curr_part_balls = []
+        for b in balls_in_inn:
+            curr_part_balls.append(b)
+            if b.is_wicket and b.player_dismissed_id:
+                parts.append(curr_part_balls)
+                curr_part_balls = []
+        if curr_part_balls:
+            parts.append(curr_part_balls)
+            
+        for part_balls in parts:
+            part_runs = sum(b.runs_batsman + b.runs_extras for b in part_balls if b.extra_type != "penalty")
+            if part_runs > best_runs:
+                best_runs = part_runs
+                batsmen_ids = set()
+                for b in part_balls:
+                    if b.batsman_id: batsmen_ids.add(b.batsman_id)
+                    if b.non_striker_id: batsmen_ids.add(b.non_striker_id)
+                if len(batsmen_ids) >= 2:
+                    p_list = list(batsmen_ids)[:2]
+                    p_names = db.query(Player.name).filter(Player.id.in_(p_list)).all()
+                    p_names_str = " & ".join([pn[0] for pn in p_names])
+                    best_part_str = f"{p_names_str} ({best_runs} runs)"
+                elif len(batsmen_ids) == 1:
+                    p_name = db.query(Player.name).filter(Player.id == list(batsmen_ids)[0]).scalar() or "Unknown"
+                    best_part_str = f"{p_name} ({best_runs} runs)"
+                else:
+                    best_part_str = f"{best_runs} runs"
+
+    # 3. Best Bowling
+    best_wk = -1
+    best_bowl_runs = 9999
+    best_bowl_str = "N/A"
+    match_ids = [m.id for m in matches if m.status == "completed"]
+    if match_ids:
+        opp_innings = db.query(Innings).filter(
+            Innings.match_id.in_(match_ids),
+            Innings.batting_team_id != id
+        ).all()
+        opp_innings_ids = [i.id for i in opp_innings]
+        if opp_innings_ids:
+            bowler_balls = db.query(Ball).filter(Ball.innings_id.in_(opp_innings_ids)).all()
+            bowling_stats = {}
+            for b in bowler_balls:
+                key = (b.innings_id, b.bowler_id)
+                if key not in bowling_stats:
+                    bowling_stats[key] = {"wickets": 0, "runs": 0}
+                is_wk = b.is_wicket and b.wicket_type in ["bowled", "caught", "lbw", "stumped", "hit_wicket"]
+                if is_wk:
+                    bowling_stats[key]["wickets"] += 1
+                if b.extra_type in ["wide", "no_ball"]:
+                    bowling_stats[key]["runs"] += (b.runs_batsman or 0) + (b.runs_extras or 0)
+                else:
+                    bowling_stats[key]["runs"] += (b.runs_batsman or 0)
+                    
+            for key, stat in bowling_stats.items():
+                wk = stat["wickets"]
+                r = stat["runs"]
+                if wk > best_wk or (wk == best_wk and r < best_bowl_runs):
+                    best_wk = wk
+                    best_bowl_runs = r
+                    best_bowler_id = key[1]
+                    
+            if best_wk != -1:
+                bowler_name = db.query(Player.name).filter(Player.id == best_bowler_id).scalar() or "Bowler"
+                best_bowl_str = f"{bowler_name} {best_wk}/{best_bowl_runs}"
+
+    # Form (Last 10 completed matches result, oldest to newest)
     form_list = []
-    completed_matches = [m for m in matches if m.status == "completed"][:5]
+    completed_matches = [m for m in matches if m.status == "completed"][:10]
     for m in completed_matches:
         if m.winner_id == id:
             form_list.append("W")
@@ -550,6 +630,9 @@ def get_team_stats(id: UUID, db: Session = Depends(get_db)):
         lowest_score=lowest_score,
         highest_chase=highest_chase,
         net_run_rate=nrr,
+        average_score=avg_score,
+        best_partnership=best_part_str,
+        best_bowling=best_bowl_str,
         captain_name=captain_name,
         vice_captain_name=vice_captain_name,
         form=form_list,

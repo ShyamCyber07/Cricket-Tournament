@@ -251,6 +251,9 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
     final int highestScore = _stats?['highest_score'] ?? 0;
     final int lowestScore = _stats?['lowest_score'] ?? 0;
     final int highestChase = _stats?['highest_chase'] ?? 0;
+    final double averageScore = _stats?['average_score'] ?? 0.0;
+    final String bestPartnership = _stats?['best_partnership'] ?? 'N/A';
+    final String bestBowling = _stats?['best_bowling'] ?? 'N/A';
 
     return RefreshIndicator(
       onRefresh: _loadDetails,
@@ -418,6 +421,7 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                     _buildStatItemMini("High Score", "$highestScore"),
                     _buildStatItemMini("Low Score", "$lowestScore"),
                     _buildStatItemMini("Best Chase", "$highestChase"),
+                    _buildStatItemMini("Avg Score", "$averageScore"),
                   ],
                 ),
                 
@@ -443,6 +447,10 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
                     ),
                   ),
                 ],
+                const Divider(color: Colors.white10, height: 24),
+                _buildTeamAnalyticsRow("Best Partnership 🤝", bestPartnership),
+                const SizedBox(height: 8),
+                _buildTeamAnalyticsRow("Best Bowling Spell 🎯", bestBowling),
               ],
             ),
           ),
@@ -1027,6 +1035,26 @@ class _TeamDetailsScreenState extends State<TeamDetailsScreen> with SingleTicker
         borderColor: Colors.white.withOpacity(0.08),
       ),
       child: child,
+    );
+  }
+
+  Widget _buildTeamAnalyticsRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
