@@ -144,6 +144,20 @@ class Notification(Base):
     # Relationships
     user = relationship("User")
 
+
+class AutomationLog(Base):
+    __tablename__ = "automation_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    match_id = Column(UUID(as_uuid=True), ForeignKey("matches.id", ondelete="CASCADE"), nullable=False)
+    event_type = Column(String, nullable=False)  # reminder_24h, reminder_2h, reminder_30m, reminder_10m, autolock, locked, ready
+    recipient_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    executed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    match = relationship("Match")
+    recipient = relationship("User")
+
 class Tournament(Base):
     __tablename__ = "tournaments"
 

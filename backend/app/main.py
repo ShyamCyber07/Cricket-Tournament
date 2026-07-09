@@ -241,12 +241,13 @@ async def lifespan(app: FastAPI):
 
     async def matchday_reminder_notification_loop():
         from app.core.database import SessionLocal
+        from app.core.automation import run_matchday_automation_engine
         while True:
             try:
                 with SessionLocal() as db:
-                    playing_xi_reminder_check_loop(db)
+                    run_matchday_automation_engine(db)
             except Exception as e:
-                logger.error(f"Error in matchday reminder loop: {e}", exc_info=True)
+                logger.error(f"Error in matchday automation loop: {e}", exc_info=True)
             await asyncio.sleep(60) # check every minute
 
     # Launch daily backup loop in background

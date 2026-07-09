@@ -17,6 +17,13 @@ class Settings(BaseSettings):
         "sqlite:///./cricket.db"
     )
 
+    # Match Day Automation timining configurations (in hours/minutes)
+    REMINDER_24H_OFFSET_HOURS: int = 24
+    REMINDER_2H_OFFSET_HOURS: int = 2
+    REMINDER_30M_OFFSET_MINUTES: int = 30
+    REMINDER_10M_OFFSET_MINUTES: int = 10
+    AUTO_LOCK_OFFSET_MINUTES: int = 0
+
     # Brevo API Configurations - production requires these to be set
     BREVO_API_KEY: str = os.getenv("BREVO_API_KEY", "").strip().strip("\"'")
     BREVO_FROM_EMAIL: str = os.getenv("BREVO_FROM_EMAIL", "").strip().strip("\"'")
