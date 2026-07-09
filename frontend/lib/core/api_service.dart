@@ -1117,6 +1117,39 @@ class ApiService {
     return await _dio.post('/tournaments/$tournamentId/fixtures/manual', data: data);
   }
 
+  Future<Response> registerDeviceToken(String fcmToken, String? deviceName, String platform) async {
+    return await _dio.post('/notifications/devices/register', data: {
+      'fcm_token': fcmToken,
+      'device_name': deviceName,
+      'platform': platform,
+    });
+  }
+
+  Future<Response> unregisterDeviceToken(String fcmToken) async {
+    return await _dio.post('/notifications/devices/unregister', data: {
+      'fcm_token': fcmToken,
+    });
+  }
+
+  Future<Response> getNotifications({int limit = 20, int skip = 0}) async {
+    return await _dio.get('/notifications/', queryParameters: {
+      'limit': limit,
+      'skip': skip,
+    });
+  }
+
+  Future<Response> markNotificationRead(String id) async {
+    return await _dio.post('/notifications/$id/read');
+  }
+
+  Future<Response> markAllNotificationsRead() async {
+    return await _dio.post('/notifications/read-all');
+  }
+
+  Future<Response> deleteNotification(String id) async {
+    return await _dio.delete('/notifications/$id');
+  }
+
   Future<Response> testConnection() async {
     final uri = Uri.parse(AppConfig.baseUrl);
     final hostUrl = "${uri.scheme}://${uri.host}:${uri.port}/";

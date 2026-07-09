@@ -17,28 +17,35 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final ApiService _apiService = ApiService();
+  final ScrollController _scrollController = ScrollController();
+  
   bool _isLoading = true;
+  bool _isLoadingMore = false;
   List<dynamic> _notifications = [];
   String _selectedCategory = "All";
   final Set<String> _processingNotifIds = {};
   final Set<String> _processedNotifIds = {};
   StreamSubscription? _eventSubscription;
-
-  Future<void> _fetchNotificationsQuietly() async {
-    try {
-      final res = await _apiService.getNotifications();
-      if (mounted) {
-        setState(() {
-          _notifications = res.data;
-        });
-      }
-    } catch (_) {}
-  }
+  
+  // Pagination variables
+  int _skip = 0;
+  final int _limit = 20;
+  bool _hasMore = true;
 
   @override
   void initState() {
     super.initState();
     _fetchNotifications();
+    
+    // Setup scroll controller for infinite scroll
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+        if (!_isLoadingMore && _hasMore) {
+          _loadMoreNotifications();
+        }
+      }
+    });
+
     _eventSubscription = AppEventBus().on.listen((event) {
       if (event is NotificationRefreshedEvent) {
         _fetchNotificationsQuietly();
@@ -49,20 +56,57 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   void dispose() {
     _eventSubscription?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _fetchNotifications() async {
-    setState(() => _isLoading = true);
+  Future<void> _fetchNotificationsQuietly() async {
     try {
-      final res = await _apiService.getNotifications();
+      final res = await _apiService.getNotifications(limit: _limit, skip: 0);
+      if (mounted) {
+        setState(() {
+          _notifications = res.data;
+          _skip = res.data.length;
+          _hasMore = res.data.length >= _limit;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _fetchNotifications() async {
+    setState(() {
+      _isLoading = true;
+      _skip = 0;
+      _hasMore = true;
+    });
+    try {
+      final res = await _apiService.getNotifications(limit: _limit, skip: 0);
       setState(() {
         _notifications = res.data;
         _isLoading = false;
+        _skip = res.data.length;
+        _hasMore = res.data.length >= _limit;
       });
     } catch (e) {
       setState(() => _isLoading = false);
       _showSnackBar("Error fetching notifications: $e", AppColors.error);
+    }
+  }
+
+  Future<void> _loadMoreNotifications() async {
+    setState(() => _isLoadingMore = true);
+    try {
+      final res = await _apiService.getNotifications(limit: _limit, skip: _skip);
+      final List<dynamic> newNotifs = res.data as List<dynamic>? ?? [];
+      setState(() {
+        _notifications.addAll(newNotifs);
+        _isLoadingMore = false;
+        _skip += newNotifs.length;
+        _hasMore = newNotifs.length >= _limit;
+      });
+    } catch (e) {
+      setState(() => _isLoadingMore = false);
+      debugPrint("[NotificationsScreen] Failed to load more: $e");
     }
   }
 
@@ -106,6 +150,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
       _showSnackBar("Failed to mark all read: $e", AppColors.error);
+    }
+  }
+
+  Future<void> _deleteNotification(String notifId) async {
+    try {
+      await _apiService.deleteNotification(notifId);
+      setState(() {
+        _notifications.removeWhere((n) => n['id'] == notifId);
+      });
+      _showSnackBar("Notification deleted", Colors.white60);
+    } catch (e) {
+      _showSnackBar("Failed to delete notification: $e", AppColors.error);
     }
   }
 
@@ -180,6 +236,38 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  Map<String, List<dynamic>> _groupNotifications(List<dynamic> list) {
+    final groups = <String, List<dynamic>>{
+      "Today": [],
+      "Yesterday": [],
+      "Older": [],
+    };
+    
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    
+    for (final item in list) {
+      if (item['created_at'] == null) {
+        groups["Older"]!.add(item);
+        continue;
+      }
+      
+      final dt = DateTime.parse(item['created_at']).toLocal();
+      final dateOnly = DateTime(dt.year, dt.month, dt.day);
+      
+      if (dateOnly.isAtSameMomentAs(today)) {
+        groups["Today"]!.add(item);
+      } else if (dateOnly.isAtSameMomentAs(yesterday)) {
+        groups["Yesterday"]!.add(item);
+      } else {
+        groups["Older"]!.add(item);
+      }
+    }
+    
+    return groups;
+  }
+
   Widget _buildCategoryChips() {
     final categories = ["All", "Team", "Tournament", "Match", "Account", "Admin"];
     return SizedBox(
@@ -226,6 +314,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ? _notifications
         : _notifications.where((n) => _getCategoryForType(n['type'] ?? '') == _selectedCategory).toList();
 
+    final groupedNotifs = _groupNotifications(filteredNotifs);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -255,272 +345,325 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ? const Center(child: NeonBallOrbitLoader())
                   : filteredNotifs.isEmpty
                       ? _buildEmptyState()
-                      : ListView.builder(
+                      : ListView(
+                          controller: _scrollController,
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          itemCount: filteredNotifs.length,
-                          itemBuilder: (context, index) {
-                            final notif = filteredNotifs[index];
-                            final notifId = notif['id'];
-                            final title = notif['title'] ?? 'Notification';
-                            final message = notif['message'] ?? '';
-                            final isRead = notif['is_read'] ?? false;
-                            final type = notif['type'] ?? '';
-                            final createdAt = notif['created_at'] != null 
-                                ? DateTime.parse(notif['created_at']).toLocal() 
-                                : DateTime.now();
-
-                            final String? extraDataStr = notif['extra_data'];
-                            String? teamId;
-                            String? requestUserId;
-                            if (extraDataStr != null) {
-                              try {
-                                final Map<String, dynamic> extraData = jsonDecode(extraDataStr);
-                                teamId = extraData['team_id'];
-                                requestUserId = extraData['user_id'];
-                              } catch (_) {}
-                            }
-
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              decoration: AppColors.glassDecoration(
-                                borderRadius: BorderRadius.circular(16),
-                                borderColor: isRead 
-                                    ? Colors.white.withOpacity(0.08) 
-                                    : AppColors.primary.withOpacity(0.3),
-                              ).copyWith(
-                                color: isRead 
-                                    ? Colors.white.withOpacity(0.02) 
-                                    : AppColors.primary.withOpacity(0.05),
+                          children: [
+                            if (groupedNotifs["Today"]!.isNotEmpty) ...[
+                              _buildGroupHeader("Today"),
+                              ...groupedNotifs["Today"]!.map((n) => _buildDismissibleNotificationCard(n)),
+                            ],
+                            if (groupedNotifs["Yesterday"]!.isNotEmpty) ...[
+                              _buildGroupHeader("Yesterday"),
+                              ...groupedNotifs["Yesterday"]!.map((n) => _buildDismissibleNotificationCard(n)),
+                            ],
+                            if (groupedNotifs["Older"]!.isNotEmpty) ...[
+                              _buildGroupHeader("Older"),
+                              ...groupedNotifs["Older"]!.map((n) => _buildDismissibleNotificationCard(n)),
+                            ],
+                            if (_isLoadingMore)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16.0),
+                                child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
                               ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    onTap: () => _handleNotificationTap(notifId, type, teamId),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.all(10),
-                                                decoration: BoxDecoration(
-                                                  color: _getColorForType(type).withOpacity(0.12),
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: Icon(
-                                                  _getIconForType(type),
-                                                  color: _getColorForType(type),
-                                                  size: 20,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 16),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Row(
-                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                      children: [
-                                                        Text(
-                                                          title,
-                                                          style: GoogleFonts.outfit(
-                                                            fontSize: 14,
-                                                            fontWeight: isRead ? FontWeight.w600 : FontWeight.w800,
-                                                            color: isRead ? Colors.white70 : Colors.white,
-                                                          ),
-                                                        ),
-                                                        if (!isRead)
-                                                          Container(
-                                                            width: 6,
-                                                            height: 6,
-                                                            decoration: const BoxDecoration(
-                                                              shape: BoxShape.circle,
-                                                              color: AppColors.primary,
-                                                            ),
-                                                          ),
-                                                      ],
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      message,
-                                                      style: GoogleFonts.outfit(
-                                                        fontSize: 13,
-                                                        color: isRead ? AppColors.textSecondary : const Color(0xFFE8E8E8),
-                                                        fontWeight: isRead ? FontWeight.normal : FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 8),
-                                                    Text(
-                                                      _formatTimeAgo(createdAt),
-                                                      style: GoogleFonts.outfit(
-                                                        fontSize: 11,
-                                                        color: AppColors.textSecondary,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          if ((type == 'join_request_sent' || type == 'invitation_received') &&
-                                              teamId != null &&
-                                              !isRead &&
-                                              !_processedNotifIds.contains(notifId)) ...[
-                                            const SizedBox(height: 12),
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.end,
-                                              children: [
-                                                OutlinedButton(
-                                                  style: OutlinedButton.styleFrom(
-                                                    side: const BorderSide(color: AppColors.error),
-                                                    foregroundColor: AppColors.error,
-                                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                  ),
-                                                  onPressed: _processingNotifIds.contains(notifId) || _processedNotifIds.contains(notifId)
-                                                      ? null
-                                                      : () async {
-                                                          setState(() {
-                                                            _processingNotifIds.add(notifId);
-                                                          });
-                                                          
-                                                          // Optimistic UI update: remove invitation notification immediately
-                                                          dynamic removedNotif;
-                                                          int removedIndex = -1;
-                                                          for (int i = 0; i < _notifications.length; i++) {
-                                                            if (_notifications[i]['id']?.toString() == notifId.toString()) {
-                                                              removedNotif = _notifications[i];
-                                                              removedIndex = i;
-                                                              break;
-                                                            }
-                                                          }
-                                                          if (removedIndex != -1) {
-                                                            setState(() {
-                                                              _notifications.removeAt(removedIndex);
-                                                            });
-                                                          }
-                                                          
-                                                          try {
-                                                            if (type == 'join_request_sent') {
-                                                              await _apiService.rejectJoinRequest(teamId!, requestUserId!);
-                                                              _showSnackBar("Join request rejected.", AppColors.textSecondary);
-                                                            } else {
-                                                              await _apiService.rejectInvitation(teamId!);
-                                                              _showSnackBar("Invitation rejected.", AppColors.textSecondary);
-                                                            }
-                                                            await _apiService.markNotificationRead(notifId);
-                                                            setState(() {
-                                                              _processedNotifIds.add(notifId);
-                                                            });
-                                                            AppEventBus().fire(NotificationRefreshedEvent());
-                                                            AppEventBus().fire(TeamRefreshedEvent());
-                                                          } catch (e) {
-                                                            // Revert optimistic update
-                                                            if (removedIndex != -1 && removedNotif != null) {
-                                                              setState(() {
-                                                                _notifications.insert(removedIndex, removedNotif);
-                                                              });
-                                                            }
-                                                            _showSnackBar("Action failed: $e", AppColors.error);
-                                                          } finally {
-                                                            if (mounted) {
-                                                              setState(() {
-                                                                _processingNotifIds.remove(notifId);
-                                                              });
-                                                            }
-                                                          }
-                                                        },
-                                                  child: Text(
-                                                    type == 'join_request_sent' ? "Reject" : "Decline",
-                                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                ElevatedButton(
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: AppColors.primary,
-                                                    foregroundColor: Colors.black,
-                                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                  ),
-                                                  onPressed: _processingNotifIds.contains(notifId) || _processedNotifIds.contains(notifId)
-                                                      ? null
-                                                      : () async {
-                                                          setState(() {
-                                                            _processingNotifIds.add(notifId);
-                                                          });
-                                                          
-                                                          // Optimistic UI update: remove invitation notification immediately
-                                                          dynamic removedNotif;
-                                                          int removedIndex = -1;
-                                                          for (int i = 0; i < _notifications.length; i++) {
-                                                            if (_notifications[i]['id']?.toString() == notifId.toString()) {
-                                                              removedNotif = _notifications[i];
-                                                              removedIndex = i;
-                                                              break;
-                                                            }
-                                                          }
-                                                          if (removedIndex != -1) {
-                                                            setState(() {
-                                                              _notifications.removeAt(removedIndex);
-                                                            });
-                                                          }
-                                                          
-                                                          try {
-                                                            if (type == 'join_request_sent') {
-                                                              await _apiService.approveJoinRequest(teamId!, requestUserId!);
-                                                              _showSnackBar("Join request approved!", AppColors.primary);
-                                                            } else {
-                                                              await _apiService.acceptInvitation(teamId!);
-                                                              _showSnackBar("Invitation accepted!", AppColors.primary);
-                                                            }
-                                                            await _apiService.markNotificationRead(notifId);
-                                                            setState(() {
-                                                              _processedNotifIds.add(notifId);
-                                                            });
-                                                            AppEventBus().fire(NotificationRefreshedEvent());
-                                                            AppEventBus().fire(TeamRefreshedEvent());
-                                                          } catch (e) {
-                                                            // Revert optimistic update
-                                                            if (removedIndex != -1 && removedNotif != null) {
-                                                              setState(() {
-                                                                _notifications.insert(removedIndex, removedNotif);
-                                                              });
-                                                            }
-                                                            _showSnackBar("Action failed: $e", AppColors.error);
-                                                          } finally {
-                                                            if (mounted) {
-                                                              setState(() {
-                                                                _processingNotifIds.remove(notifId);
-                                                              });
-                                                            }
-                                                          }
-                                                        },
-                                                  child: Text(
-                                                    type == 'join_request_sent' ? "Approve" : "Accept",
-                                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
+                          ],
                         ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGroupHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0, bottom: 12.0, left: 4.0),
+      child: Text(
+        title,
+        style: GoogleFonts.outfit(
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+          color: AppColors.primary,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDismissibleNotificationCard(dynamic notif) {
+    final notifId = notif['id'].toString();
+    return Dismissible(
+      key: Key(notifId),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        decoration: BoxDecoration(
+          color: AppColors.error.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
+      ),
+      onDismissed: (direction) => _deleteNotification(notifId),
+      child: _buildNotificationCard(notif),
+    );
+  }
+
+  Widget _buildNotificationCard(dynamic notif) {
+    final notifId = notif['id'];
+    final title = notif['title'] ?? 'Notification';
+    final message = notif['message'] ?? '';
+    final isRead = notif['is_read'] ?? false;
+    final type = notif['type'] ?? '';
+    final createdAt = notif['created_at'] != null 
+        ? DateTime.parse(notif['created_at']).toLocal() 
+        : DateTime.now();
+
+    final String? extraDataStr = notif['extra_data'];
+    String? teamId;
+    String? requestUserId;
+    if (extraDataStr != null) {
+      try {
+        final Map<String, dynamic> extraData = jsonDecode(extraDataStr);
+        teamId = extraData['team_id'];
+        requestUserId = extraData['user_id'];
+      } catch (_) {}
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: AppColors.glassDecoration(
+        borderRadius: BorderRadius.circular(16),
+        borderColor: isRead 
+            ? Colors.white.withOpacity(0.08) 
+            : AppColors.primary.withOpacity(0.3),
+      ).copyWith(
+        color: isRead 
+            ? Colors.white.withOpacity(0.02) 
+            : AppColors.primary.withOpacity(0.05),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _handleNotificationTap(notifId, type, teamId),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: _getColorForType(type).withOpacity(0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          _getIconForType(type),
+                          color: _getColorForType(type),
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    title,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      fontWeight: isRead ? FontWeight.w600 : FontWeight.w800,
+                                      color: isRead ? Colors.white70 : Colors.white,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (!isRead)
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              message,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                color: isRead ? AppColors.textSecondary : const Color(0xFFE8E8E8),
+                                fontWeight: isRead ? FontWeight.normal : FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _formatTimeAgo(createdAt),
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if ((type == 'join_request_sent' || type == 'invitation_received') &&
+                      teamId != null &&
+                      !isRead &&
+                      !_processedNotifIds.contains(notifId)) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.error),
+                            foregroundColor: AppColors.error,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: _processingNotifIds.contains(notifId) || _processedNotifIds.contains(notifId)
+                              ? null
+                              : () async {
+                                  setState(() {
+                                    _processingNotifIds.add(notifId);
+                                  });
+                                  
+                                  dynamic removedNotif;
+                                  int removedIndex = -1;
+                                  for (int i = 0; i < _notifications.length; i++) {
+                                    if (_notifications[i]['id']?.toString() == notifId.toString()) {
+                                      removedNotif = _notifications[i];
+                                      removedIndex = i;
+                                      break;
+                                    }
+                                  }
+                                  if (removedIndex != -1) {
+                                    setState(() {
+                                      _notifications.removeAt(removedIndex);
+                                    });
+                                  }
+                                  
+                                  try {
+                                    if (type == 'join_request_sent') {
+                                      await _apiService.rejectJoinRequest(teamId!, requestUserId!);
+                                      _showSnackBar("Join request rejected.", AppColors.textSecondary);
+                                    } else {
+                                      await _apiService.rejectInvitation(teamId!);
+                                      _showSnackBar("Invitation rejected.", AppColors.textSecondary);
+                                    }
+                                    await _apiService.markNotificationRead(notifId);
+                                    setState(() {
+                                      _processedNotifIds.add(notifId);
+                                    });
+                                    AppEventBus().fire(NotificationRefreshedEvent());
+                                    AppEventBus().fire(TeamRefreshedEvent());
+                                  } catch (e) {
+                                    if (removedIndex != -1 && removedNotif != null) {
+                                      setState(() {
+                                        _notifications.insert(removedIndex, removedNotif);
+                                      });
+                                    }
+                                    _showSnackBar("Action failed: $e", AppColors.error);
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() {
+                                        _processingNotifIds.remove(notifId);
+                                      });
+                                    }
+                                  }
+                                },
+                          child: Text(
+                            type == 'join_request_sent' ? "Reject" : "Decline",
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: _processingNotifIds.contains(notifId) || _processedNotifIds.contains(notifId)
+                              ? null
+                              : () async {
+                                  setState(() {
+                                    _processingNotifIds.add(notifId);
+                                  });
+                                  
+                                  dynamic removedNotif;
+                                  int removedIndex = -1;
+                                  for (int i = 0; i < _notifications.length; i++) {
+                                    if (_notifications[i]['id']?.toString() == notifId.toString()) {
+                                      removedNotif = _notifications[i];
+                                      removedIndex = i;
+                                      break;
+                                    }
+                                  }
+                                  if (removedIndex != -1) {
+                                    setState(() {
+                                      _notifications.removeAt(removedIndex);
+                                    });
+                                  }
+                                  
+                                  try {
+                                    if (type == 'join_request_sent') {
+                                      await _apiService.approveJoinRequest(teamId!, requestUserId!);
+                                      _showSnackBar("Join request approved!", AppColors.primary);
+                                    } else {
+                                      await _apiService.acceptInvitation(teamId!);
+                                      _showSnackBar("Invitation accepted!", AppColors.primary);
+                                    }
+                                    await _apiService.markNotificationRead(notifId);
+                                    setState(() {
+                                      _processedNotifIds.add(notifId);
+                                    });
+                                    AppEventBus().fire(NotificationRefreshedEvent());
+                                    AppEventBus().fire(TeamRefreshedEvent());
+                                  } catch (e) {
+                                    if (removedIndex != -1 && removedNotif != null) {
+                                      setState(() {
+                                        _notifications.insert(removedIndex, removedNotif);
+                                      });
+                                    }
+                                    _showSnackBar("Action failed: $e", AppColors.error);
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() {
+                                        _processingNotifIds.remove(notifId);
+                                      });
+                                    }
+                                  }
+                                },
+                          child: Text(
+                            type == 'join_request_sent' ? "Approve" : "Accept",
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

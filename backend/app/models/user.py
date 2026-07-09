@@ -105,3 +105,18 @@ class Report(Base):
     reporter = relationship("User", foreign_keys=[reporter_id])
     resolver = relationship("User", foreign_keys=[resolved_by])
 
+
+class DeviceToken(Base):
+    __tablename__ = "device_tokens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    fcm_token = Column(String, unique=True, index=True, nullable=False)
+    device_name = Column(String, nullable=True)
+    platform = Column(String, nullable=True)
+    last_seen = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    # Relationships
+    user = relationship("User")
+

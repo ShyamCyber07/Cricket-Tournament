@@ -136,8 +136,10 @@ class Notification(Base):
     message = Column(String, nullable=False)
     type = Column(String, nullable=False)  # invitation_received, request_approved, request_rejected, etc.
     extra_data = Column(String, nullable=True)  # Optional JSON string
+    payload = Column(String, nullable=True)  # JSON payload string
     is_read = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
     user = relationship("User")

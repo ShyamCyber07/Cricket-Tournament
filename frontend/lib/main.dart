@@ -11,6 +11,7 @@ import 'package:cricket_scorer/features/auth/screens/complete_profile_screen.dar
 import 'package:cricket_scorer/features/dashboard/screens/dashboard_screen.dart';
 
 import 'package:cricket_scorer/core/app_config.dart';
+import 'package:cricket_scorer/core/notification_service.dart';
 
 import 'package:cricket_scorer/features/auth/screens/splash_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -20,6 +21,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await Firebase.initializeApp();
+    // Initialize notification service at startup
+    await NotificationService().initialize();
   } catch (e) {
     debugPrint("[Firebase Initialization Warning] $e");
   }
@@ -59,6 +62,7 @@ class MyApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'CRICUP',
+        navigatorKey: NotificationService.navigatorKey,
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
         home: const SplashScreen(),
