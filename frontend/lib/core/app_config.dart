@@ -5,11 +5,11 @@ class AppConfig {
   static const String env = 'production';
 
   /// The production API domain address.
-  static const String prodDomain = 'cricket-tournament-production.up.railway.app';
+  static const String prodDomain = 'cricket-tournament-djdp.onrender.com';
 
   /// Returns the base URL based on the environment configuration
   static String get baseUrl {
-    return "https://cricket-tournament-production.up.railway.app/api/v1";
+    return "https://cricket-tournament-djdp.onrender.com/api/v1";
   }
 }
 
