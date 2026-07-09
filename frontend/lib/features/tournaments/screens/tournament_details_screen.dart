@@ -1773,6 +1773,25 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> with 
                           _buildTeamLogo(entry['logo_url'], entry['team_name'] ?? 'Team', size: 24),
                           const SizedBox(width: 8),
                           Text(entry['team_name'] ?? '', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+                          if (entry['is_qualified'] == true) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: AppColors.primary, width: 0.8),
+                              ),
+                              child: Text(
+                                "Q",
+                                style: GoogleFonts.outfit(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

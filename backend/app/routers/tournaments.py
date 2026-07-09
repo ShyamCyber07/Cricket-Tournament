@@ -102,6 +102,40 @@ def get_points_table_logic(id: UUID, db: Session) -> List[PointsTableEntry]:
     if not tour:
         return []
         
+    from app.models.cricket import TournamentStanding
+    # Check if standings are stored in database
+    standings = db.query(TournamentStanding).filter(
+        TournamentStanding.tournament_id == id
+    ).all()
+    
+    if standings:
+        # Sort standings by: 1. Points, 2. NRR, 3. Wins
+        standings.sort(key=lambda x: (x.points, x.net_run_rate, x.won), reverse=True)
+        entries = []
+        for st in standings:
+            team = db.query(Team).filter(Team.id == st.team_id).first()
+            entries.append(
+                PointsTableEntry(
+                    team_id=st.team_id,
+                    team_name=team.name if team else "Unknown",
+                    logo_url=team.logo_url if team else None,
+                    played=st.played,
+                    won=st.won,
+                    lost=st.lost,
+                    tied=st.tied,
+                    no_result=st.no_result,
+                    points=st.points,
+                    runs_for=st.runs_scored,
+                    runs_against=st.runs_conceded,
+                    overs_faced=st.overs_faced,
+                    overs_bowled=st.overs_bowled,
+                    net_run_rate=st.net_run_rate,
+                    is_qualified=st.is_qualified,
+                    fair_play_points=10.0
+                )
+            )
+        return entries
+        
     teams = tour.teams
     
     # Get completed/abandoned league matches
@@ -560,6 +594,8 @@ def publish_fixtures(
         raise HTTPException(status_code=400, detail=f"Tournament is not in draft state. Current status: {tour.status}")
         
     tour.status = "ongoing"
+    from app.core.tournament_engine import init_tournament_standings
+    init_tournament_standings(db, tour.id)
     
     # Notify captains
     import json
@@ -685,6 +721,61 @@ def create_manual_fixture(
 @router.get("/{id}/points-table", response_model=List[PointsTableEntry])
 def get_points_table(id: UUID, db: Session = Depends(get_db)):
     return get_points_table_logic(id, db)
+
+@router.get("/{id}/standings", response_model=List[PointsTableEntry])
+def get_tournament_standings_api(id: UUID, db: Session = Depends(get_db)):
+    return get_points_table_logic(id, db)
+
+@router.get("/{id}/qualification-status")
+def get_tournament_qualification_status_api(id: UUID, db: Session = Depends(get_db)):
+    entries = get_points_table_logic(id, db)
+    return {
+        "tournament_id": str(id),
+        "qualified_teams": [
+            {
+                "team_id": str(e.team_id),
+                "team_name": e.team_name,
+                "logo_url": e.logo_url,
+                "played": e.played,
+                "won": e.won,
+                "lost": e.lost,
+                "points": e.points,
+                "net_run_rate": e.net_run_rate,
+                "is_qualified": e.is_qualified
+            }
+            for e in entries if e.is_qualified
+        ]
+    }
+
+@router.get("/{id}/summary")
+def get_tournament_summary_api(id: UUID, db: Session = Depends(get_db)):
+    tour = db.query(Tournament).filter(Tournament.id == id).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    points_table = get_points_table_logic(id, db)
+    return {
+        "id": str(tour.id),
+        "name": tour.name,
+        "status": tour.status,
+        "format": tour.format,
+        "num_teams": tour.num_teams,
+        "winner_id": str(tour.winner_id) if tour.winner_id else None,
+        "total_teams_registered": len(tour.teams),
+        "points_table": [
+            {
+                "team_id": str(e.team_id),
+                "team_name": e.team_name,
+                "logo_url": e.logo_url,
+                "played": e.played,
+                "won": e.won,
+                "lost": e.lost,
+                "points": e.points,
+                "net_run_rate": e.net_run_rate,
+                "is_qualified": e.is_qualified
+            }
+            for e in points_table
+        ]
+    }
 
 @router.get("/{id}/leaderboards", response_model=LeaderboardResponse)
 def get_tournament_leaderboards(id: UUID, db: Session = Depends(get_db)):

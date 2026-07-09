@@ -17,7 +17,8 @@ from app.models.cricket import (
     TournamentActivity,
     TeamInvitation,
     JoinRequest,
-    AutomationLog
+    AutomationLog,
+    TournamentStanding
 )
 
 __all__ = [
@@ -44,5 +45,6 @@ __all__ = [
     "TournamentActivity",
     "TeamInvitation",
     "JoinRequest",
-    "AutomationLog"
+    "AutomationLog",
+    "TournamentStanding"
 ]

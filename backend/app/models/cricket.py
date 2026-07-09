@@ -406,3 +406,27 @@ class MatchActivity(Base):
     match = relationship("Match")
     user = relationship("User")
 
+
+class TournamentStanding(Base):
+    __tablename__ = "tournament_standings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tournament_id = Column(UUID(as_uuid=True), ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False)
+    team_id = Column(UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    played = Column(Integer, default=0, nullable=False)
+    won = Column(Integer, default=0, nullable=False)
+    lost = Column(Integer, default=0, nullable=False)
+    tied = Column(Integer, default=0, nullable=False)
+    no_result = Column(Integer, default=0, nullable=False)
+    points = Column(Integer, default=0, nullable=False)
+    runs_scored = Column(Integer, default=0, nullable=False)
+    overs_faced = Column(Float, default=0.0, nullable=False)
+    runs_conceded = Column(Integer, default=0, nullable=False)
+    overs_bowled = Column(Float, default=0.0, nullable=False)
+    net_run_rate = Column(Float, default=0.0, nullable=False)
+    is_qualified = Column(Boolean, default=False, nullable=False)
+
+    # Relationships
+    tournament = relationship("Tournament")
+    team = relationship("Team")
+

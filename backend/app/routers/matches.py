@@ -1074,8 +1074,10 @@ def submit_ball(
     
     # If the match belongs to a tournament, check if we need to progress to the next stage
     if match.status == "completed" and match.tournament_id:
+        from app.core.tournament_engine import update_team_standings_on_match_completion
         from app.routers.tournaments import check_and_progress_tournament
         try:
+            update_team_standings_on_match_completion(db, match.id)
             check_and_progress_tournament(match.tournament_id, db)
         except Exception as err:
             print(f"Error progressing tournament: {err}")
