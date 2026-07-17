@@ -5,7 +5,7 @@ import time
 import re
 import random
 
-PROD_URL = "https://cricket-tournament-production.up.railway.app/api/v1"
+PROD_URL = "https://cricket-tournament-djdp.onrender.com/api/v1"
 
 def api_post(path, data_dict):
     url = f"{PROD_URL}{path}"

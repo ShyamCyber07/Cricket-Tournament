@@ -7,7 +7,7 @@ import json
 import xml.etree.ElementTree as ET
 
 ADB = os.path.expandvars(r"%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe")
-ARTIFACTS_DIR = r"C:\Users\praja\.gemini\antigravity-ide\brain\cf74d05a-9d09-4a85-82f1-b3d1bd0d2185"
+ARTIFACTS_DIR = r"C:\Users\praja\.gemini\antigravity-ide\brain\832a7ec0-18bd-4949-8d54-9da5a615c7ad"
 CREDS_PATH = r"c:\Users\praja\Desktop\Cricket\scratch\prod_credentials.json"
 
 def run_adb(args):
@@ -215,13 +215,13 @@ def run_smoke_test():
     print("Scrolling down to reveal Teams action card...")
     run_adb(["shell", "input", "swipe", "500", "1800", "500", "800", "300"])
     time.sleep(2)
-    # Quick action text "Teams"
-    if not tap_node_by_text("Teams"):
+    # Quick action text "Team Management"
+    if not tap_node_by_text("Team Management"):
         print("ERROR: Failed to tap on Teams action card.")
         sys.exit(1)
         
     time.sleep(3)
-    if not check_screen_text("Team Management"):
+    if not check_screen_text("My Teams"):
         print("ERROR: Failed to load Team Management Screen.")
         capture_screen("smoke_failed_teams.png")
         sys.exit(1)

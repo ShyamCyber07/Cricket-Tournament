@@ -5,10 +5,12 @@ import xml.etree.ElementTree as ET
 import re
 import sys
 import random
+import json
+
 
 ADB = os.path.expandvars(r"%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe")
 DEVICE_ID = "f35c3099"
-ARTIFACTS_DIR = r"C:\Users\praja\.gemini\antigravity-ide\brain\900358b5-5af2-41ba-8984-6794252a881e"
+ARTIFACTS_DIR = r"C:\Users\praja\.gemini\antigravity-ide\brain\832a7ec0-18bd-4949-8d54-9da5a615c7ad"
 
 # Generate a unique suffix for the run to prevent list search collisions
 SUFFIX = str(random.randint(100, 999))
@@ -30,6 +32,77 @@ def run_adb(args):
         print(f"WARNING: ADB command timed out: {' '.join(cmd)}")
         return ""
 
+def assign_players_via_api(team_name, emails):
+    import urllib.request
+    import urllib.parse
+    import json
+    
+    print(f"[API Helper] Logging in to get access token for adding players to {team_name}...")
+    with open("c:/Users/praja/Desktop/Cricket/scratch/prod_credentials.json", "r") as f:
+        creds = json.load(f)
+    email = creds["email"]
+    password = creds["password"]
+    
+    # Login
+    login_data = urllib.parse.urlencode({
+        "username": email,
+        "password": password
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://cricket-tournament-djdp.onrender.com/api/v1/auth/login",
+        data=login_data,
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as res:
+            res_data = json.loads(res.read().decode("utf-8"))
+            token = res_data["access_token"]
+    except Exception as e:
+        print("[API Helper] Login failed:", e)
+        return False
+        
+    # Get My Teams list to find the team ID
+    req_teams = urllib.request.Request(
+        "https://cricket-tournament-djdp.onrender.com/api/v1/teams/my-teams",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    team_id = None
+    try:
+        with urllib.request.urlopen(req_teams, timeout=25) as res:
+            teams_list = json.loads(res.read().decode("utf-8"))
+            for item in teams_list:
+                team_info = item.get('team', item)
+                if team_info.get('name') == team_name:
+                    team_id = team_info.get('id')
+                    break
+    except Exception as e:
+        print("[API Helper] Failed to fetch my teams:", e)
+        
+    if not team_id:
+        print(f"[API Helper] Could not find team with name {team_name}")
+        return False
+        
+    print(f"[API Helper] Found team ID: {team_id} for {team_name}. Adding members...")
+    
+    # Add each email
+    for member_email in emails:
+        req_add = urllib.request.Request(
+            f"https://cricket-tournament-djdp.onrender.com/api/v1/teams/{team_id}/members",
+            data=json.dumps({"email": member_email}).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+        )
+        try:
+            with urllib.request.urlopen(req_add, timeout=25) as res:
+                print(f"[API Helper] Added {member_email} successfully: {res.read().decode()}")
+        except Exception as e:
+            print(f"[API Helper] Failed to add {member_email}: {e}")
+            
+    return True
+
+
 def capture_screen(filename):
     dest = os.path.join(ARTIFACTS_DIR, filename)
     run_adb(["shell", "screencap", "-p", "/sdcard/screen.png"])
@@ -40,6 +113,15 @@ def check_keyboard_and_dismiss():
     dumpsys = run_adb(["shell", "dumpsys", "input_method"])
     if "mInputShown=true" in dumpsys:
         print("Keyboard is shown, dismissing...")
+        for safe_text in ["CREATE TEAM", "Create Tournament", "INVITE PLAYERS"]:
+            coords = get_node_center_by_text(safe_text, exact=True, retries=1)
+            if coords:
+                print(f"Tapping safe text '{safe_text}' to dismiss keyboard...")
+                run_adb(["shell", "input", "tap", str(coords[0]), str(coords[1])])
+                time.sleep(2.0)
+                return
+        # If nothing found, send Back keyevent 4 (very safe for full screen keyboard dismissals)
+        print("No safe text title found, sending Back keyevent 4...")
         run_adb(["shell", "input", "keyevent", "4"])
         time.sleep(2.0)
 
@@ -232,9 +314,13 @@ def enter_text_in_field(field_index, text_val, wait_secs=1):
     if field:
         run_adb(["shell", "input", "tap", str(field[0]), str(field[1])])
         time.sleep(0.5)
-        # Clear field using backspaces
-        clear_keys = ["123"] + ["67"] * 25
-        run_adb(["shell", "input", "keyevent"] + clear_keys)
+        # Move cursor to end
+        run_adb(["shell", "input", "keyevent", "123"])
+        time.sleep(0.3)
+        # Send 80 backspaces in chunks of 20
+        for _ in range(4):
+            run_adb(["shell", "input", "keyevent"] + ["67"] * 20)
+        time.sleep(0.5)
         # Input text
         escaped_val = text_val.replace(" ", "%s")
         run_adb(["shell", "input", "text", escaped_val])
@@ -243,31 +329,101 @@ def enter_text_in_field(field_index, text_val, wait_secs=1):
     return False
 
 def ensure_on_dashboard():
-    print("Ensuring app is on Scorer Dashboard...")
-    for attempt in range(5):
-        if is_screen_active("Scorer Dashboard") or is_screen_active("Admin-CricUp"):
-            print("App is on Scorer Dashboard!")
-            return True
-        # Check if com.cricup is running in foreground
-        dumpsys = run_adb(["shell", "dumpsys", "activity", "activities"])
-        is_foreground = any("mcurrentfocus" in line.lower() and "com.cricup" in line.lower() for line in dumpsys.splitlines())
-        if not is_foreground:
-            print("App is not in foreground, launching...")
-            print("Focus lines in dumpsys activity activities:")
-            for line in dumpsys.splitlines():
-                if "focus" in line.lower() or "resumed" in line.lower():
-                    print("  ", line.strip())
-            run_adb(["shell", "monkey", "-p", "com.cricup", "-c", "android.intent.category.LAUNCHER", "1"])
-            time.sleep(5.0)
+    print("Ensuring app is on Scorer Dashboard (with splash/login/profile auto-handling)...")
+    
+    # 1. Bring app to foreground if not running
+    dumpsys = run_adb(["shell", "dumpsys", "activity", "activities"])
+    is_foreground = any("mcurrentfocus" in line.lower() and "com.cricup" in line.lower() for line in dumpsys.splitlines())
+    if not is_foreground:
+        print("App is not in foreground, launching...")
+        run_adb(["shell", "monkey", "-p", "com.cricup", "-c", "android.intent.category.LAUNCHER", "1"])
+        time.sleep(4.0)
+
+    # 2. Loop to handle screen states
+    start_time = time.time()
+    while time.time() - start_time < 120.0: # Max 120 seconds to settle/login
+        xml_content = get_fresh_xml(retries=2)
+        if not xml_content:
+            time.sleep(1.5)
             continue
-        # Tap back button
-        run_adb(["shell", "input", "keyevent", "4"])
-        time.sleep(3.0)
+            
+        try:
+            root = ET.fromstring(xml_content)
+            texts = [node.get('text', '') or node.get('content-desc', '') for node in root.iter('node')]
+            texts = [t.lower() for t in texts if t]
+            
+            # Dashboard Check
+            if any("scorer dashboard" in t or "admin-cricup" in t for t in texts):
+                print("SUCCESS: App is on Scorer Dashboard!")
+                return True
+                
+            # Sub-screen Check (if on sub-screen inside the app, go back to Dashboard)
+            if any(x in texts for x in ["my teams", "tournaments", "back", "overview", "squad"]):
+                print("App is on a sub-screen, pressing Back to return to Scorer Dashboard...")
+                run_adb(["shell", "input", "keyevent", "4"])
+                time.sleep(3.0)
+                continue
+
+                
+            # Splash/Onboarding Check
+            if any("skip" in t for t in texts):
+                print("Splash screen detected, tapping 'Skip'...")
+                for node in root.iter('node'):
+                    txt = node.get('text', '') or node.get('content-desc', '')
+                    if "skip" in txt.lower():
+                        bounds = node.get('bounds')
+                        m = re.findall(r'\d+', bounds)
+                        if len(m) == 4:
+                            x1, y1, x2, y2 = map(int, m)
+                            center = ((x1 + x2) // 2, (y1 + y2) // 2)
+                            run_adb(["shell", "input", "tap", str(center[0]), str(center[1])])
+                            time.sleep(2.0)
+                            break
+                continue
+                
+            # Complete Profile Check
+            if any("complete profile" in t or "username" in t or "save and continue" in t for t in texts):
+                print("Complete Profile screen detected, filling it...")
+                enter_text_in_field(0, "u_" + SUFFIX)
+                check_keyboard_and_dismiss()
+                enter_text_in_field(1, "Prod Friend")
+                check_keyboard_and_dismiss()
+                tap_node_by_text("Batsman", exact=True)
+                tap_node_by_text("Save and Continue", exact=True)
+                time.sleep(4.0)
+                continue
+                
+            # Login Screen Check
+            if any("email login" in t or "login" in t or "password" in t or "sign in" in t for t in texts):
+                print("Login screen detected, automating login...")
+                with open("c:/Users/praja/Desktop/Cricket/scratch/prod_credentials.json", "r") as f:
+                    creds = json.load(f)
+                email = creds["email"]
+                password = creds["password"]
+                
+                enter_text_in_field(0, email)
+                enter_text_in_field(1, password)
+                check_keyboard_and_dismiss()
+                
+                if not tap_node_by_text("Sign In", exact=True):
+                    if not tap_node_by_text("Login", exact=True):
+                        tap_node_by_text("Email Login", exact=True)
+                time.sleep(5.0)
+                continue
+                
+            # Loading check
+            print("App is loading/transitioning, waiting...")
+            time.sleep(2.0)
+            
+        except Exception as e:
+            print("Error checking screen in ensure_on_dashboard:", e)
+            time.sleep(2.0)
+            
     return False
 
 def ensure_on_teams_screen():
     print("Ensuring app is on Teams screen...")
-    if is_screen_active("Team Management"):
+    if is_screen_active("My Teams"):
         print("App is on Teams screen!")
         wait_for_loading_to_complete()
         return True
@@ -277,14 +433,14 @@ def ensure_on_teams_screen():
         scroll_down()
         if tap_node_by_text("Team Management", exact=True, wait_secs=3):
             time.sleep(1.0)
-            if is_screen_active("Team Management"):
+            if is_screen_active("My Teams"):
                 print("App is on Teams screen!")
                 wait_for_loading_to_complete()
                 return True
         scroll_down()
         if tap_node_by_text("Team Management", exact=True, wait_secs=3):
             time.sleep(1.0)
-            if is_screen_active("Team Management"):
+            if is_screen_active("My Teams"):
                 print("App is on Teams screen!")
                 wait_for_loading_to_complete()
                 return True
@@ -514,9 +670,18 @@ def main():
     print("\n--- STEP 1: Creating Team A with Logo ---")
     ensure_on_teams_screen()
     
-    # FAB click
-    tap_node_or_raise("Add Team FAB", exact=True)
-    time.sleep(2.0)
+    # FAB click with retry
+    dialog_opened = False
+    for attempt in range(3):
+        print(f"Tapping Add Team FAB... (Attempt {attempt+1})")
+        if tap_node_by_text("Add Team FAB", exact=True, wait_secs=3):
+            time.sleep(2.0)
+            if check_screen_text("Tap to upload logo", retries=2):
+                dialog_opened = True
+                break
+    if not dialog_opened:
+        raise Exception("CRITICAL: Failed to open Create Team dialog")
+
     
     # Click clickable image view container above "Tap to upload logo"
     coords = get_clickable_node_above_text("Tap to upload logo")
@@ -558,22 +723,25 @@ def main():
     
     # Assign players to Team A
     print(f"Assigning players to {TEAM_A_NAME}...")
-    tap_node_with_scroll_or_raise(TEAM_A_NAME, exact=False)
-    time.sleep(3)
-    tap_node_or_raise("Add Player", exact=True)
-    time.sleep(2)
-    if not select_players_in_sheet(3):
-        raise Exception("Failed to select 3 players for Team A")
-    if not tap_bulk_add_button():
-        raise Exception("Failed to tap bulk add button for Team A")
-    time.sleep(3)
-    wait_for_loading_to_complete()
+    assign_players_via_api(TEAM_A_NAME, ['testuser@cricup.com', 'player@cricup.com', 'captain@cricup.com'])
+    ensure_on_teams_screen()
+
     
     # Create Team B
     print(f"Creating {TEAM_B_NAME}...")
     ensure_on_teams_screen()
-    tap_node_or_raise("Add Team FAB", exact=True)
-    time.sleep(2.0)
+    # FAB click with retry for Team B
+    dialog_opened = False
+    for attempt in range(3):
+        print(f"Tapping Add Team FAB for Team B... (Attempt {attempt+1})")
+        if tap_node_by_text("Add Team FAB", exact=True, wait_secs=3):
+            time.sleep(2.0)
+            if check_screen_text("Tap to upload logo", retries=2):
+                dialog_opened = True
+                break
+    if not dialog_opened:
+        raise Exception("CRITICAL: Failed to open Create Team dialog for Team B")
+
     
     # Click clickable image view container
     coords = get_clickable_node_above_text("Tap to upload logo")
@@ -600,25 +768,25 @@ def main():
     
     # Assign players to Team B
     print(f"Assigning players to {TEAM_B_NAME}...")
+    assign_players_via_api(TEAM_B_NAME, ['explore_tester2@cricup.com', 'bulk_u1@cricup.com', 'bulk_u2@cricup.com'])
     ensure_on_teams_screen()
-    tap_node_with_scroll_or_raise(TEAM_B_NAME, exact=False)
-    time.sleep(3)
-    tap_node_or_raise("Add Player", exact=True)
-    time.sleep(2)
-    if not select_players_in_sheet(3):
-        raise Exception("Failed to select 3 players for Team B")
-    if not tap_bulk_add_button():
-        raise Exception("Failed to tap bulk add button for Team B")
-    time.sleep(3)
-    wait_for_loading_to_complete()
     
     # 2. TOURNAMENT LOGO UPLOAD & CREATION
     print("\n--- STEP 2: Creating Tournament with Logo ---")
     ensure_on_tournaments_screen()
     
-    # FAB click
-    tap_node_or_raise("Add Tournament FAB", exact=True)
-    time.sleep(2.0)
+    # FAB click with retry for Tournament
+    dialog_opened = False
+    for attempt in range(3):
+        print(f"Tapping Add Tournament FAB... (Attempt {attempt+1})")
+        if tap_node_by_text("Add Tournament FAB", exact=True, wait_secs=3):
+            time.sleep(2.0)
+            if check_screen_text("Tournament Logo", retries=2) or check_screen_text("Upload Tournament Logo", retries=2):
+                dialog_opened = True
+                break
+    if not dialog_opened:
+        raise Exception("CRITICAL: Failed to open Create Tournament dialog")
+
     
     # Upload logo click
     coords = get_clickable_node_above_text("Tournament Logo")

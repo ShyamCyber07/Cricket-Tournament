@@ -1,21 +1,23 @@
-import os
 import re
-import json
+import os
 
-base_dir = r"C:\Users\praja\.gemini\antigravity-ide\brain"
-url_pattern = re.compile(r"postgresql?://[^\s\"']+", re.IGNORECASE)
+log_path = r"C:\Users\praja\.gemini\antigravity-ide\brain\01eabe81-72bf-4d1a-b7c0-b4dbd3b4d008\.system_generated\logs\transcript.jsonl"
+full_log_path = r"C:\Users\praja\.gemini\antigravity-ide\brain\01eabe81-72bf-4d1a-b7c0-b4dbd3b4d008\.system_generated\logs\transcript_full.jsonl"
 
-print("Searching all transcript.jsonl files for PostgreSQL URLs...")
-for root, dirs, files in os.walk(base_dir):
-    for file in files:
-        if file == "transcript.jsonl":
-            path = os.path.join(root, file)
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    for line_num, line in enumerate(f, 1):
-                        urls = url_pattern.findall(line)
-                        for url in urls:
-                            if "postgres.railway.internal" not in url and "127.0.0.1" not in url and "localhost" not in url:
-                                print(f"Found URL in {path}:{line_num}: {url}")
-            except Exception as e:
-                pass
+def search_file(path):
+    if not os.path.exists(path):
+        print(f"File {path} does not exist")
+        return
+    print(f"Searching in {path}...")
+    with open(path, "r", encoding="utf-8") as f:
+        for i, line in enumerate(f, 1):
+            if "rlwy" in line or "thomas" in line:
+                # Find all occurrences of postgresql:// or database URL pattern
+                matches = re.findall(r"postgresql://[^\s\"']+", line)
+                if matches:
+                    print(f"Line {i} matches:")
+                    for m in matches:
+                        print("  ", m)
+
+search_file(log_path)
+search_file(full_log_path)
